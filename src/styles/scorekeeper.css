@@ -1,0 +1,727 @@
+/* =========================================================================
+   DEDICATED COURT-SIDE SCOREKEEPER VIEW (/scorekeeper)
+   Full-screen, touch & keyboard optimized tap-to-score interface.
+   ========================================================================= */
+
+.scorekeeper-shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(56, 189, 248, 0.14), transparent 40%),
+    radial-gradient(circle at 80% 0%, rgba(251, 113, 133, 0.14), transparent 40%),
+    #060a12;
+  overflow: hidden;
+  user-select: none;
+}
+
+.sk-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.9rem;
+  min-height: 58px;
+  max-width: 100%;
+  padding: 0.6rem 1.1rem;
+  background: rgba(9, 14, 26, 0.92);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sk-top-left,
+.sk-top-center,
+.sk-top-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sk-badge-title {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #fde68a;
+  white-space: nowrap;
+}
+
+.sk-match-select,
+.sk-match-trigger {
+  max-width: min(360px, 100%);
+  min-width: 0;
+  padding: 0.44rem 0.76rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: #0b1120;
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.sk-match-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.sk-match-trigger:hover:not(:disabled) {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: #111c33;
+}
+
+.sk-match-trigger-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sk-match-trigger-caret {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sk-match-select.is-locked,
+.sk-match-select:disabled,
+.sk-match-trigger.is-locked,
+.sk-match-trigger:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.sk-lock-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.22rem 0.58rem;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+  white-space: nowrap;
+}
+
+.sk-rules-chip {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Giant Tap-to-Score Arena */
+.sk-arena {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.sk-tap-pad {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 2.5px solid var(--border-strong);
+  background: linear-gradient(180deg, #111c33 0%, #09101f 100%);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.08s ease;
+}
+
+.sk-tap-pad.sk-side-p1 {
+  border-top: 6px solid var(--accent-p1);
+}
+
+.sk-tap-pad.sk-side-p2 {
+  border-top: 6px solid var(--accent-p2);
+}
+
+.sk-tap-pad.is-serving {
+  border-color: rgba(245, 158, 11, 0.85);
+  box-shadow: 0 0 36px rgba(245, 158, 11, 0.25);
+}
+
+.sk-tap-pad.is-winner {
+  border-color: #10b981;
+  box-shadow: 0 0 42px rgba(16, 185, 129, 0.34);
+}
+
+.sk-pad-main-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: clamp(0.8rem, 2vw, 1.35rem) clamp(0.9rem, 2.2vw, 1.5rem);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  touch-action: manipulation;
+  transition: background-color 0.12s ease;
+}
+
+.sk-pad-main-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sk-pad-main-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.sk-pad-main-btn:disabled {
+  opacity: 0.88;
+  cursor: default;
+}
+
+.sk-pad-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sk-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sk-name-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sk-name {
+  font-size: clamp(1.35rem, 2.6vw, 2.35rem);
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sk-members {
+  font-size: clamp(0.82rem, 1.25vw, 1.05rem);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 0.12rem;
+}
+
+.sk-score-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.sk-huge-score {
+  font-size: clamp(4.2rem, min(20dvh, 18vw), 15rem) !important;
+  line-height: 0.9 !important;
+}
+
+.sk-side-p1 .sk-huge-score {
+  color: #e0f2fe;
+  text-shadow: 0 0 38px var(--accent-p1-glow);
+}
+
+.sk-side-p2 .sk-huge-score {
+  color: #ffe4e6;
+  text-shadow: 0 0 38px var(--accent-p2-glow);
+}
+
+.sk-serve-sub {
+  font-size: clamp(0.88rem, 1.4vw, 1.15rem);
+  font-weight: 700;
+  color: #fde68a;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.42);
+}
+
+.sk-tap-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.sk-minus-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5;
+  min-width: 58px;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: rgba(15, 23, 42, 0.92);
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+
+.sk-minus-btn:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.95);
+  color: #ffffff;
+}
+
+.sk-minus-btn.is-pending-remove {
+  border-color: rgba(248, 113, 113, 0.85);
+  background: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.38);
+}
+
+.sk-remove-tooltip {
+  right: 16px;
+  bottom: 72px;
+  z-index: 25;
+  max-width: calc(100% - 24px);
+}
+
+/* Bottom Action Dock */
+.sk-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.8rem 1.25rem;
+  background: rgba(10, 16, 30, 0.96);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sk-dock-controls,
+.sk-dock-cues {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sk-grandma-menu-btn {
+  width: 38px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.18);
+  font-size: 1.2rem;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.sk-grandma-menu-btn:hover {
+  background: rgba(245, 158, 11, 0.34);
+  transform: translateY(-1px);
+}
+
+.sk-phrase-chip {
+  max-width: 175px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Full Grandma Phrase Menu Modal inside Scorekeeper */
+.sk-menu-category {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sk-menu-category h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fde68a;
+}
+
+.sk-menu-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.48rem;
+}
+
+.sk-menu-phrase-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: #080d1a;
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  text-align: left;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.sk-menu-phrase-btn:hover {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.sk-menu-phrase-btn span:first-child {
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .sk-menu-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sk-complete-btn {
+  min-width: 220px;
+}
+
+/* Scorekeeper Game Selection Menu (Shows Player Names Under Team Names) */
+.sk-match-dialog {
+  width: min(640px, calc(100vw - 2rem));
+}
+
+.sk-match-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.sk-match-picker-card {
+  width: 100%;
+  text-align: left;
+  padding: 0.72rem 0.9rem;
+  border-radius: 11px;
+  border: 1.5px solid var(--border-subtle);
+  background: #080d1a;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.48rem;
+  transition: border-color 0.14s ease, background-color 0.14s ease, transform 0.1s ease;
+}
+
+.sk-match-picker-card:hover {
+  border-color: rgba(148, 163, 184, 0.55);
+  background: #10192d;
+  transform: translateY(-1px);
+}
+
+.sk-match-picker-card.is-ready {
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.sk-match-picker-card.is-completed {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.sk-match-picker-card.is-selected {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.sk-mp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.sk-mp-code {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sk-mp-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.sk-mp-score {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #fef3c7;
+}
+
+.sk-mp-status {
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.9);
+  color: var(--text-muted);
+}
+
+.sk-mp-status.is-active {
+  background: #f59e0b;
+  color: #0f172a;
+}
+
+.sk-mp-status.is-ready {
+  background: rgba(56, 189, 248, 0.2);
+  color: #bae6fd;
+}
+
+.sk-mp-status.is-final {
+  background: rgba(16, 185, 129, 0.22);
+  color: #a7f3d0;
+}
+
+.sk-mp-matchup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.sk-mp-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.sk-mp-side.is-right {
+  text-align: right;
+}
+
+.sk-mp-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sk-mp-members {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sk-mp-vs {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+/* Begin Match Gate Banner in Scorekeeper */
+.sk-begin-match-bar {
+  flex: 0 0 auto;
+  margin: 0.85rem 1.25rem 0;
+  padding: 0.85rem 1.15rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(15, 23, 42, 0.96));
+  border: 2px solid rgba(245, 158, 11, 0.72);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(245, 158, 11, 0.22);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.sk-begin-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
+.sk-begin-copy strong {
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fef3c7;
+}
+
+.sk-begin-copy span {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+
+.sk-begin-match-btn {
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sk-arena.is-awaiting-start .sk-tap-pad {
+  opacity: 0.72;
+}
+
+/* Post-Game Banner & Recommended Highlight inside Game Picker */
+.sk-postgame-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 11px;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+}
+
+.sk-postgame-banner strong {
+  font-size: 0.92rem;
+  color: #ecfdf5;
+}
+
+.sk-postgame-banner span {
+  font-size: 0.8rem;
+  color: #a7f3d0;
+}
+
+.sk-mp-head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.sk-mp-recommended-badge {
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  padding: 0.14rem 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  color: #0f172a;
+}
+
+.sk-match-picker-card.is-recommended {
+  border-color: #fbbf24;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(15, 23, 42, 0.95));
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.26);
+}
+
+@media (max-width: 780px), (max-height: 600px) {
+  .scorekeeper-shell {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sk-topbar {
+    padding: 0.5rem 0.75rem;
+    gap: 0.45rem 0.65rem;
+  }
+
+  .sk-rules-chip {
+    white-space: normal;
+  }
+
+  .sk-begin-match-bar {
+    margin: 0.65rem 0.75rem 0;
+    padding: 0.7rem 0.85rem;
+  }
+
+  .sk-guest-gate-bar {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .sk-dock {
+    padding: 0.65rem 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .sk-phrase-chip {
+    display: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .sk-arena {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+    padding: 0.65rem 0.75rem;
+    min-height: auto;
+  }
+
+  .sk-tap-pad {
+    min-height: 195px;
+    border-radius: 16px;
+  }
+
+  .sk-huge-score {
+    font-size: clamp(3.6rem, min(14dvh, 22vw), 7.5rem) !important;
+  }
+
+  .sk-complete-btn {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .sk-remove-tooltip {
+    right: 12px;
+    bottom: 68px;
+  }
+}
+
+/* Guest Read-Only Scorekeeper Gate & Greyed-Out State */
+.sk-guest-gate-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.16), rgba(30, 41, 59, 0.92));
+  border-bottom: 1.5px solid rgba(192, 132, 252, 0.45);
+}
+
+.sk-arena.is-guest-readonly {
+  filter: grayscale(0.72);
+  opacity: 0.52;
+  pointer-events: none;
+}
+
+.sk-dock.is-guest-readonly {
+  filter: grayscale(0.65);
+  opacity: 0.55;
+}

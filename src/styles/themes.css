@@ -1,0 +1,269 @@
+/* =========================================================================
+   SEASONAL & HOLIDAY TOURNAMENT THEMES
+   Applied via [data-theme="..."] on the root document & Presentation stage.
+   ========================================================================= */
+
+.title-ambiance-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.presentation-stage-scaler .presentation-header,
+.presentation-stage-scaler .presentation-stage {
+  position: relative;
+  z-index: 5;
+}
+
+/* 🦃 THANKSGIVING (Warm Autumn Hearth, Pumpkin & Harvest Gold) */
+[data-theme='thanksgiving'] {
+  --bg-deep: #140a05;
+  --bg-arena: #1c0f08;
+  --bg-surface: #25150c;
+  --bg-surface-elevated: #311c10;
+  --bg-surface-hover: #3d2314;
+  --border-subtle: rgba(251, 146, 60, 0.22);
+  --border-strong: rgba(251, 146, 60, 0.42);
+  --accent-p1: #fb923c;
+  --accent-p1-glow: rgba(251, 146, 60, 0.34);
+  --accent-p2: #f87171;
+  --accent-p2-glow: rgba(248, 113, 113, 0.32);
+  --accent-amber: #f59e0b;
+  --scrollbar-thumb: #9a552a;
+  --scrollbar-track: #1c0f08;
+}
+
+[data-theme='thanksgiving'] .presentation-stage-scaler,
+body[data-theme='thanksgiving'] {
+  background-color: #140a05;
+  background-image:
+    radial-gradient(circle at 16% 12%, rgba(234, 88, 12, 0.24), transparent 44%),
+    radial-gradient(circle at 86% 18%, rgba(245, 158, 11, 0.2), transparent 46%),
+    radial-gradient(circle at 50% 96%, rgba(185, 28, 28, 0.16), transparent 45%),
+    linear-gradient(180deg, #160b06 0%, #24130a 100%);
+}
+
+/* Shared themed card glass surface across all 5 presentation slides */
+[data-theme]:not([data-theme='arena']) .scoreboard-card.mode-presentation,
+[data-theme]:not([data-theme='arena']) .scoreboard-card.mode-compact,
+[data-theme]:not([data-theme='arena']) .mini-bracket-panel,
+[data-theme]:not([data-theme='arena']) .split-queue-col,
+[data-theme]:not([data-theme='arena']) .broadcast-ticker-card,
+[data-theme]:not([data-theme='arena']) .title-roster-card,
+[data-theme]:not([data-theme='arena']) .spotlight-hero-card {
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  border-color: var(--border-strong);
+}
+
+[data-theme]:not([data-theme='arena']) .player-panel {
+  background: color-mix(in srgb, var(--bg-surface-elevated) 84%, #000000 16%);
+}
+
+[data-theme]:not([data-theme='arena']) .presentation-header {
+  background: color-mix(in srgb, var(--bg-deep) 84%, transparent);
+  border-bottom-color: var(--border-subtle);
+}
+
+[data-theme='thanksgiving'] .title-hero-block {
+  background: linear-gradient(145deg, rgba(44, 24, 12, 0.92), rgba(20, 10, 5, 0.95));
+  border-color: rgba(251, 146, 60, 0.42);
+}
+
+[data-theme='thanksgiving'] .title-mega-heading {
+  background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 50%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* 🎄 CHRISTMAS (Evergreen Pine, Holly Red & Champagne Gold) */
+[data-theme='christmas'] {
+  --bg-deep: #05110b;
+  --bg-arena: #081a11;
+  --bg-surface: #0e2418;
+  --bg-surface-elevated: #143222;
+  --bg-surface-hover: #1b422d;
+  --border-subtle: rgba(52, 211, 153, 0.22);
+  --border-strong: rgba(251, 191, 36, 0.36);
+  --accent-p1: #34d399;
+  --accent-p1-glow: rgba(52, 211, 153, 0.34);
+  --accent-p2: #f87171;
+  --accent-p2-glow: rgba(239, 68, 68, 0.36);
+  --accent-amber: #fbbf24;
+  --scrollbar-thumb: #2d6a4f;
+  --scrollbar-track: #081a11;
+}
+
+[data-theme='christmas'] .presentation-stage-scaler,
+body[data-theme='christmas'] {
+  background-color: #05110b;
+  background-image:
+    radial-gradient(circle at 14% 12%, rgba(16, 185, 129, 0.22), transparent 44%),
+    radial-gradient(circle at 86% 12%, rgba(220, 38, 38, 0.22), transparent 44%),
+    radial-gradient(circle at 50% 90%, rgba(251, 191, 36, 0.14), transparent 46%),
+    linear-gradient(180deg, #05120c 0%, #0b2217 100%);
+}
+
+[data-theme='christmas'] .title-hero-block {
+  background: linear-gradient(145deg, rgba(13, 38, 25, 0.92), rgba(7, 20, 14, 0.95));
+  border-color: rgba(251, 191, 36, 0.42);
+}
+
+[data-theme='christmas'] .title-mega-heading {
+  background: linear-gradient(135deg, #ffffff 0%, #d1fae5 50%, #fde68a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* 🎃 HALLOWEEN (Midnight Plum, Pumpkin Orange & Arcane Violet) */
+[data-theme='halloween'] {
+  --bg-deep: #0e0616;
+  --bg-arena: #150a22;
+  --bg-surface: #1e1030;
+  --bg-surface-elevated: #291641;
+  --bg-surface-hover: #351d52;
+  --border-subtle: rgba(168, 85, 247, 0.26);
+  --border-strong: rgba(249, 115, 22, 0.44);
+  --accent-p1: #f97316;
+  --accent-p1-glow: rgba(249, 115, 22, 0.36);
+  --accent-p2: #c084fc;
+  --accent-p2-glow: rgba(192, 132, 252, 0.36);
+  --accent-amber: #fb923c;
+  --scrollbar-thumb: #7e22ce;
+  --scrollbar-track: #150a22;
+}
+
+[data-theme='halloween'] .presentation-stage-scaler,
+body[data-theme='halloween'] {
+  background-color: #0e0616;
+  background-image:
+    radial-gradient(circle at 18% 15%, rgba(249, 115, 22, 0.24), transparent 42%),
+    radial-gradient(circle at 84% 16%, rgba(168, 85, 247, 0.26), transparent 44%),
+    linear-gradient(180deg, #0d0615 0%, #1b0d2c 100%);
+}
+
+[data-theme='halloween'] .title-hero-block {
+  background: linear-gradient(145deg, rgba(32, 16, 52, 0.92), rgba(14, 7, 23, 0.95));
+  border-color: rgba(249, 115, 22, 0.45);
+}
+
+[data-theme='halloween'] .title-mega-heading {
+  background: linear-gradient(135deg, #fff7ed 0%, #fdba74 52%, #d8b4fe 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* 🌸 SPRING (Twilight Indigo, Cherry Blossom Pink & Fresh Sage) */
+[data-theme='spring'] {
+  --bg-deep: #0f1020;
+  --bg-arena: #15172b;
+  --bg-surface: #1c2039;
+  --bg-surface-elevated: #252a4a;
+  --bg-surface-hover: #2f355c;
+  --border-subtle: rgba(244, 114, 182, 0.24);
+  --border-strong: rgba(244, 114, 182, 0.42);
+  --accent-p1: #f472b6;
+  --accent-p1-glow: rgba(244, 114, 182, 0.34);
+  --accent-p2: #34d399;
+  --accent-p2-glow: rgba(52, 211, 153, 0.32);
+  --scrollbar-thumb: #be5a8d;
+  --scrollbar-track: #15172b;
+}
+
+[data-theme='spring'] .presentation-stage-scaler,
+body[data-theme='spring'] {
+  background-color: #0f1020;
+  background-image:
+    radial-gradient(circle at 16% 12%, rgba(244, 114, 182, 0.24), transparent 44%),
+    radial-gradient(circle at 85% 18%, rgba(52, 211, 153, 0.18), transparent 44%),
+    linear-gradient(180deg, #101224 0%, #1c1d36 100%);
+}
+
+[data-theme='spring'] .title-hero-block {
+  background: linear-gradient(145deg, rgba(31, 33, 60, 0.92), rgba(15, 17, 32, 0.95));
+  border-color: rgba(244, 114, 182, 0.4);
+}
+
+[data-theme='spring'] .title-mega-heading {
+  background: linear-gradient(135deg, #ffffff 0%, #fbcfe8 55%, #a7f3d0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* ☀️ SUMMER RETRO (Sunset Twilight, Synthwave Cyan & Magenta) */
+[data-theme='summer'] {
+  --bg-deep: #130920;
+  --bg-arena: #1a0d2b;
+  --bg-surface: #24133a;
+  --bg-surface-elevated: #2e194a;
+  --bg-surface-hover: #3b215d;
+  --border-subtle: rgba(6, 182, 212, 0.26);
+  --border-strong: rgba(236, 72, 153, 0.44);
+  --accent-p1: #22d3ee;
+  --accent-p1-glow: rgba(34, 211, 238, 0.36);
+  --accent-p2: #f472b6;
+  --accent-p2-glow: rgba(244, 114, 182, 0.36);
+  --scrollbar-thumb: #0891b2;
+  --scrollbar-track: #1a0d2b;
+}
+
+[data-theme='summer'] .presentation-stage-scaler,
+body[data-theme='summer'] {
+  background-color: #130920;
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(236, 72, 153, 0.24), transparent 42%),
+    radial-gradient(circle at 84% 14%, rgba(6, 182, 212, 0.24), transparent 44%),
+    radial-gradient(circle at 50% 95%, rgba(251, 191, 36, 0.16), transparent 44%),
+    linear-gradient(180deg, #140922 0%, #1e1136 100%);
+}
+
+[data-theme='summer'] .title-hero-block {
+  background: linear-gradient(145deg, rgba(38, 19, 62, 0.92), rgba(16, 8, 28, 0.95));
+  border-color: rgba(34, 211, 238, 0.42);
+}
+
+[data-theme='summer'] .title-mega-heading {
+  background: linear-gradient(135deg, #fef08a 0%, #f472b6 50%, #67e8f9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* 🥂 NEW YEAR GALA (Obsidian Tuxedo, Champagne Gold & Platinum) */
+[data-theme='newyear'] {
+  --bg-deep: #09090d;
+  --bg-arena: #101016;
+  --bg-surface: #171720;
+  --bg-surface-elevated: #20202b;
+  --bg-surface-hover: #2a2a38;
+  --border-subtle: rgba(234, 179, 8, 0.26);
+  --border-strong: rgba(250, 204, 21, 0.48);
+  --accent-p1: #facc15;
+  --accent-p1-glow: rgba(250, 204, 21, 0.34);
+  --accent-p2: #e2e8f0;
+  --accent-p2-glow: rgba(226, 232, 240, 0.28);
+  --accent-amber: #facc15;
+  --scrollbar-thumb: #a16207;
+  --scrollbar-track: #101016;
+}
+
+[data-theme='newyear'] .presentation-stage-scaler,
+body[data-theme='newyear'] {
+  background-color: #09090d;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(234, 179, 8, 0.22), transparent 44%),
+    radial-gradient(circle at 82% 16%, rgba(226, 232, 240, 0.14), transparent 44%),
+    linear-gradient(180deg, #09090d 0%, #14141d 100%);
+}
+
+[data-theme='newyear'] .title-hero-block {
+  background: linear-gradient(145deg, rgba(26, 25, 34, 0.94), rgba(10, 10, 14, 0.96));
+  border-color: rgba(250, 204, 21, 0.48);
+}
+
+[data-theme='newyear'] .title-mega-heading {
+  background: linear-gradient(135deg, #ffffff 0%, #fef08a 52%, #eab308 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}

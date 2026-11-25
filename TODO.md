@@ -1,0 +1,34 @@
+# Ping Pong Championship — Feature TODO
+
+Ideas queued and implemented.
+
+---
+
+## 1. Number of Tables Setting (Setup → Rules)
+- [x] Add a `tableCount` (Number of Tables) numeric setting in the Tournament Setup dialog under **Rules** (default `1`, allow any integer `>= 1`).
+- [x] Persist `rules.tableCount` in `tournamentStore.js` (and sync over LAN/Cloud).
+- [x] Support assigning/tracking active matches across multiple tables (e.g., `Table 1`, `Table 2`, …) in Scorekeeper, Control View, Presentation slides, and Next Match recommendations.
+- [x] Update default/contextual table references cleanly when `tableCount > 1` (including `$table` / `$tables`).
+
+---
+
+## 2. Accessible & Contextual Variables for Grandma's Phrases
+- [x] Support template variables inside Grandma's **Idle Banter**, **Contextual**, **Game Point**, and **Custom / Live** phrases, resolved dynamically at display/trigger time.
+- [x] Supported variables (case-insensitive `$var` and `${var}`):
+  - **Match & Entrants**: `$player1`, `$player2`, `$leader`, `$trailer`, `$server`, `$winner`, `$loser`, `$round`, `$match`
+  - **Scores & Rules**: `$score1`, `$score2`, `$score` (e.g. `10-9`), `$targetPoints`, `$winBy`, `$pointDiff`
+  - **Tournament & Venue**: `$tournament`, `$tables`, `$table` (current match table), `$playersRemaining`, `$totalPlayers`, `$matchesLeft`, `$champion`
+- [x] Add an accessible variable helper/reference in Grandma's Phrase Manager (grouped clickable insert chips with keyboard focus & descriptive ARIA labels + live preview).
+- [x] Gracefully fall back if a variable isn't applicable in the current state (e.g., `$champion` before finals, or `$leader` when tied) and preserve literal values like `$5`.
+
+---
+
+## 3. Browser & Device Notifications
+- [x] Add opt-in Web Notifications API / Web Push (VAPID) / in-app alert banner support (with graceful fallback on plain HTTP LAN where browser Push/Notification permissions may be restricted, plus optional sound/vibration cues).
+- [x] Support notifying devices on key tournament events (match starting, on deck, near end, role/join request approvals, tournament announcements & direct messages).
+
+---
+
+## 4. User Player Claim & Progress Notifications
+- [x] Allow a connected user/device to claim a player (or team) from the tournament roster (with confirmation, lock-in, and host/moderator reassignment or release support).
+- [x] Automatically notify the user whenever their claimed player/team progresses — including **On Deck / Next Up**, **Near End**, **Match Starting (with Table #)**, **Match Result**, and **Bracket Advancement / Elimination**.

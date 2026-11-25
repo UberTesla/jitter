@@ -1,0 +1,1023 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { tournamentStore } from '../state/tournamentStore.js';
+import { evaluateMatchState, MATCH_STATUS } from '../engine/scoringEngine.js';
+import { ROLE_LEVEL } from '../engine/roles.js';
+import { formatTeamMembers, findNextReadyMatchId } from '../engine/bracketGenerator.js';
+import { hasGrandmaVariables, resolveGrandmaPhrase } from '../engine/grandmaVariables.js';
+import DebounceOverrideDialog from '../components/DebounceOverrideDialog.jsx';
+import GrandmaPhraseInput from '../components/GrandmaPhraseInput.jsx';
+import MatchTimer from '../components/MatchTimer.jsx';
+import PointRemovalTooltip, { usePendingPointRemoval } from '../components/PointRemovalTooltip.jsx';
+import ViewNavBar from '../components/ViewNavBar.jsx';
+import { useFullscreenMenu } from '../hooks/useFullscreenMenu.js';
+
+/**
+ * Dedicated Table-Side Scorekeeper View (/scorekeeper)
+ * Built for fast, zero-clutter scoring on a tablet, phone, or court-side laptop.
+ * Features huge tap-to-score cards, keyboard shortcuts (1, 2, Z, S, X),
+ * local left/right court side swap, match switcher, instant match advancement,
+ * first-5 Phrase Manager quick Grandma buttons, and a full Grandma phrase menu modal.
+ */
+const SCOREKEEPER_SWAP_KEY = 'pingpong-scorekeeper-swapped-v1';
+
+export default function ScorekeeperView({
+  state,
+  effectiveRole = 'host',
+  rolePerms = null,
+  myDeviceId = '',
+  onNavigateMode,
+  onOpenTournamentChooser,
+}) {
+  const canScoreRole = rolePerms ? Boolean(rolePerms.canScore) : effectiveRole !== 'spectator' && effectiveRole !== 'presenter';
+  const requireScorekeeperApproval = state.rules?.requireScorekeeperApproval !== false;
+  const isModeratorOrAbove = (ROLE_LEVEL[effectiveRole] ?? 0) >= ROLE_LEVEL.moderator;
+  const allowScorekeeperGrandma =
+    isModeratorOrAbove || state.rules?.allowScorekeeperGrandma !== false;
+  const tabId = tournamentStore.getTabId();
+  const pendingRequestsCount =
+    (state.scorekeeperRequests?.length || 0) + (state.joinRequests?.length || 0);
+  const hasPendingScorekeeperRequest = Boolean(
+    myDeviceId &&
+      (state.scorekeeperRequests || []).some((r) => r && r.deviceId === myDeviceId)
+  );
+  const [swappedSides, setSwappedSides] = useState(() => {
+    try {
+      return localStorage.getItem(SCOREKEEPER_SWAP_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [feedback, setFeedback] = useState('');
+  const [debounceRequest, setDebounceRequest] = useState(null);
+  const { isFullscreen, isMenuRevealed, toggleFullscreen, barHoverHandlers } = useFullscreenMenu();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SCOREKEEPER_SWAP_KEY, swappedSides ? '1' : '0');
+    } catch {
+      // Ignore storage errors
+    }
+  }, [swappedSides]);
+  const [phraseMenuOpen, setPhraseMenuOpen] = useState(false);
+  const [matchMenuOpen, setMatchMenuOpen] = useState(false);
+  const [postCompleteBanner, setPostCompleteBanner] = useState(null);
+  const [customCue, setCustomCue] = useState('');
+  const phraseDialogRef = useRef(null);
+  const matchDialogRef = useRef(null);
+  const lastSeenCompletedEventIdRef = useRef(state.lastCompletedEvent?.id || 0);
+
+  const isPopout = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('popout') === '1' || Boolean(window.opener);
+  }, []);
+
+  const isTeams = state.entryMode === 'teams';
+  const activeMatch = state.matches?.[state.activeMatchId] || null;
+  const evalState = evaluateMatchState(activeMatch, state.rules);
+
+  const playerMap = useMemo(() => {
+    const map = new Map();
+    for (const p of state.players || []) map.set(p.id, p);
+    return map;
+  }, [state.players]);
+
+  const recommendedMatchId = useMemo(
+    () => findNextReadyMatchId(state.matches || {}),
+    [state.matches]
+  );
+
+  // Auto-open Next Match Selection Modal on Scorekeepers whenever any game completes
+  useEffect(() => {
+    const evt = state.lastCompletedEvent;
+    if (!evt || !evt.id || evt.id === lastSeenCompletedEventIdRef.current) return;
+    lastSeenCompletedEventIdRef.current = evt.id;
+
+    // If a Champion was crowned or no ready matches remain, don't force next-match picker
+    if (state.championId || !evt.recommendedMatchId) return;
+
+    const winnerName = evt.winnerId ? playerMap.get(evt.winnerId)?.name : null;
+    setPostCompleteBanner({
+      matchLabel: evt.completedMatchLabel,
+      winnerName,
+      score1: evt.score1,
+      score2: evt.score2,
+      recommendedMatchId: evt.recommendedMatchId,
+    });
+    setMatchMenuOpen(true);
+  }, [state.lastCompletedEvent, state.championId, playerMap]);
+
+  const selectableMatches = useMemo(() => {
+    const recId = postCompleteBanner?.recommendedMatchId || recommendedMatchId;
+    return Object.values(state.matches || {})
+      .filter((m) => !m.isBye && (m.player1Id || m.player2Id))
+      .sort((a, b) => {
+        if (recId) {
+          if (a.id === recId && b.id !== recId) return -1;
+          if (b.id === recId && a.id !== recId) return 1;
+        }
+        const aReady = !a.completed && Boolean(a.player1Id && a.player2Id);
+        const bReady = !b.completed && Boolean(b.player1Id && b.player2Id);
+        if (aReady !== bReady) return aReady ? -1 : 1;
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        if (a.bracket !== b.bracket) {
+          const order = { winners: 0, losers: 1, final: 2 };
+          return (order[a.bracket] ?? 0) - (order[b.bracket] ?? 0);
+        }
+        return a.round - b.round || a.matchNumber - b.matchNumber;
+      });
+  }, [state.matches, recommendedMatchId, postCompleteBanner]);
+
+  // Contextual phrases ONLY for Scorekeeper (first 5 in dock, full contextual list in menu)
+  const contextualPhrases = useMemo(
+    () => (state.grandma?.contextualQuotes || []).filter(Boolean),
+    [state.grandma]
+  );
+  const quickGrandmaPhrases = useMemo(() => contextualPhrases.slice(0, 5), [contextualPhrases]);
+
+  // Automatically close Grandma phrase menu if disabled by tournament rules
+  useEffect(() => {
+    if (!allowScorekeeperGrandma && phraseMenuOpen) {
+      setPhraseMenuOpen(false);
+    }
+  }, [allowScorekeeperGrandma, phraseMenuOpen]);
+
+  // Sync native <dialog> for Full Grandma Phrase Menu
+  useEffect(() => {
+    const dialog = phraseDialogRef.current;
+    if (!dialog) return undefined;
+    if (phraseMenuOpen && !dialog.open) {
+      dialog.showModal();
+    } else if (!phraseMenuOpen && dialog.open) {
+      dialog.close();
+    }
+    return undefined;
+  }, [phraseMenuOpen]);
+
+  useEffect(() => {
+    const dialog = phraseDialogRef.current;
+    if (!dialog) return undefined;
+
+    const handleClose = () => {
+      dialog.returnValue = '';
+      setPhraseMenuOpen(false);
+    };
+    dialog.addEventListener('close', handleClose);
+
+    let removeFallback = () => { };
+    if (!('closedBy' in HTMLDialogElement.prototype)) {
+      const isOutside = (e) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      let pressedOutside = false;
+      const onPointerDown = (e) => {
+        pressedOutside = isOutside(e);
+      };
+      const onPointerUp = (e) => {
+        if (pressedOutside && isOutside(e)) dialog.close();
+        pressedOutside = false;
+      };
+      dialog.addEventListener('pointerdown', onPointerDown);
+      dialog.addEventListener('pointerup', onPointerUp);
+      removeFallback = () => {
+        dialog.removeEventListener('pointerdown', onPointerDown);
+        dialog.removeEventListener('pointerup', onPointerUp);
+      };
+    }
+
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      removeFallback();
+    };
+  }, []);
+
+  // Sync native <dialog> for Game Selection Menu
+  useEffect(() => {
+    const dialog = matchDialogRef.current;
+    if (!dialog) return undefined;
+    if (matchMenuOpen && !dialog.open) {
+      dialog.showModal();
+    } else if (!matchMenuOpen && dialog.open) {
+      dialog.close();
+    }
+    return undefined;
+  }, [matchMenuOpen]);
+
+  useEffect(() => {
+    const dialog = matchDialogRef.current;
+    if (!dialog) return undefined;
+
+    const handleClose = () => {
+      dialog.returnValue = '';
+      setMatchMenuOpen(false);
+      setPostCompleteBanner(null);
+    };
+    dialog.addEventListener('close', handleClose);
+
+    let removeFallback = () => { };
+    if (!('closedBy' in HTMLDialogElement.prototype)) {
+      const isOutside = (e) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      let pressedOutside = false;
+      const onPointerDown = (e) => {
+        pressedOutside = isOutside(e);
+      };
+      const onPointerUp = (e) => {
+        if (pressedOutside && isOutside(e)) dialog.close();
+        pressedOutside = false;
+      };
+      dialog.addEventListener('pointerdown', onPointerDown);
+      dialog.addEventListener('pointerup', onPointerUp);
+      removeFallback = () => {
+        dialog.removeEventListener('pointerdown', onPointerDown);
+        dialog.removeEventListener('pointerup', onPointerUp);
+      };
+    }
+
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      removeFallback();
+    };
+  }, []);
+
+  const flashFeedback = (msg) => {
+    setFeedback(msg);
+    setTimeout(() => {
+      setFeedback((curr) => (curr === msg ? '' : curr));
+    }, 2200);
+  };
+
+  const leftSlot = swappedSides ? 2 : 1;
+  const rightSlot = swappedSides ? 1 : 2;
+
+  const resolveSlotName = (slot) => {
+    const id = slot === 1 ? activeMatch?.player1Id : activeMatch?.player2Id;
+    const found = id ? playerMap.get(id) : null;
+    return found?.name || (isTeams ? `Team ${slot}` : `Player ${slot}`);
+  };
+
+  const { pendingRemoval, requestRemovePoint, cancelPendingRemoval } = usePendingPointRemoval({
+    matchId: activeMatch?.id,
+    score1: activeMatch?.score1 || 0,
+    score2: activeMatch?.score2 || 0,
+    onCommit: (slot, count, playerName) => {
+      for (let i = 0; i < count; i += 1) {
+        tournamentStore.subtractPoint(slot);
+      }
+      flashFeedback(`Removed ${count} ${count === 1 ? 'point' : 'points'} from ${playerName}`);
+    },
+    onCancel: (entry) => {
+      flashFeedback(`Cancelled removing point from ${entry.playerName}`);
+    },
+  });
+
+  const handleScoreTap = (slot) => {
+    if (!canScoreRole) {
+      flashFeedback(
+        requireScorekeeperApproval
+          ? 'Guest view is read-only — request Scorekeeper access above'
+          : 'Tap 🎯 Become Scorekeeper above to start scoring'
+      );
+      return;
+    }
+    cancelPendingRemoval(true);
+    const res = tournamentStore.addPoint(slot, { requireStarted: true });
+    if (res && res.requiresStart) {
+      flashFeedback('Tap ▶ BEGIN MATCH to start scoring');
+      return;
+    }
+    if (res && !res.accepted && res.remainingMs > 0) {
+      setDebounceRequest({
+        id: Date.now(),
+        slot,
+        playerName: resolveSlotName(slot),
+        remainingSec: res.remainingSec,
+      });
+    }
+  };
+
+  const handleConfirmDebounceOverride = (slot) => {
+    setDebounceRequest(null);
+    tournamentStore.addPoint(slot, { bypassDebounce: true, requireStarted: true });
+    flashFeedback(`+1 point added for ${resolveSlotName(slot)} (override)`);
+  };
+
+  const handleFirePhrase = (text, closeMenu = false) => {
+    if (!canScoreRole || !allowScorekeeperGrandma) return;
+    const cleaned = String(text || '').trim();
+    if (!cleaned) return;
+    const resolved = resolveGrandmaPhrase(cleaned, state);
+    tournamentStore.triggerLiveQuote(cleaned);
+    flashFeedback(`Grandma: "${resolved}"`);
+    if (closeMenu) {
+      phraseDialogRef.current?.close();
+    }
+  };
+
+  // Keyboard shortcuts: 1 (Left +1), 2 (Right +1), S (Switch 1st Server), X (Swap Sides)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (phraseMenuOpen || matchMenuOpen) return;
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === '1') {
+        e.preventDefault();
+        handleScoreTap(leftSlot);
+      } else if (e.key === '2') {
+        e.preventDefault();
+        handleScoreTap(rightSlot);
+      } else if (e.key === 's' || e.key === 'S') {
+        if (!canScoreRole) return;
+        e.preventDefault();
+        tournamentStore.switchFirstServer();
+      } else if (e.key === 'x' || e.key === 'X') {
+        if (!canScoreRole) return;
+        e.preventDefault();
+        setSwappedSides((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [leftSlot, rightSlot, phraseMenuOpen, matchMenuOpen, activeMatch, playerMap, canScoreRole, requireScorekeeperApproval]);
+
+  const formatScore = (n) => String(Math.max(0, Number(n) || 0)).padStart(2, '0');
+
+  const statusTone =
+    evalState.status === MATCH_STATUS.WINNER
+      ? 'status-winner'
+      : evalState.status === MATCH_STATUS.DEUCE
+        ? 'status-deuce'
+        : evalState.status === MATCH_STATUS.GAME_POINT
+          ? 'status-gamepoint'
+          : evalState.status === MATCH_STATUS.WAITING
+            ? 'status-waiting'
+            : 'status-live';
+
+  const getSlotData = (slot) => {
+    const playerId = slot === 1 ? activeMatch?.player1Id : activeMatch?.player2Id;
+    const entrant = playerId ? playerMap.get(playerId) : null;
+    const score = slot === 1 ? activeMatch?.score1 || 0 : activeMatch?.score2 || 0;
+    const fallbackLabel =
+      slot === 1
+        ? activeMatch?.source1Label || (isTeams ? 'Awaiting Team' : 'Awaiting Player')
+        : activeMatch?.source2Label || (isTeams ? 'Awaiting Team' : 'Awaiting Player');
+    const membersText = isTeams ? formatTeamMembers(entrant, ' · ') : '';
+    const isServing =
+      evalState.activeServer === slot &&
+      Boolean(activeMatch?.player1Id && activeMatch?.player2Id) &&
+      !activeMatch?.completed &&
+      evalState.winnerSlot === null;
+    const isWinner =
+      evalState.winnerSlot === slot ||
+      (activeMatch?.completed && activeMatch?.winnerId === playerId && Boolean(playerId));
+
+    let serveDetail = evalState.isDeadMansServe
+      ? "Dead Man's Serve"
+      : evalState.isInDeuceZone
+      ? 'Deuce · 1 serve'
+      : `${evalState.pointsUntilServeSwitch} serve${evalState.pointsUntilServeSwitch === 1 ? '' : 's'
+      } left`;
+
+    if (isTeams && Array.isArray(entrant?.members)) {
+      const serverMember =
+        entrant.members[evalState.activeServerMemberIndex] || entrant.members[0];
+      if (serverMember) serveDetail = `${serverMember} serving · ${serveDetail}`;
+    }
+
+    return {
+      slot,
+      entrant,
+      score,
+      fallbackLabel,
+      membersText,
+      isServing,
+      isWinner,
+      serveDetail,
+    };
+  };
+
+  const leftData = getSlotData(leftSlot);
+  const rightData = getSlotData(rightSlot);
+  const isMatchStarted = Boolean(
+    activeMatch &&
+    (activeMatch.started ||
+      activeMatch.completed ||
+      (activeMatch.score1 || 0) > 0 ||
+      (activeMatch.score2 || 0) > 0)
+  );
+  const needsScoreboardUpdate = tournamentStore.hasUnpublishedMatchSelection();
+  const canStartMatch = Boolean(
+    canScoreRole &&
+    activeMatch &&
+    activeMatch.player1Id &&
+    activeMatch.player2Id &&
+    !activeMatch.completed &&
+    !isMatchStarted
+  );
+  const canScore = Boolean(
+    canScoreRole &&
+    activeMatch &&
+    activeMatch.player1Id &&
+    activeMatch.player2Id &&
+    isMatchStarted &&
+    !activeMatch.completed &&
+    evalState.winnerSlot === null
+  );
+
+  const renderTapPad = (data, sideKey, shortcutKey) => {
+    const colorClass = data.slot === 1 ? 'sk-side-p1' : 'sk-side-p2';
+    return (
+      <div
+        className={`sk-tap-pad ${colorClass} ${data.isServing ? 'is-serving' : ''} ${data.isWinner ? 'is-winner' : ''
+          } score-font-${state.ui?.scoreFont || 'barlow'}`}
+      >
+        <button
+          type="button"
+          className="sk-pad-main-btn"
+          onClick={() => handleScoreTap(data.slot)}
+          disabled={!canScore}
+          aria-label={`Add 1 point to ${data.entrant?.name || data.fallbackLabel}`}
+        >
+          <div className="sk-pad-top">
+            <div className="sk-identity">
+              <span className="seed-badge">{data.entrant ? `#${data.entrant.seed}` : 'TBD'}</span>
+              <div className="sk-name-stack">
+                <span className="sk-name">
+                  {data.entrant ? data.entrant.name : data.fallbackLabel}
+                </span>
+                {data.membersText && <span className="sk-members">{data.membersText}</span>}
+              </div>
+            </div>
+
+            {data.isServing && (
+              <span className="serving-badge">
+                <span className="serving-ball" aria-hidden="true" />
+                SERVING
+              </span>
+            )}
+            {data.isWinner && <span className="winner-tag">WINNER</span>}
+          </div>
+
+          <div className="sk-score-center">
+            <div className="digital-score sk-huge-score">{formatScore(data.score)}</div>
+            {data.isServing && <div className="sk-serve-sub">{data.serveDetail}</div>}
+          </div>
+
+          <div className="sk-tap-prompt">
+            <span>
+              {canScore
+                ? 'TAP ANYWHERE FOR +1'
+                : canStartMatch
+                  ? 'BEGIN MATCH TO SCORE'
+                  : activeMatch?.completed
+                    ? 'MATCH COMPLETE'
+                    : 'READY'}
+            </span>
+            <kbd>{shortcutKey}</kbd>
+          </div>
+        </button>
+
+        {pendingRemoval?.slot === data.slot && (
+          <PointRemovalTooltip
+            pending={pendingRemoval}
+            onCancel={() => cancelPendingRemoval()}
+            className="sk-remove-tooltip"
+          />
+        )}
+
+        <button
+          type="button"
+          className={`sk-minus-btn ${pendingRemoval?.slot === data.slot ? 'is-pending-remove' : ''}`}
+          onClick={() => requestRemovePoint(data.slot, resolveSlotName(data.slot))}
+          disabled={
+            !canScoreRole ||
+            !activeMatch ||
+            activeMatch.completed ||
+            data.score <= 0
+          }
+          aria-label={`Subtract 1 point from ${data.entrant?.name || sideKey}`}
+        >
+          −1
+        </button>
+      </div>
+    );
+  };
+
+  const isMatchInProgress = Boolean(
+    activeMatch &&
+    !activeMatch.completed &&
+    ((activeMatch.score1 || 0) > 0 || (activeMatch.score2 || 0) > 0)
+  );
+
+  const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
+  const activeTableNum = Math.max(
+    1,
+    Math.min(tableCount, Math.floor(Number(activeMatch?.tableNumber) || 1))
+  );
+
+  const activeP1 = activeMatch?.player1Id ? playerMap.get(activeMatch.player1Id) : null;
+  const activeP2 = activeMatch?.player2Id ? playerMap.get(activeMatch.player2Id) : null;
+  const activeTriggerLabel = activeMatch
+    ? `${activeMatch.label}: ${activeP1?.name || activeMatch.source1Label} vs ${activeP2?.name || activeMatch.source2Label
+    }`
+    : 'Select Match';
+
+  return (
+    <div className="scorekeeper-shell">
+      {/* Uniform Top Navigation Bar (Hub + Role Views + Contextual Match Picker + Full Screen on Top-Left) */}
+      <header
+        className={`sk-topbar ${
+          isFullscreen ? `is-fullscreen-topbar ${isMenuRevealed ? 'is-revealed' : ''}` : ''
+        }`}
+        {...barHoverHandlers}
+      >
+        <div className="sk-top-left">
+          {!isPopout ? (
+            <ViewNavBar
+              activeMode="scorekeeper"
+              rolePerms={rolePerms}
+              pendingRequestsCount={pendingRequestsCount}
+              onNavigateMode={onNavigateMode}
+              onOpenTournamentChooser={onOpenTournamentChooser}
+              isFullscreen={isFullscreen}
+            >
+              <button
+                type="button"
+                className={`sk-match-trigger ${isMatchInProgress || !canScoreRole ? 'is-locked' : ''}`}
+                disabled={isMatchInProgress || !canScoreRole}
+                title={
+                  !canScoreRole
+                    ? 'Spectator view is read-only — become a Scorekeeper to switch matches'
+                    : isMatchInProgress
+                    ? 'Match in progress — complete the match, return score to 0–0, or change matches from Control View'
+                    : 'Open game selection menu'
+                }
+                onClick={() => {
+                  if (!isMatchInProgress && canScoreRole) setMatchMenuOpen(true);
+                }}
+                aria-label="Open game selection menu"
+              >
+                <span className="sk-match-trigger-text">{activeTriggerLabel}</span>
+                <span className="sk-match-trigger-caret" aria-hidden="true">
+                  {isMatchInProgress ? '🔒' : '▾'}
+                </span>
+              </button>
+              {isMatchInProgress && (
+                <span
+                  className="sk-lock-chip"
+                  title="Return score to 0–0, complete the match, or switch from Control View"
+                >
+                  Locked (0–0 to switch)
+                </span>
+              )}
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
+              >
+                {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
+              </button>
+            </ViewNavBar>
+          ) : (
+            <>
+              <span className="sk-badge-title">🎯 SCOREKEEPER</span>
+              <button
+                type="button"
+                className={`sk-match-trigger ${isMatchInProgress || !canScoreRole ? 'is-locked' : ''}`}
+                disabled={isMatchInProgress || !canScoreRole}
+                onClick={() => {
+                  if (!isMatchInProgress && canScoreRole) setMatchMenuOpen(true);
+                }}
+                aria-label="Open game selection menu"
+              >
+                <span className="sk-match-trigger-text">{activeTriggerLabel}</span>
+                <span className="sk-match-trigger-caret" aria-hidden="true">
+                  {isMatchInProgress ? '🔒' : '▾'}
+                </span>
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="sk-top-right">
+          <div
+            className={`match-status-banner ${canStartMatch ? 'status-waiting' : statusTone}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="status-dot" aria-hidden="true" />
+            <span>
+              {canStartMatch
+                ? 'READY TO START'
+                : evalState.status === MATCH_STATUS.WINNER && evalState.isSkunkWin
+                ? '🦨 SKUNK WIN'
+                : evalState.status === MATCH_STATUS.GAME_POINT && evalState.isSkunkPoint
+                ? '🦨 SKUNK POINT'
+                : evalState.status}
+            </span>
+            <MatchTimer match={activeMatch} inline />
+          </div>
+          <span className="sk-rules-chip">
+            To {state.rules.targetPoints} · Win by {state.rules.winBy ?? 2} · Serve{' '}
+            {evalState.isInDeuceZone ? '1' : state.rules.serveRotation}
+            {state.rules?.skunkEnabled ? ` · Skunk ${state.rules.skunkScore ?? 7}–0` : ''}
+            {state.rules?.deadMansServe ? " · Dead Man's Serve" : ''}
+            {tableCount > 1 ? ` · Table ${activeTableNum}/${tableCount}` : ''}
+          </span>
+        </div>
+      </header>
+
+      {feedback && (
+        <div className="operator-toast" role="status" aria-live="polite">
+          {feedback}
+        </div>
+      )}
+
+      {canStartMatch && (
+        <div className="sk-begin-match-bar" role="region" aria-label="Begin Match">
+          <div className="sk-begin-copy">
+            <strong>
+              {activeMatch.label} Ready on Table {activeTableNum}
+            </strong>
+            <span>
+              {needsScoreboardUpdate
+                ? 'This match differs from the live scoreboard — press Update Scoreboard first, then Begin Match.'
+                : `Confirm players${tableCount > 1 ? ', table,' : ''} & first server, then press Begin Match to start & sync across all screens.`}
+            </span>
+          </div>
+          <div className="inline-actions">
+            {tableCount > 1 && (
+              <select
+                className="table-select-pill"
+                value={activeTableNum}
+                onChange={(e) =>
+                  tournamentStore.setMatchTable(activeMatch.id, Number(e.target.value))
+                }
+                aria-label="Select table for this match"
+              >
+                {Array.from({ length: tableCount }, (_, idx) => (
+                  <option key={idx + 1} value={idx + 1}>
+                    Table {idx + 1}
+                  </option>
+                ))}
+              </select>
+            )}
+            {needsScoreboardUpdate && (
+              <button
+                type="button"
+                className="btn-amber sk-update-scoreboard-btn"
+                onClick={() => {
+                  tournamentStore.publishSelectedMatch();
+                  flashFeedback(`📺 Scoreboard updated to ${activeMatch.label}`);
+                }}
+              >
+                📺 Update Scoreboard
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-amber sk-begin-match-btn"
+              disabled={needsScoreboardUpdate}
+              title={needsScoreboardUpdate ? 'Update the scoreboard first' : undefined}
+              onClick={() => {
+                tournamentStore.startMatch(activeMatch.id, activeTableNum);
+                flashFeedback(
+                  `▶ ${activeMatch.label} started on Table ${activeTableNum} & synced live!`
+                );
+              }}
+            >
+              ▶ Begin Match
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!canScoreRole && (
+        <div className="sk-guest-gate-bar" role="region" aria-label="Guest Scorekeeper Access">
+          <div className="sk-begin-copy">
+            <strong>
+              👤 Guest Mode (Read-Only Scoreboard)
+            </strong>
+            <span>
+              {hasPendingScorekeeperRequest
+                ? 'Your Scorekeeper access request has been sent — waiting for a Host, Admin, or Moderator to approve.'
+                : requireScorekeeperApproval
+                ? 'Request Scorekeeper access from the Host, Admin, or Moderator to score matches.'
+                : 'Scorekeeper approval is disabled — click below to become a Scorekeeper immediately.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-amber sk-begin-match-btn"
+            disabled={hasPendingScorekeeperRequest}
+            onClick={async () => {
+              const res = await tournamentStore.requestScorekeeperAccess();
+              if (res.ok && res.approved) {
+                flashFeedback('🎯 You are now a Scorekeeper!');
+              } else if (res.ok && res.pending) {
+                flashFeedback('🙋 Request sent — waiting for approval in Users tab');
+              } else {
+                flashFeedback(res.error || 'Could not request Scorekeeper access');
+              }
+            }}
+          >
+            {hasPendingScorekeeperRequest
+              ? '⏳ Approval Pending...'
+              : requireScorekeeperApproval
+              ? '🙋 Request Access'
+              : '🎯 Become Scorekeeper'}
+          </button>
+        </div>
+      )}
+
+      {/* Main Giant Dual-Pad Tap Arena */}
+      <main
+        className={`sk-arena ${canStartMatch ? 'is-awaiting-start' : ''} ${
+          !canScoreRole ? 'is-guest-readonly' : ''
+        }`}
+      >
+        {renderTapPad(leftData, 'left', '1')}
+        {renderTapPad(rightData, 'right', '2')}
+      </main>
+
+      {/* Bottom Action & Phrase Manager Quick Grandma Dock */}
+      <footer className={`sk-dock ${!canScoreRole ? 'is-guest-readonly' : ''}`}>
+        <div className="sk-dock-controls">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => tournamentStore.switchFirstServer()}
+            disabled={!canScoreRole || !activeMatch || activeMatch.completed}
+          >
+            ⇄ 1st Server <kbd>S</kbd>
+          </button>
+
+          <button
+            type="button"
+            className={`btn-secondary ${swappedSides ? 'is-toggled-on' : ''}`}
+            onClick={() => {
+              setSwappedSides((prev) => !prev);
+              flashFeedback('Court sides swapped locally');
+            }}
+          >
+            ↔ Swap Sides <kbd>X</kbd>
+          </button>
+        </div>
+
+        {/* Clickable Grandma Icon (Opens Full Phrase Menu) + First 5 Phrase Manager Buttons */}
+        {allowScorekeeperGrandma && (
+          <div className="sk-dock-cues" aria-label="Grandma Quick Phrases">
+            <button
+              type="button"
+              className="sk-grandma-menu-btn"
+              onClick={() => setPhraseMenuOpen(true)}
+              title="Open full Grandma phrase menu"
+              aria-label="Open full Grandma phrase menu"
+            >
+              👵
+            </button>
+            {quickGrandmaPhrases.map((phrase, idx) => {
+              const resolved = resolveGrandmaPhrase(phrase, state);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  className="cue-chip sk-phrase-chip"
+                  title={resolved}
+                  onClick={() => handleFirePhrase(phrase)}
+                >
+                  {resolved}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className={`btn-advance sk-complete-btn ${evalState.canComplete ? 'is-ready' : ''}`}
+          disabled={!evalState.canComplete}
+          onClick={() => {
+            cancelPendingRemoval(true);
+            const label = activeMatch?.label;
+            tournamentStore.completeActiveMatch();
+            flashFeedback(`Completed ${label} — next match loaded!`);
+          }}
+        >
+          {activeMatch?.completed
+            ? '✓ Match Completed'
+            : evalState.canComplete
+              ? '🏆 Complete & Next Match'
+              : `Win at ${state.rules.targetPoints} (+2)`}
+        </button>
+      </footer>
+
+      {/* Native <dialog> Contextual Grandma Phrase Menu (Contextual Phrases Only) */}
+      <dialog
+        ref={phraseDialogRef}
+        className="app-dialog sk-phrase-menu-dialog is-wide"
+        closedby="any"
+        aria-labelledby="sk-grandma-menu-heading"
+      >
+        <div className="dialog-surface">
+          <header className="dialog-header">
+            <h1 id="sk-grandma-menu-heading" className="dialog-title">
+              👵 Grandma Contextual Phrases
+            </h1>
+            <button
+              type="button"
+              className="dialog-close-btn"
+              onClick={() => phraseDialogRef.current?.close()}
+              aria-label="Close Grandma phrase menu"
+            >
+              ✕
+            </button>
+          </header>
+
+          <div className="dialog-body scroller">
+            <form
+              className="live-quote-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!customCue.trim()) return;
+                handleFirePhrase(customCue, true);
+                setCustomCue('');
+              }}
+            >
+              <GrandmaPhraseInput
+                state={state}
+                value={customCue}
+                onChange={(val) => setCustomCue(val)}
+                autoFocus
+                placeholder="Type a custom Grandma phrase (type $ for variables)..."
+                aria-label="Custom Grandma phrase"
+              />
+              <button type="submit" className="btn-amber">
+                💬 Say Now
+              </button>
+            </form>
+            {hasGrandmaVariables(customCue) && (
+              <div className="grandma-live-preview is-compact" role="status" aria-live="polite">
+                <span className="glp-label">Preview:</span>
+                <span className="glp-text">“{resolveGrandmaPhrase(customCue, state)}”</span>
+              </div>
+            )}
+
+            <div className="sk-menu-category">
+              <h2>⚡ Contextual Phrases ({contextualPhrases.length})</h2>
+              <div className="sk-menu-list">
+                {contextualPhrases.map((q, i) => {
+                  const resolved = resolveGrandmaPhrase(q, state);
+                  return (
+                    <button
+                      key={`c-${i}`}
+                      type="button"
+                      className="sk-menu-phrase-btn"
+                      onClick={() => handleFirePhrase(q, true)}
+                    >
+                      <span>▶</span>
+                      <span>{resolved}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </dialog>
+      {/* Game Selection Menu Modal (Auto-Opens on Match Completion with Highlighted Recommended Next Match) */}
+      <dialog
+        ref={matchDialogRef}
+        className="app-dialog sk-match-dialog"
+        closedby="any"
+        aria-labelledby="sk-match-menu-title"
+      >
+        <div className="dialog-surface">
+          <header className="dialog-header">
+            <h1 id="sk-match-menu-title" className="dialog-title">
+              {postCompleteBanner
+                ? '🏆 Match Complete — Select Next Game'
+                : `🏓 Select Game (${selectableMatches.length})`}
+            </h1>
+            <button
+              type="button"
+              className="dialog-close-btn"
+              onClick={() => matchDialogRef.current?.close()}
+              aria-label="Close game selection menu"
+            >
+              ✕
+            </button>
+          </header>
+
+          <div className="dialog-body scroller">
+            {postCompleteBanner && (
+              <div className="sk-postgame-banner">
+                <strong>
+                  ✓ {postCompleteBanner.matchLabel} Final ({postCompleteBanner.score1}–
+                  {postCompleteBanner.score2})
+                  {postCompleteBanner.winnerName ? ` · Winner: ${postCompleteBanner.winnerName}` : ''}
+                </strong>
+                <span>
+                  Choose the next match for {tableCount > 1 ? 'your table' : 'Table 1'} (the
+                  recommended next game is highlighted below).
+                </span>
+              </div>
+            )}
+
+            <div className="sk-match-picker-list">
+              {selectableMatches.map((m) => {
+                const p1 = m.player1Id ? playerMap.get(m.player1Id) : null;
+                const p2 = m.player2Id ? playerMap.get(m.player2Id) : null;
+                const p1Members = isTeams && p1 ? formatTeamMembers(p1, ' & ') : '';
+                const p2Members = isTeams && p2 ? formatTeamMembers(p2, ' & ') : '';
+                const isSelected = m.id === state.activeMatchId;
+                const isReady = Boolean(p1 && p2 && !m.completed);
+                const activeRecId = postCompleteBanner?.recommendedMatchId || recommendedMatchId;
+                const isRecommended = Boolean(activeRecId && m.id === activeRecId && isReady);
+                const hasScore = m.completed || (m.score1 || 0) > 0 || (m.score2 || 0) > 0;
+                const statusLabel = isSelected
+                  ? 'ACTIVE'
+                  : m.completed
+                    ? 'FINAL'
+                    : isReady
+                      ? 'READY'
+                      : 'TBD';
+
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`sk-match-picker-card ${isRecommended ? 'is-recommended' : ''} ${isSelected ? 'is-selected' : ''
+                      } ${m.completed ? 'is-completed' : isReady ? 'is-ready' : ''}`}
+                    onClick={() => {
+                      tournamentStore.selectMatch(m.id);
+                      matchDialogRef.current?.close();
+                    }}
+                  >
+                    <div className="sk-mp-head">
+                      <div className="sk-mp-head-left">
+                        <span className="sk-mp-code">
+                          {m.label} · {m.roundLabel}
+                          {tableCount > 1 && m.tableNumber ? ` · Table ${m.tableNumber}` : ''}
+                        </span>
+                        {isRecommended && (
+                          <span className="sk-mp-recommended-badge">★ RECOMMENDED NEXT</span>
+                        )}
+                      </div>
+                      <div className="sk-mp-badges">
+                        {hasScore && (
+                          <span className="sk-mp-score">
+                            {m.score1}–{m.score2}
+                          </span>
+                        )}
+                        <span className={`sk-mp-status is-${statusLabel.toLowerCase()}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="sk-mp-matchup">
+                      <div className="sk-mp-side">
+                        <strong className="sk-mp-name">
+                          {p1 ? `#${p1.seed} ${p1.name}` : m.source1Label}
+                        </strong>
+                        {p1Members && <span className="sk-mp-members">{p1Members}</span>}
+                      </div>
+
+                      <span className="sk-mp-vs">vs</span>
+
+                      <div className="sk-mp-side is-right">
+                        <strong className="sk-mp-name">
+                          {p2 ? `#${p2.seed} ${p2.name}` : m.source2Label}
+                        </strong>
+                        {p2Members && <span className="sk-mp-members">{p2Members}</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </dialog>
+
+      <DebounceOverrideDialog
+        request={debounceRequest}
+        onConfirm={handleConfirmDebounceOverride}
+        onCancel={() => setDebounceRequest(null)}
+      />
+
+      {(isFullscreen || isPopout) && tabId && (
+        <span className="floating-session-id-pill" title={`Current Session ID: ${tabId}`}>
+          {tabId}
+        </span>
+      )}
+    </div>
+  );
+}

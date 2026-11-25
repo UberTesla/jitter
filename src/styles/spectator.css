@@ -1,0 +1,217 @@
+/* =========================================================================
+   GUEST SPECTATOR MODE (/spectator)
+   Clean top bar for local slide browsing, Sync Presentation toggle,
+   and Request Scorekeeper action — wrapping PresentationView untouched.
+   ========================================================================= */
+
+.spectator-shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #04070e;
+  overflow: hidden;
+}
+
+.spectator-topbar {
+  flex: 0 0 auto;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.85rem;
+  min-height: 58px;
+  max-width: 100%;
+  padding: 0.6rem 1.1rem;
+  background: rgba(9, 14, 26, 0.96);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+
+.spectator-left,
+.spectator-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.spectator-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.68rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #bae6fd;
+}
+
+.spectator-slides-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.7rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.spectator-slide-pills {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: 0.25rem;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.spectator-slide-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.spectator-slide-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.32rem 0.65rem;
+  border-radius: 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.spectator-slide-btn:hover {
+  color: var(--text-primary);
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.spectator-slide-btn.is-active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #0f172a;
+}
+
+.spectator-sync-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(30, 41, 59, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.spectator-sync-toggle input {
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.spectator-sync-toggle.is-synced {
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e0f2fe;
+}
+
+.spectator-pending-btn {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.spectator-toast {
+  position: fixed;
+  top: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: calc(100vw - 1.5rem);
+  text-align: center;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  color: #fef3c7;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+@media (max-width: 720px) {
+  .spectator-topbar {
+    padding: 0.45rem 0.7rem;
+    gap: 0.45rem;
+  }
+
+  .spectator-slide-btn {
+    padding: 0.28rem 0.55rem;
+    font-size: 0.72rem;
+  }
+}
+
+.spectator-stage-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #04070e;
+}
+
+.spectator-stage-host .presentation-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 768px) {
+  .spectator-topbar {
+    min-height: 48px;
+    padding: 0.42rem 0.65rem;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+  }
+
+  .spectator-role-pill {
+    padding: 0.22rem 0.52rem;
+    font-size: 0.66rem;
+    white-space: nowrap;
+  }
+
+  .nav-items-tray.is-open .spectator-slide-pills {
+    width: 100%;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .nav-items-tray.is-open .spectator-slide-btn {
+    flex: 1 1 calc(33% - 0.25rem);
+    text-align: center;
+  }
+}

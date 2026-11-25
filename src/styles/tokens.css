@@ -1,0 +1,48 @@
+:root {
+  color-scheme: dark;
+
+  /* Core Arena Palette */
+  --bg-deep: #070b13;
+  --bg-arena: #0c1220;
+  --bg-surface: #121b2e;
+  --bg-surface-elevated: #18233a;
+  --bg-surface-hover: #1e2c48;
+  --border-subtle: rgba(148, 163, 184, 0.16);
+  --border-strong: rgba(148, 163, 184, 0.32);
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Orbitron', 'Inter', sans-serif;
+  --font-score-barlow: 'Barlow Condensed', 'Inter', sans-serif;
+  --font-score-chakra: 'Chakra Petch', 'Inter', sans-serif;
+  --font-score-orbitron: 'Orbitron', 'Inter', sans-serif;
+  --font-score-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Text */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  /* Broadcast Semantic Accents */
+  --accent-p1: #38bdf8;
+  --accent-p1-glow: rgba(56, 189, 248, 0.28);
+  --accent-p2: #fb7185;
+  --accent-p2-glow: rgba(251, 113, 133, 0.28);
+  --accent-amber: #f59e0b;
+  --accent-amber-soft: rgba(245, 158, 11, 0.18);
+  --accent-emerald: #10b981;
+  --accent-emerald-soft: rgba(16, 185, 129, 0.16);
+  --accent-red: #ef4444;
+  --accent-purple: #a855f7;
+
+  /* Radii & Shadows */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-glow-amber: 0 0 24px rgba(245, 158, 11, 0.28);
+
+  /* Scrollbar Tokens (>= 3:1 contrast between thumb and track) */
+  --scrollbar-thumb: #64748b;
+  --scrollbar-track: #0f172a;
+}
