@@ -812,7 +812,7 @@ export default function PlayerInboxDrawer({
                     flexShrink: 0,
                   }}
                 >
-                  {myPlayerStatus?.tone === 'playing' ? '🏓 YOU ARE UP' : '⏳ ON DECK'}
+                  ⏳ {(myPlayerStatus?.tabLabel || 'On Deck').toUpperCase()}
                 </span>
                 <span
                   style={{
@@ -829,39 +829,6 @@ export default function PlayerInboxDrawer({
                     </span>
                   ) : (() => {
                       const nextM = upNextMatches[0];
-                      const topText = nextM
-                        ? `${getPlayerLabel(nextM.player1Id, nextM.source1Label)} vs ${getPlayerLabel(
-                            nextM.player2Id,
-                            nextM.source2Label
-                          )}`
-                        : '';
-                      const p1Members = nextM ? getTeamMembersLine(nextM.player1Id) : '';
-                      const p2Members = nextM ? getTeamMembersLine(nextM.player2Id) : '';
-                      const subMembersText =
-                        isTeams && (p1Members || p2Members)
-                          ? `${p1Members || 'TBD'}  vs  ${p2Members || 'TBD'}`
-                          : '';
-                      if (myPlayerStatus?.tone === 'ondeck') {
-                        const isNextMe =
-                          nextM &&
-                          claimedEntrantId &&
-                          (nextM.player1Id === claimedEntrantId ||
-                            nextM.player2Id === claimedEntrantId);
-                        return (
-                          <>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                              {isNextMe
-                                ? `★ YOU'RE NEXT: ${topText}`
-                                : `${topText}  ·  ★ ${myPlayerStatus.headline.replace(/^⏳\s*/, '')}`}
-                            </span>
-                            {subMembersText && (
-                              <span style={{ fontSize: '0.68rem', opacity: 0.74, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {subMembersText}
-                              </span>
-                            )}
-                          </>
-                        );
-                      }
                       if (isTeams && nextM) {
                         return (
                           <span
@@ -1085,7 +1052,7 @@ export default function PlayerInboxDrawer({
                   trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
                 }}
               >
-                ⏳ {myPlayerStatus?.tabLabel || 'On Deck'}
+                ⏳ On Deck
               </button>
               <button
                 type="button"
