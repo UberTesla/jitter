@@ -101,11 +101,11 @@ export default function PresentationView({
   );
   const isBetweenMatches = Boolean(
     hasCompletedAnyMatch &&
-      (!activeMatchForSlide ||
-        activeMatchForSlide.completed ||
-        (!activeMatchForSlide.started &&
-          (activeMatchForSlide.score1 || 0) === 0 &&
-          (activeMatchForSlide.score2 || 0) === 0))
+    (!activeMatchForSlide ||
+      activeMatchForSlide.completed ||
+      (!activeMatchForSlide.started &&
+        (activeMatchForSlide.score1 || 0) === 0 &&
+        (activeMatchForSlide.score2 || 0) === 0))
   );
   // Allow operator to manually switch to any slide (like Bracket or Split) even while between matches
   const [manualBetweenOverride, setManualBetweenOverride] = useState(false);
@@ -127,11 +127,11 @@ export default function PresentationView({
 
   const forceSpotlightBetween = Boolean(
     state.presentation?.spotlightBetweenMatches &&
-      isBetweenMatches &&
-      !manualBetweenOverride &&
-      !embedded &&
-      baseSlide !== 'title' &&
-      baseSlide !== 'bracket'
+    isBetweenMatches &&
+    !manualBetweenOverride &&
+    !embedded &&
+    baseSlide !== 'title' &&
+    baseSlide !== 'bracket'
   );
   const targetSlide = forceSpotlightBetween
     ? 'spotlight'
@@ -249,20 +249,34 @@ export default function PresentationView({
   };
 
   const renderOnDeckEntrant = (id, fallback) => {
-    if (!id) return fallback || 'TBD';
+    if (!id) {
+      return isTeams ? (
+        <span className="pod-team-stack">
+          <span className="pod-team-name">{fallback || 'TBD'}</span>
+        </span>
+      ) : (
+        fallback || 'TBD'
+      );
+    }
     const p = playerMap.get(id);
-    if (!p) return fallback || 'TBD';
+    if (!p) {
+      return isTeams ? (
+        <span className="pod-team-stack">
+          <span className="pod-team-name">{fallback || 'TBD'}</span>
+        </span>
+      ) : (
+        fallback || 'TBD'
+      );
+    }
     const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
+    if (!isTeams) return `#${p.seed} ${p.name}`;
     return (
-      <>
-        #{p.seed} {p.name}
-        {members && (
-          <span style={{ opacity: 0.78, fontWeight: 500, fontSize: '0.86em' }}>
-            {' '}
-            ({members})
-          </span>
-        )}
-      </>
+      <span className="pod-team-stack">
+        <span className="pod-team-name">
+          #{p.seed} {p.name}
+        </span>
+        {members && <span className="pod-team-members">{members}</span>}
+      </span>
     );
   };
 
@@ -300,8 +314,8 @@ export default function PresentationView({
 
   const bannerNeedsTick = Boolean(
     candidateBanner?.dismissAt ||
-      candidateBanner?.countdownTargetAt ||
-      candidateBanner?.liveTemplate?.includes('[[CD:')
+    candidateBanner?.countdownTargetAt ||
+    candidateBanner?.liveTemplate?.includes('[[CD:')
   );
   useEffect(() => {
     if (!bannerNeedsTick) return undefined;
@@ -327,7 +341,7 @@ export default function PresentationView({
       .then((data) => {
         if (active && data && typeof data === 'object') setQrServerInfo(data);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       active = false;
     };
@@ -388,7 +402,7 @@ export default function PresentationView({
         {stats.upNext.slice(0, 2).map((m, idx) => (
           <div key={m.id} className={`pres-ondeck-item ${idx === 0 ? 'is-next' : ''}`}>
             <span className="pod-label">{idx === 0 ? 'NEXT UP' : m.label}</span>
-            <strong className="pod-matchup">
+            <strong className={`pod-matchup ${isTeams ? 'is-teams-dual' : ''}`}>
               {renderOnDeckEntrant(m.player1Id, m.source1Label)} <em>vs</em>{' '}
               {renderOnDeckEntrant(m.player2Id, m.source2Label)}
             </strong>
@@ -733,25 +747,51 @@ export default function PresentationView({
                       <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
                         ⏳ ON DECK
                       </span>
-                      <span
+                      <div
                         style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.55rem',
+                          minWidth: 0,
+                          flex: 1,
                           overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
                           fontWeight: 600,
                         }}
                       >
-                        {stats.upNext
-                          .slice(0, 2)
-                          .map(
-                            (m) =>
-                              `${getOnDeckLabel(m.player1Id, m.source1Label)} vs ${getOnDeckLabel(
-                                m.player2Id,
-                                m.source2Label
-                              )}`
-                          )
-                          .join('  ·  ')}
-                      </span>
+                        {isTeams ? (
+                          (() => {
+                            const m = stats.upNext[0];
+                            return (
+                              <span
+                                className="pod-matchup is-teams-dual"
+                                style={{ fontSize: '0.9rem' }}
+                              >
+                                {renderOnDeckEntrant(m.player1Id, m.source1Label)} <em>vs</em>{' '}
+                                {renderOnDeckEntrant(m.player2Id, m.source2Label)}
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {stats.upNext
+                              .slice(0, 2)
+                              .map(
+                                (m) =>
+                                  `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                    m.player2Id,
+                                    m.source2Label
+                                  )}`
+                              )
+                              .join('  ·  ')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -777,17 +817,17 @@ export default function PresentationView({
                               background: isWin
                                 ? 'rgba(16, 185, 129, 0.16)'
                                 : isAnn
-                                ? 'rgba(245, 158, 11, 0.18)'
-                                : isEvt
-                                ? 'rgba(56, 189, 248, 0.14)'
-                                : undefined,
+                                  ? 'rgba(245, 158, 11, 0.18)'
+                                  : isEvt
+                                    ? 'rgba(56, 189, 248, 0.14)'
+                                    : undefined,
                               borderColor: isWin
                                 ? 'rgba(16, 185, 129, 0.45)'
                                 : isAnn
-                                ? 'rgba(245, 158, 11, 0.5)'
-                                : isEvt
-                                ? 'rgba(56, 189, 248, 0.4)'
-                                : undefined,
+                                  ? 'rgba(245, 158, 11, 0.5)'
+                                  : isEvt
+                                    ? 'rgba(56, 189, 248, 0.4)'
+                                    : undefined,
                             }}
                           >
                             <div className="queue-card-top" style={{ marginBottom: '0.25rem' }}>
@@ -797,9 +837,9 @@ export default function PresentationView({
                               <span className="queue-tag">
                                 {m.sentAt
                                   ? new Date(m.sentAt).toLocaleTimeString([], {
-                                      hour: 'numeric',
-                                      minute: '2-digit',
-                                    })
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })
                                   : ''}
                               </span>
                             </div>

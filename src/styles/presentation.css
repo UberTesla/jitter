@@ -307,6 +307,38 @@
   margin: 0 4px;
 }
 
+.pod-matchup.is-teams-dual {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pod-team-stack {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.pod-team-name {
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pod-team-members {
+  font-size: 0.72em;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.76);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+}
+
 .slide-split-wrapper {
   flex: 1;
   min-height: 0;

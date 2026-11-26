@@ -59,11 +59,17 @@ export default function Ticker({
   const stats = useMemo(() => computeTournamentStats(state), [state]);
   const isTeams = state.entryMode === 'teams';
   const nameOf = (id, fallback) => state.players?.find((p) => p.id === id)?.name || fallback || 'TBD';
-  const onDeckNameOf = (id, fallback) => {
+  const renderOnDeckSide = (id, fallback) => {
     const p = state.players?.find((pl) => pl.id === id);
-    if (!p) return fallback || 'TBD';
-    const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
-    return members ? `${p.name} (${members})` : p.name;
+    const label = p?.name || fallback || 'TBD';
+    const members = p && isTeams ? formatTeamMembersShort(p, ' & ') : '';
+    if (!isTeams) return <span>{label}</span>;
+    return (
+      <span className="pod-team-stack">
+        <span className="pod-team-name">{label}</span>
+        {members && <span className="pod-team-members">{members}</span>}
+      </span>
+    );
   };
 
   if (items.length === 0) return null;
@@ -116,9 +122,9 @@ export default function Ticker({
         stats.upNext.slice(0, 4).map((m) => (
           <div key={m.id} className="ticker-chip">
             <span className="ticker-code">{m.label}</span>
-            <span>{onDeckNameOf(m.player1Id, m.source1Label)}</span>
+            {renderOnDeckSide(m.player1Id, m.source1Label)}
             <em>vs</em>
-            <span>{onDeckNameOf(m.player2Id, m.source2Label)}</span>
+            {renderOnDeckSide(m.player2Id, m.source2Label)}
           </div>
         ))
       );
@@ -150,18 +156,31 @@ export default function Ticker({
               <span className="ticker-code" style={{ color: '#38bdf8' }}>
                 ⏳ ON DECK
               </span>
-              <span>
-                {stats.upNext
-                  .slice(0, 2)
-                  .map(
-                    (m) =>
-                      `${onDeckNameOf(m.player1Id, m.source1Label)} vs ${onDeckNameOf(
-                        m.player2Id,
-                        m.source2Label
-                      )}`
-                  )
-                  .join(' · ')}
-              </span>
+              {isTeams ? (
+                (() => {
+                  const m = stats.upNext[0];
+                  return (
+                    <span className="pod-matchup is-teams-dual" style={{ fontSize: 'inherit' }}>
+                      {renderOnDeckSide(m.player1Id, m.source1Label)}
+                      <em>vs</em>
+                      {renderOnDeckSide(m.player2Id, m.source2Label)}
+                    </span>
+                  );
+                })()
+              ) : (
+                <span>
+                  {stats.upNext
+                    .slice(0, 2)
+                    .map(
+                      (m) =>
+                        `${nameOf(m.player1Id, m.source1Label)} vs ${nameOf(
+                          m.player2Id,
+                          m.source2Label
+                        )}`
+                    )
+                    .join(' · ')}
+                </span>
+              )}
             </div>
           )}
           {recentChat.length === 0 ? (

@@ -327,12 +327,43 @@ export default function PlayerInboxDrawer({
     if (!pid) return fallback || 'TBD';
     return players.find((p) => p.id === pid)?.name || fallback || 'TBD';
   };
-  const getOnDeckLabel = (pid, fallback) => {
-    if (!pid) return fallback || 'TBD';
+  const getTeamMembersLine = (pid) => {
+    if (!isTeams || !pid) return '';
     const p = players.find((pl) => pl.id === pid);
-    if (!p) return fallback || 'TBD';
-    const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
-    return members ? `${p.name} (${members})` : p.name;
+    return p ? formatTeamMembersShort(p, ' & ') : '';
+  };
+  const renderDrawerOnDeckSide = (pid, fallback) => {
+    const label = getPlayerLabel(pid, fallback);
+    const members = getTeamMembersLine(pid);
+    if (!isTeams) return <span>{label}</span>;
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          lineHeight: 1.2,
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </span>
+        {members && (
+          <span
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: 500,
+              opacity: 0.72,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {members}
+          </span>
+        )}
+      </span>
+    );
   };
 
   const handleSaveChatName = (e) => {
@@ -751,42 +782,81 @@ export default function PlayerInboxDrawer({
                 </span>
                 <span
                   style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minWidth: 0,
+                    flex: 1,
+                    lineHeight: 1.2,
                   }}
                 >
-                  {myPlayerStatus?.tone === 'playing'
-                    ? myPlayerStatus.detail
-                    : (() => {
-                        const nextM = upNextMatches[0];
-                        const nextText = nextM
-                          ? `${getOnDeckLabel(nextM.player1Id, nextM.source1Label)} vs ${getOnDeckLabel(
-                              nextM.player2Id,
-                              nextM.source2Label
-                            )}`
+                  {myPlayerStatus?.tone === 'playing' ? (
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {myPlayerStatus.detail}
+                    </span>
+                  ) : (() => {
+                      const nextM = upNextMatches[0];
+                      const topText = nextM
+                        ? `${getPlayerLabel(nextM.player1Id, nextM.source1Label)} vs ${getPlayerLabel(
+                            nextM.player2Id,
+                            nextM.source2Label
+                          )}`
+                        : '';
+                      const p1Members = nextM ? getTeamMembersLine(nextM.player1Id) : '';
+                      const p2Members = nextM ? getTeamMembersLine(nextM.player2Id) : '';
+                      const subMembersText =
+                        isTeams && (p1Members || p2Members)
+                          ? `${p1Members || 'TBD'}  vs  ${p2Members || 'TBD'}`
                           : '';
-                        if (myPlayerStatus?.tone === 'ondeck') {
-                          const isNextMe =
-                            nextM &&
-                            claimedPlayerObj &&
-                            (nextM.player1Id === claimedPlayerObj.id ||
-                              nextM.player2Id === claimedPlayerObj.id);
-                          return isNextMe
-                            ? `★ YOU'RE NEXT: ${nextText}`
-                            : `${nextText}  ·  ★ ${myPlayerStatus.headline.replace(/^⏳\s*/, '')}`;
-                        }
-                        return upNextMatches
-                          .slice(0, 2)
-                          .map(
-                            (m) =>
-                              `${getOnDeckLabel(m.player1Id, m.source1Label)} vs ${getOnDeckLabel(
-                                m.player2Id,
-                                m.source2Label
-                              )}`
-                          )
-                          .join('  ·  ');
-                      })()}
+                      if (myPlayerStatus?.tone === 'ondeck') {
+                        const isNextMe =
+                          nextM &&
+                          claimedPlayerObj &&
+                          (nextM.player1Id === claimedPlayerObj.id ||
+                            nextM.player2Id === claimedPlayerObj.id);
+                        return (
+                          <>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                              {isNextMe
+                                ? `★ YOU'RE NEXT: ${topText}`
+                                : `${topText}  ·  ★ ${myPlayerStatus.headline.replace(/^⏳\s*/, '')}`}
+                            </span>
+                            {subMembersText && (
+                              <span style={{ fontSize: '0.68rem', opacity: 0.74, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {subMembersText}
+                              </span>
+                            )}
+                          </>
+                        );
+                      }
+                      if (isTeams && nextM) {
+                        return (
+                          <>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                              {topText}
+                            </span>
+                            {subMembersText && (
+                              <span style={{ fontSize: '0.68rem', opacity: 0.74, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {subMembersText}
+                              </span>
+                            )}
+                          </>
+                        );
+                      }
+                      return (
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {upNextMatches
+                            .slice(0, 2)
+                            .map(
+                              (m) =>
+                                `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                  m.player2Id,
+                                  m.source2Label
+                                )}`
+                            )
+                            .join('  ·  ')}
+                        </span>
+                      );
+                    })()}
                 </span>
               </button>
             )}
@@ -1463,10 +1533,19 @@ export default function PlayerInboxDrawer({
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: '0.15rem' }}>
-                              {getOnDeckLabel(m.player1Id, m.source1Label)}{' '}
-                              <span style={{ opacity: 0.6 }}>vs</span>{' '}
-                              {getOnDeckLabel(m.player2Id, m.source2Label)}
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.45rem',
+                                fontSize: '0.84rem',
+                                fontWeight: 600,
+                                marginTop: '0.2rem',
+                              }}
+                            >
+                              {renderDrawerOnDeckSide(m.player1Id, m.source1Label)}
+                              <span style={{ opacity: 0.6, flexShrink: 0 }}>vs</span>
+                              {renderDrawerOnDeckSide(m.player2Id, m.source2Label)}
                             </div>
                           </div>
                         );
