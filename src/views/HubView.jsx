@@ -70,7 +70,9 @@ export default function HubView({
   const [newName, setNewName] = useState('');
   const [newEntryMode, setNewEntryMode] = useState('singles');
   const [newFormat, setNewFormat] = useState('single');
-  const [newPlayerCount, setNewPlayerCount] = useState(8);
+  const [newRoster, setNewRoster] = useState([]);
+  const [newPlayerDraft, setNewPlayerDraft] = useState('');
+  const newPlayerInputRef = useRef(null);
   const [hostNewOnCloud, setHostNewOnCloud] = useState(true);
   const [newIsPublic, setNewIsPublic] = useState(true);
   const [newIsSecure, setNewIsSecure] = useState(true);
@@ -306,14 +308,55 @@ export default function HubView({
     flashStatus('Deleted local tournament');
   };
 
+  const handleAddCreatePlayer = () => {
+    if (newRoster.length >= MAX_PLAYERS) return;
+    const typed = newPlayerDraft.trim();
+    const name = typed || `Player ${newRoster.length + 1}`;
+    setNewRoster((prev) => [
+      ...prev,
+      { id: `r-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, name },
+    ]);
+    setNewPlayerDraft('');
+    requestAnimationFrame(() => newPlayerInputRef.current?.focus());
+  };
+
+  const handleEditCreatePlayer = (idx, value) => {
+    setNewRoster((prev) => prev.map((p, i) => (i === idx ? { ...p, name: value } : p)));
+  };
+
+  const handleRemoveCreatePlayer = (idx) => {
+    setNewRoster((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleCreate = (e) => {
     e.preventDefault();
     const isTeams = newEntryMode === 'teams';
-    const humans = Math.max(
-      isTeams ? 4 : MIN_PLAYERS,
-      Math.min(MAX_PLAYERS, clampPlayerCount(newPlayerCount))
-    );
+    const minNeeded = isTeams ? 4 : MIN_PLAYERS;
+    if (newRoster.length < minNeeded) return;
+    const cleanedRoster = newRoster.map((p, idx) => ({
+      id: p.id || `r${idx + 1}`,
+      name: p.name.trim() || `Player ${idx + 1}`,
+    }));
+    const humans = cleanedRoster.length;
     const entrants = isTeams ? Math.max(2, Math.ceil(humans / 2)) : humans;
+    const initialPlayers = isTeams
+      ? Array.from({ length: entrants }, (_, i) => {
+          const pA = cleanedRoster[i * 2] || null;
+          const pB = cleanedRoster[i * 2 + 1] || null;
+          return {
+            id: `p${i + 1}`,
+            seed: i + 1,
+            name: `Team ${i + 1}`,
+            memberIds: [pA?.id || '', pB?.id || ''],
+            members: [pA?.name || '', pB?.name || ''],
+          };
+        })
+      : cleanedRoster.map((p, idx) => ({
+          id: `p${idx + 1}`,
+          seed: idx + 1,
+          name: p.name,
+        }));
+
     const created = tournamentStore.createNewTournament(
       {
         tournamentName: newName.trim() || 'GRAND RETRO PING PONG CHAMPIONSHIP',
@@ -321,6 +364,8 @@ export default function HubView({
         format: newFormat,
         playerCount: entrants,
         totalPlayers: humans,
+        roster: cleanedRoster,
+        players: initialPlayers,
         rules: {
           requireScorekeeperApproval: hubSettings.defaultRequireScorekeeperApproval !== false,
         },
@@ -334,6 +379,8 @@ export default function HubView({
     setLocalTournaments(tournamentStore.listTournaments());
     setShowCreateModal(false);
     setNewName('');
+    setNewRoster([]);
+    setNewPlayerDraft('');
     onEnterTournament?.(created.tournamentId);
   };
 
@@ -1231,10 +1278,7 @@ export default function HubView({
                 <button
                   type="button"
                   className={newEntryMode === 'teams' ? 'is-selected' : ''}
-                  onClick={() => {
-                    setNewEntryMode('teams');
-                    if (Number(newPlayerCount) < 4) setNewPlayerCount(4);
-                  }}
+                  onClick={() => setNewEntryMode('teams')}
                 >
                   Teams
                 </button>
@@ -1263,25 +1307,80 @@ export default function HubView({
           </div>
 
           <div className="form-field">
-            <label htmlFor="simple-new-count">
-              Players ({newEntryMode === 'teams' ? 4 : MIN_PLAYERS}–{MAX_PLAYERS})
+            <label htmlFor="simple-new-player">
+              Players ({newRoster.length} added
+              {newEntryMode === 'teams' && newRoster.length >= 2
+                ? ` · ${Math.max(2, Math.ceil(newRoster.length / 2))} teams`
+                : ''}
+              )
             </label>
-            <div className="custom-sec-input-wrap">
+            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
               <input
-                id="simple-new-count"
-                type="number"
-                min={newEntryMode === 'teams' ? 4 : MIN_PLAYERS}
-                max={MAX_PLAYERS}
-                value={newPlayerCount}
-                onChange={(e) => setNewPlayerCount(e.target.value)}
-                className="count-number-input"
+                ref={newPlayerInputRef}
+                id="simple-new-player"
+                type="text"
+                value={newPlayerDraft}
+                onChange={(e) => setNewPlayerDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCreatePlayer();
+                  }
+                }}
+                placeholder="Type player name and press Enter..."
+                disabled={newRoster.length >= MAX_PLAYERS}
+                style={{ flex: 1 }}
               />
-              <span className="sec-unit">
-                {newEntryMode === 'teams'
-                  ? `players (${Math.max(2, Math.ceil((Number(newPlayerCount) || 4) / 2))} teams)`
-                  : 'players'}
-              </span>
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={handleAddCreatePlayer}
+                disabled={newRoster.length >= MAX_PLAYERS}
+              >
+                + Add
+              </button>
             </div>
+            {newRoster.length < (newEntryMode === 'teams' ? 4 : MIN_PLAYERS) && (
+              <p className="panel-subtitle" style={{ margin: '0.35rem 0 0' }}>
+                Add at least {newEntryMode === 'teams' ? 4 : MIN_PLAYERS} players to start
+              </p>
+            )}
+            {newRoster.length > 0 && (
+              <div
+                className="scroller"
+                style={{
+                  maxHeight: '190px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.35rem',
+                  marginTop: '0.5rem',
+                }}
+              >
+                {newRoster.map((p, idx) => (
+                  <div key={p.id} className="player-input-row">
+                    <span className="seed-tag">#{idx + 1}</span>
+                    <input
+                      type="text"
+                      value={p.name}
+                      onChange={(e) => handleEditCreatePlayer(idx, e.target.value)}
+                      placeholder={`Player ${idx + 1}`}
+                      aria-label={`Player ${idx + 1} name`}
+                    />
+                    <button
+                      type="button"
+                      className="btn-danger-outline btn-sm"
+                      onClick={() => handleRemoveCreatePlayer(idx)}
+                      aria-label={`Remove ${p.name || `Player ${idx + 1}`}`}
+                      title="Remove player"
+                      style={{ padding: '0.25rem 0.45rem', flexShrink: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {isConnected && canCreateCloud && (
@@ -1358,7 +1457,11 @@ export default function HubView({
             >
               Cancel
             </button>
-              <button type="submit" className="btn-amber">
+              <button
+                type="submit"
+                className="btn-amber"
+                disabled={newRoster.length < (newEntryMode === 'teams' ? 4 : MIN_PLAYERS)}
+              >
                 Create Tournament
               </button>
             </div>

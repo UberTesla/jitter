@@ -16,7 +16,9 @@ import {
   AMBIANCE_OPTIONS,
 } from '../state/tournamentStore.js';
 
-const PRESET_COUNTS = [4, 8, 16, 32, 64, 128, 256];
+function makeRosterPlayerId() {
+  return `r-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
 
 function shuffleArray(list) {
   const arr = [...list];
@@ -226,7 +228,6 @@ export default function PlayerSetupModal({
   const initData = useMemo(() => extractInitialRosterAndTeams(state), []);
 
   const [draftName, setDraftName] = useState(state.tournamentName);
-  const [draftHumanCount, setDraftHumanCount] = useState(initData.roster.length);
   const [draftFormat, setDraftFormat] = useState(state.format);
   const [draftEntryMode, setDraftEntryMode] = useState(state.entryMode || 'singles');
   const [draftAutoTeamNames, setDraftAutoTeamNames] = useState(Boolean(state.autoTeamNames));
@@ -259,13 +260,14 @@ export default function PlayerSetupModal({
   const [draftSeedsRandomized, setDraftSeedsRandomized] = useState(false);
   const [draftApplyMode, setDraftApplyMode] = useState('preserve'); // 'preserve' | 'rebuild'
   const [rosterSearch, setRosterSearch] = useState('');
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const newPlayerInputRef = useRef(null);
 
   // Snapshot live state only on closed -> open transition
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       const { roster, teams } = extractInitialRosterAndTeams(state);
       setDraftName(state.tournamentName);
-      setDraftHumanCount(roster.length);
       setDraftFormat(state.format);
       setDraftEntryMode(state.entryMode || 'singles');
       setDraftAutoTeamNames(Boolean(state.autoTeamNames));
@@ -273,7 +275,7 @@ export default function PlayerSetupModal({
       setDraftServeRotation(state.rules?.serveRotation ?? 2);
       setDraftWinBy(state.rules?.winBy ?? 2);
       setDraftSkunk(state.rules?.skunkEnabled ? String(state.rules?.skunkScore ?? 7) : '0');
-        setDraftDeadMansServe(Boolean(state.rules?.deadMansServe));
+      setDraftDeadMansServe(Boolean(state.rules?.deadMansServe));
       setDraftTableCount(state.rules?.tableCount ?? 1);
       setDraftRequireScorekeeperApproval(state.rules?.requireScorekeeperApproval !== false);
       setDraftAllowScorekeeperGrandma(state.rules?.allowScorekeeperGrandma !== false);
@@ -288,6 +290,7 @@ export default function PlayerSetupModal({
       setDraftSeedsRandomized(false);
       setDraftApplyMode('preserve');
       setRosterSearch('');
+      setNewPlayerName('');
     }
     wasOpenRef.current = open;
   }, [open, state]);
@@ -346,38 +349,18 @@ export default function PlayerSetupModal({
 
   const isTeams = draftEntryMode === 'teams';
   const minHumans = isTeams ? 4 : MIN_PLAYERS;
-  const entrantCount = isTeams ? Math.max(2, Math.ceil(draftHumanCount / 2)) : draftHumanCount;
+  const draftHumanCount = draftRoster.length;
+  const hasEnoughPlayers = draftHumanCount >= minHumans;
+  const safeHumanCount = Math.max(minHumans, draftHumanCount);
+  const entrantCount = isTeams ? Math.max(2, Math.ceil(safeHumanCount / 2)) : safeHumanCount;
 
   const handleModeChange = (nextMode) => {
     if (nextMode === draftEntryMode) return;
-    const nextMin = nextMode === 'teams' ? 4 : MIN_PLAYERS;
-    const nextHumans = Math.max(nextMin, draftHumanCount);
-    const nextRoster = resizePlayerRoster(nextHumans, draftRoster, {
-      demoMode: Boolean(state.demoMode),
-    });
     setDraftEntryMode(nextMode);
-    setDraftHumanCount(nextHumans);
-    setDraftRoster(nextRoster);
     if (nextMode === 'teams') {
       // Generate teams randomly from the Player Roster when entering Teams mode
       setDraftTeams(
-        generateRandomTeamsFromRoster(nextRoster, draftTeams, {
-          autoTeamNames: draftAutoTeamNames,
-        })
-      );
-    }
-  };
-
-  const handleSizeChange = (rawCount) => {
-    const clamped = Math.max(minHumans, Math.min(MAX_PLAYERS, clampPlayerCount(rawCount)));
-    const nextRoster = resizePlayerRoster(clamped, draftRoster, {
-      demoMode: Boolean(state.demoMode),
-    });
-    setDraftHumanCount(clamped);
-    setDraftRoster(nextRoster);
-    if (isTeams) {
-      setDraftTeams((prev) =>
-        reconcileTeamsWithRoster(nextRoster, prev, {
+        generateRandomTeamsFromRoster(draftRoster, draftTeams, {
           autoTeamNames: draftAutoTeamNames,
         })
       );
@@ -466,9 +449,38 @@ export default function PlayerSetupModal({
   };
 
   const handleAddPlayer = () => {
-    if (draftHumanCount >= MAX_PLAYERS) return;
+    if (draftRoster.length >= MAX_PLAYERS) return;
+    const typed = newPlayerName.trim();
+    const fallbackName = state.demoMode
+      ? generateDemoPlayerName(draftRoster.length)
+      : `Player ${draftRoster.length + 1}`;
+    const nextRoster = [
+      ...draftRoster,
+      { id: makeRosterPlayerId(), name: typed || fallbackName },
+    ];
     setRosterSearch('');
-    handleSizeChange(draftHumanCount + 1);
+    setNewPlayerName('');
+    setDraftRoster(nextRoster);
+    if (isTeams) {
+      setDraftTeams((prev) =>
+        reconcileTeamsWithRoster(nextRoster, prev, {
+          autoTeamNames: draftAutoTeamNames,
+        })
+      );
+    }
+    requestAnimationFrame(() => newPlayerInputRef.current?.focus());
+  };
+
+  const handleRemovePlayer = (idx) => {
+    const nextRoster = draftRoster.filter((_, i) => i !== idx);
+    setDraftRoster(nextRoster);
+    if (isTeams) {
+      setDraftTeams((prev) =>
+        reconcileTeamsWithRoster(nextRoster, prev, {
+          autoTeamNames: draftAutoTeamNames,
+        })
+      );
+    }
   };
 
   // Preview-only seed randomization inside the Setup modal (does not close or apply until Saved)
@@ -513,6 +525,7 @@ export default function PlayerSetupModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!hasEnoughPlayers) return;
     const finalEntrants = isTeams
       ? draftTeams.map((t, idx) => ({
           id: `p${idx + 1}`,
@@ -639,64 +652,10 @@ export default function PlayerSetupModal({
               </div>
             </div>
 
-            <div className="form-field">
-              <label htmlFor="modal-player-count">
-                Number of Players ({minHumans}–{MAX_PLAYERS})
-              </label>
-              <div className="player-count-picker">
-                <div className="stepper-group">
-                  <button
-                    type="button"
-                    className="btn-secondary btn-sm"
-                    onClick={() => handleSizeChange(draftHumanCount - 1)}
-                    disabled={draftHumanCount <= minHumans}
-                    aria-label="Decrease number of players"
-                  >
-                    −
-                  </button>
-                  <input
-                    id="modal-player-count"
-                    type="number"
-                    min={minHumans}
-                    max={MAX_PLAYERS}
-                    value={draftHumanCount}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '') return;
-                      handleSizeChange(val);
-                    }}
-                    className="count-number-input"
-                  />
-                  <button
-                    type="button"
-                    className="btn-secondary btn-sm"
-                    onClick={() => handleSizeChange(draftHumanCount + 1)}
-                    disabled={draftHumanCount >= MAX_PLAYERS}
-                    aria-label="Increase number of players"
-                  >
-                    +
-                  </button>
-                </div>
-
-                <div className="segmented-control compact">
-                  {PRESET_COUNTS.map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      className={draftHumanCount === sz ? 'is-selected' : ''}
-                      onClick={() => handleSizeChange(sz)}
-                    >
-                      {sz}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
             {isTeams && (
               <p className="setup-info">
-                {draftHumanCount} players → <strong>{entrantCount} randomly paired teams</strong>{' '}
-                (2v2
+                {draftHumanCount} player{draftHumanCount === 1 ? '' : 's'} →{' '}
+                <strong>{entrantCount} randomly paired teams</strong> (2v2
                 {draftHumanCount % 2 === 1
                   ? ` · ${Math.floor(draftHumanCount / 2)} pairs + 1 solo slot`
                   : ''}
@@ -991,22 +950,14 @@ export default function PlayerSetupModal({
           <div className="setup-section-box">
             <div className="players-grid-header">
               <h2 className="setup-section-heading">
-                Player Roster ({draftHumanCount} Players)
+                Player Roster ({draftHumanCount} Player{draftHumanCount === 1 ? '' : 's'})
               </h2>
               <div className="inline-actions">
                 <button
                   type="button"
-                  className="btn-primary btn-sm"
-                  onClick={handleAddPlayer}
-                  disabled={draftHumanCount >= MAX_PLAYERS}
-                  title="Add a player mid-tournament (auto-adjusts teams & preserves scores)"
-                >
-                  + Add Player
-                </button>
-                <button
-                  type="button"
                   className="btn-secondary btn-sm"
                   onClick={handlePreviewRandomizeSeeds}
+                  disabled={draftHumanCount < 2}
                   title="Preview a randomized seed order (only takes effect when saved)"
                 >
                   🎲 Randomize Seeds
@@ -1023,6 +974,42 @@ export default function PlayerSetupModal({
                 </button>
               </div>
             </div>
+
+            <div
+              className="roster-add-row"
+              style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.65rem' }}
+            >
+              <input
+                ref={newPlayerInputRef}
+                type="text"
+                value={newPlayerName}
+                onChange={(e) => setNewPlayerName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddPlayer();
+                  }
+                }}
+                placeholder="Type a player name and press Enter to add..."
+                aria-label="Add player name"
+                disabled={draftHumanCount >= MAX_PLAYERS}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={handleAddPlayer}
+                disabled={draftHumanCount >= MAX_PLAYERS}
+              >
+                + Add
+              </button>
+            </div>
+
+            {!hasEnoughPlayers && (
+              <p className="setup-notice" style={{ marginBottom: '0.5rem' }}>
+                Add at least {minHumans} players ({isTeams ? '4 required for Teams' : '2 minimum'}) to save the tournament.
+              </p>
+            )}
 
             {draftSeedsRandomized && (
               <p className="setup-info">
@@ -1047,19 +1034,36 @@ export default function PlayerSetupModal({
             )}
 
             <div className="roster-scroll-box scroller">
-              <div className="player-inputs-grid">
-                {filteredRoster.map(({ player, idx }) => (
-                  <label key={player.id} className="player-input-row">
-                    <span className="seed-tag">#{idx + 1}</span>
-                    <input
-                      type="text"
-                      value={player.name}
-                      onChange={(e) => handleRosterNameChange(idx, e.target.value)}
-                      placeholder={`Player ${idx + 1}`}
-                    />
-                  </label>
-                ))}
-              </div>
+              {draftHumanCount === 0 ? (
+                <p className="panel-subtitle" style={{ margin: '0.4rem 0' }}>
+                  No players yet — type a name above and click <strong>+ Add</strong>.
+                </p>
+              ) : (
+                <div className="player-inputs-grid">
+                  {filteredRoster.map(({ player, idx }) => (
+                    <div key={player.id} className="player-input-row">
+                      <span className="seed-tag">#{idx + 1}</span>
+                      <input
+                        type="text"
+                        value={player.name}
+                        onChange={(e) => handleRosterNameChange(idx, e.target.value)}
+                        placeholder={`Player ${idx + 1}`}
+                        aria-label={`Player ${idx + 1} name`}
+                      />
+                      <button
+                        type="button"
+                        className="btn-danger-outline btn-sm"
+                        onClick={() => handleRemovePlayer(idx)}
+                        aria-label={`Remove ${player.name || `Player ${idx + 1}`}`}
+                        title="Remove player"
+                        style={{ padding: '0.25rem 0.45rem', flexShrink: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1201,6 +1205,7 @@ export default function PlayerSetupModal({
             <button
               type="submit"
               className={willRebuildBracket ? 'btn-amber' : 'btn-primary'}
+              disabled={!hasEnoughPlayers}
             >
               {willRebuildBracket
                 ? '🔥 Apply & Rebuild Bracket'
