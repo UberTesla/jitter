@@ -566,6 +566,13 @@ export default function PlayerInboxDrawer({
           <div className="inbox-drawer-card">
             <div className="inbox-drawer-header" style={{ gap: '0.5rem', alignItems: 'center' }}>
               <h2
+                title={
+                  claimedPlayerObj
+                    ? `🔒 Claimed Player: ${claimedPlayerObj.name} — Ask a Moderator or Host to change or release your claim.`
+                    : hasCustomChatName
+                    ? `Display Name: ${remoteSync.deviceName}`
+                    : 'Tournament Chat & Inbox'
+                }
                 style={{
                   margin: 0,
                   fontSize: '0.96rem',
@@ -573,6 +580,7 @@ export default function PlayerInboxDrawer({
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   maxWidth: '38%',
+                  cursor: claimedPlayerObj ? 'help' : undefined,
                 }}
               >
                 💬 {chatHeaderName}
@@ -1534,97 +1542,104 @@ export default function PlayerInboxDrawer({
             {/* TAB 4: ALERTS INBOX & PLAYER CLAIM */}
             {activeTab === 'alerts' && (
               <div className="scroller" style={{ overflowY: 'auto', flex: 1 }}>
-                {/* Player Claim Section */}
-                <section className="inbox-section" aria-label="Claim Your Player">
-                  <div className="inbox-section-head">
-                    <strong>🏓 Your Player</strong>
-                    {notifyCaps?.canUseDesktop && notifyCaps?.permission === 'default' && (
-                      <button
-                        type="button"
-                        className="btn-primary btn-sm"
-                        onClick={onEnableDesktopAlerts}
-                      >
-                        🔔 Enable Alerts
-                      </button>
-                    )}
-                  </div>
-
-                  {claimedPlayerObj ? (
-                    <div className="inbox-claimed-locked">
-                      <strong>🔒 Claimed: {claimedPlayerObj.name}</strong>
-                      <p>
-                        Your player claim is locked. Ask a Moderator or Host to change or release it
-                        from the Users panel.
-                      </p>
-                    </div>
-                  ) : confirmingClaim && selectedPlayerObj ? (
-                    <div className="inbox-claim-confirm">
-                      <p>
-                        Are you sure you want to claim <strong>{selectedPlayerObj.name}</strong>? Once
-                        claimed, you cannot change it — only a Moderator or Host can modify or release
-                        your claim.
-                      </p>
-                      <div className="inline-actions">
+                {/* Player Claim Section (only shown until a player is claimed) */}
+                {!claimedPlayerObj && (
+                  <section className="inbox-section" aria-label="Claim Your Player">
+                    <div className="inbox-section-head">
+                      <strong>🏓 Claim Your Player</strong>
+                      {notifyCaps?.canUseDesktop && notifyCaps?.permission === 'default' && (
                         <button
                           type="button"
                           className="btn-primary btn-sm"
-                          disabled={claimBusy}
-                          onClick={handleConfirmClaim}
+                          onClick={onEnableDesktopAlerts}
                         >
-                          {claimBusy ? 'Claiming...' : `✓ Confirm Claim (${selectedPlayerObj.name})`}
+                          🔔 Enable Alerts
                         </button>
+                      )}
+                    </div>
+
+                    {confirmingClaim && selectedPlayerObj ? (
+                      <div className="inbox-claim-confirm">
+                        <p>
+                          Are you sure you want to claim <strong>{selectedPlayerObj.name}</strong>? Once
+                          claimed, you cannot change it — only a Moderator or Host can modify or release
+                          your claim.
+                        </p>
+                        <div className="inline-actions">
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            disabled={claimBusy}
+                            onClick={handleConfirmClaim}
+                          >
+                            {claimBusy ? 'Claiming...' : `✓ Confirm Claim (${selectedPlayerObj.name})`}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            disabled={claimBusy}
+                            onClick={() => setConfirmingClaim(false)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="inbox-claim-row">
+                        <select
+                          className="panel-select"
+                          value={selectedPlayerId}
+                          onChange={(e) => setSelectedPlayerId(e.target.value)}
+                          aria-label="Select your player to claim"
+                        >
+                          <option value="">Select your player...</option>
+                          {availablePlayers.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              #{p.seed} {p.name}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="button"
-                          className="btn-secondary btn-sm"
-                          disabled={claimBusy}
-                          onClick={() => setConfirmingClaim(false)}
+                          className="btn-primary btn-sm"
+                          disabled={!selectedPlayerId}
+                          onClick={() => setConfirmingClaim(true)}
                         >
-                          Cancel
+                          Claim Player
                         </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="inbox-claim-row">
-                      <select
-                        className="panel-select"
-                        value={selectedPlayerId}
-                        onChange={(e) => setSelectedPlayerId(e.target.value)}
-                        aria-label="Select your player to claim"
-                      >
-                        <option value="">Select your player...</option>
-                        {availablePlayers.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            #{p.seed} {p.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="btn-primary btn-sm"
-                        disabled={!selectedPlayerId}
-                        onClick={() => setConfirmingClaim(true)}
-                      >
-                        Claim Player
-                      </button>
-                    </div>
-                  )}
+                    )}
 
-                  {claimFeedback && <p className="inbox-feedback">{claimFeedback}</p>}
-                </section>
+                    {claimFeedback && <p className="inbox-feedback">{claimFeedback}</p>}
+                  </section>
+                )}
 
                 {/* System & Host Announcements Inbox */}
                 <section className="inbox-section" aria-label="Announcements and Alerts Inbox">
                   <div className="inbox-section-head">
                     <strong>📢 Alerts &amp; Announcements ({inbox.length})</strong>
-                    {inbox.length > 0 && (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-sm"
-                        onClick={() => tournamentStore.clearInbox()}
-                      >
-                        Clear All
-                      </button>
-                    )}
+                    <div className="inline-actions">
+                      {claimedPlayerObj &&
+                        notifyCaps?.canUseDesktop &&
+                        notifyCaps?.permission === 'default' && (
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={onEnableDesktopAlerts}
+                          >
+                            🔔 Enable Alerts
+                          </button>
+                        )}
+                      {inbox.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => tournamentStore.clearInbox()}
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {inbox.length === 0 ? (
