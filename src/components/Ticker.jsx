@@ -59,13 +59,13 @@ export default function Ticker({
   const stats = useMemo(() => computeTournamentStats(state), [state]);
   const isTeams = state.entryMode === 'teams';
   const nameOf = (id, fallback) => state.players?.find((p) => p.id === id)?.name || fallback || 'TBD';
-  const renderOnDeckSide = (id, fallback) => {
+  const renderOnDeckSide = (id, fallback, align = 'left') => {
     const p = state.players?.find((pl) => pl.id === id);
     const label = p?.name || fallback || 'TBD';
     const members = p && isTeams ? formatTeamMembersShort(p, ' & ') : '';
     if (!isTeams) return <span>{label}</span>;
     return (
-      <span className="pod-team-stack">
+      <span className={`pod-team-stack ${align === 'right' ? 'is-right' : 'is-left'}`}>
         <span className="pod-team-name">{label}</span>
         {members && <span className="pod-team-members">{members}</span>}
       </span>
@@ -120,11 +120,25 @@ export default function Ticker({
         <span className="ticker-empty">No matches queued.</span>
       ) : (
         stats.upNext.slice(0, 4).map((m) => (
-          <div key={m.id} className="ticker-chip">
+          <div
+            key={m.id}
+            className="ticker-chip"
+            style={isTeams ? { flex: '1 1 280px', minWidth: 0 } : undefined}
+          >
             <span className="ticker-code">{m.label}</span>
-            {renderOnDeckSide(m.player1Id, m.source1Label)}
-            <em>vs</em>
-            {renderOnDeckSide(m.player2Id, m.source2Label)}
+            {isTeams ? (
+              <div className="pod-matchup is-teams-dual" style={{ fontSize: 'inherit' }}>
+                {renderOnDeckSide(m.player1Id, m.source1Label, 'left')}
+                <em>vs</em>
+                {renderOnDeckSide(m.player2Id, m.source2Label, 'right')}
+              </div>
+            ) : (
+              <>
+                {renderOnDeckSide(m.player1Id, m.source1Label, 'left')}
+                <em>vs</em>
+                {renderOnDeckSide(m.player2Id, m.source2Label, 'right')}
+              </>
+            )}
           </div>
         ))
       );
@@ -161,9 +175,9 @@ export default function Ticker({
                   const m = stats.upNext[0];
                   return (
                     <span className="pod-matchup is-teams-dual" style={{ fontSize: 'inherit' }}>
-                      {renderOnDeckSide(m.player1Id, m.source1Label)}
+                      {renderOnDeckSide(m.player1Id, m.source1Label, 'left')}
                       <em>vs</em>
-                      {renderOnDeckSide(m.player2Id, m.source2Label)}
+                      {renderOnDeckSide(m.player2Id, m.source2Label, 'right')}
                     </span>
                   );
                 })()

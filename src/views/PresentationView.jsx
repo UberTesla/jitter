@@ -248,10 +248,11 @@ export default function PresentationView({
     return members ? `#${p.seed} ${p.name} (${members})` : `#${p.seed} ${p.name}`;
   };
 
-  const renderOnDeckEntrant = (id, fallback) => {
+  const renderOnDeckEntrant = (id, fallback, align = 'left') => {
+    const sideClass = `pod-team-stack ${align === 'right' ? 'is-right' : 'is-left'}`;
     if (!id) {
       return isTeams ? (
-        <span className="pod-team-stack">
+        <span className={sideClass}>
           <span className="pod-team-name">{fallback || 'TBD'}</span>
         </span>
       ) : (
@@ -261,7 +262,7 @@ export default function PresentationView({
     const p = playerMap.get(id);
     if (!p) {
       return isTeams ? (
-        <span className="pod-team-stack">
+        <span className={sideClass}>
           <span className="pod-team-name">{fallback || 'TBD'}</span>
         </span>
       ) : (
@@ -271,7 +272,7 @@ export default function PresentationView({
     const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
     if (!isTeams) return `#${p.seed} ${p.name}`;
     return (
-      <span className="pod-team-stack">
+      <span className={sideClass}>
         <span className="pod-team-name">
           #{p.seed} {p.name}
         </span>
@@ -403,8 +404,8 @@ export default function PresentationView({
           <div key={m.id} className={`pres-ondeck-item ${idx === 0 ? 'is-next' : ''}`}>
             <span className="pod-label">{idx === 0 ? 'NEXT UP' : m.label}</span>
             <strong className={`pod-matchup ${isTeams ? 'is-teams-dual' : ''}`}>
-              {renderOnDeckEntrant(m.player1Id, m.source1Label)} <em>vs</em>{' '}
-              {renderOnDeckEntrant(m.player2Id, m.source2Label)}
+              {renderOnDeckEntrant(m.player1Id, m.source1Label, 'left')} <em>vs</em>{' '}
+              {renderOnDeckEntrant(m.player2Id, m.source2Label, 'right')}
             </strong>
           </div>
         ))}
@@ -766,8 +767,8 @@ export default function PresentationView({
                                 className="pod-matchup is-teams-dual"
                                 style={{ fontSize: '0.9rem' }}
                               >
-                                {renderOnDeckEntrant(m.player1Id, m.source1Label)} <em>vs</em>{' '}
-                                {renderOnDeckEntrant(m.player2Id, m.source2Label)}
+                                {renderOnDeckEntrant(m.player1Id, m.source1Label, 'left')} <em>vs</em>{' '}
+                                {renderOnDeckEntrant(m.player2Id, m.source2Label, 'right')}
                               </span>
                             );
                           })()

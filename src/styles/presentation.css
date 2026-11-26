@@ -268,11 +268,12 @@
 }
 
 .pres-ondeck-item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex: 1 1 0;
   min-width: 0;
-  padding: 4px 12px;
+  padding: 5px 12px;
   border-radius: 9px;
   background: rgba(7, 12, 24, 0.78);
   border: 1px solid var(--border-subtle);
@@ -308,17 +309,36 @@
 }
 
 .pod-matchup.is-teams-dual {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 
+.pod-matchup.is-teams-dual em {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .pod-team-stack {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
+  flex: 0 1 auto;
   min-width: 0;
   line-height: 1.15;
+}
+
+.pod-team-stack.is-left {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.pod-team-stack.is-right {
+  align-items: flex-end;
+  text-align: right;
 }
 
 .pod-team-name {
@@ -327,6 +347,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .pod-team-members {
@@ -336,7 +357,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 22ch;
+  max-width: 100%;
 }
 
 .slide-split-wrapper {

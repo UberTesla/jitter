@@ -332,31 +332,43 @@ export default function PlayerInboxDrawer({
     const p = players.find((pl) => pl.id === pid);
     return p ? formatTeamMembersShort(p, ' & ') : '';
   };
-  const renderDrawerOnDeckSide = (pid, fallback) => {
+  const renderDrawerOnDeckSide = (pid, fallback, align = 'left') => {
     const label = getPlayerLabel(pid, fallback);
     const members = getTeamMembersLine(pid);
     if (!isTeams) return <span>{label}</span>;
+    const isRight = align === 'right';
     return (
       <span
         style={{
-          display: 'inline-flex',
+          display: 'flex',
           flexDirection: 'column',
+          flex: '0 1 auto',
           minWidth: 0,
           lineHeight: 1.2,
+          alignItems: isRight ? 'flex-end' : 'flex-start',
+          textAlign: isRight ? 'right' : 'left',
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '100%',
+          }}
+        >
           {label}
         </span>
         {members && (
           <span
             style={{
-              fontSize: '0.72rem',
+              fontSize: '0.7rem',
               fontWeight: 500,
               opacity: 0.72,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              maxWidth: '100%',
             }}
           >
             {members}
@@ -830,16 +842,21 @@ export default function PlayerInboxDrawer({
                       }
                       if (isTeams && nextM) {
                         return (
-                          <>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                              {topText}
-                            </span>
-                            {subMembersText && (
-                              <span style={{ fontSize: '0.68rem', opacity: 0.74, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {subMembersText}
-                              </span>
-                            )}
-                          </>
+                          <span
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '0.45rem',
+                              width: '100%',
+                              minWidth: 0,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {renderDrawerOnDeckSide(nextM.player1Id, nextM.source1Label, 'left')}
+                            <span style={{ opacity: 0.6, flexShrink: 0, fontSize: '0.7rem' }}>vs</span>
+                            {renderDrawerOnDeckSide(nextM.player2Id, nextM.source2Label, 'right')}
+                          </span>
                         );
                       }
                       return (
@@ -1537,15 +1554,18 @@ export default function PlayerInboxDrawer({
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
+                                justifyContent: isTeams ? 'space-between' : 'flex-start',
                                 gap: '0.45rem',
+                                width: '100%',
+                                minWidth: 0,
                                 fontSize: '0.84rem',
                                 fontWeight: 600,
                                 marginTop: '0.2rem',
                               }}
                             >
-                              {renderDrawerOnDeckSide(m.player1Id, m.source1Label)}
+                              {renderDrawerOnDeckSide(m.player1Id, m.source1Label, 'left')}
                               <span style={{ opacity: 0.6, flexShrink: 0 }}>vs</span>
-                              {renderDrawerOnDeckSide(m.player2Id, m.source2Label)}
+                              {renderDrawerOnDeckSide(m.player2Id, m.source2Label, 'right')}
                             </div>
                           </div>
                         );
