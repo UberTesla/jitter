@@ -362,9 +362,129 @@ export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '' } = {}) 
   }
 }
 
-export async function loadTvPlaylistItemSource(item) {
+/**
+ * Detects YouTube, Twitch, or Vimeo URLs and returns a clean autoplay-ready embed config,
+ * or `null` for direct image/GIF/video URLs.
+ */
+export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true } = {}) {
+  const cleaned = String(rawUrl || '').trim();
+  if (!cleaned) return null;
+  let u;
+  try {
+    u = new URL(cleaned);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+  const hostname = typeof window !== 'undefined' && window.location?.hostname ? window.location.hostname : 'localhost';
+
+  // YouTube (watch, youtu.be, live, shorts, embed, playlist)
+  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be') {
+    let videoId = '';
+    const listId = u.searchParams.get('list') || '';
+    if (host === 'youtu.be') {
+      videoId = u.pathname.replace(/^\/+/, '').split('/')[0] || '';
+    } else if (u.pathname === '/watch') {
+      videoId = u.searchParams.get('v') || '';
+    } else {
+      const m = u.pathname.match(/^\/(?:embed|shorts|live)\/([^/?#]+)/i);
+      if (m) videoId = m[1];
+    }
+    if (videoId) {
+      const params = new URLSearchParams({
+        autoplay: '1',
+        mute: muted ? '1' : '0',
+        controls: '0',
+        rel: '0',
+        modestbranding: '1',
+        playsinline: '1',
+        enablejsapi: '1',
+      });
+      if (loop) {
+        params.set('loop', '1');
+        params.set('playlist', listId || videoId);
+      } else if (listId) {
+        params.set('list', listId);
+      }
+      return {
+        kind: 'embed',
+        provider: 'youtube',
+        embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`,
+        defaultName: `YouTube (${videoId})`,
+      };
+    }
+    if (listId) {
+      const params = new URLSearchParams({
+        list: listId,
+        autoplay: '1',
+        mute: muted ? '1' : '0',
+        controls: '0',
+        playsinline: '1',
+        enablejsapi: '1',
+      });
+      return {
+        kind: 'embed',
+        provider: 'youtube',
+        embedUrl: `https://www.youtube.com/embed/videoseries?${params.toString()}`,
+        defaultName: 'YouTube Playlist',
+      };
+    }
+  }
+
+  // Twitch (live channel or VOD)
+  if (host === 'twitch.tv' || host === 'm.twitch.tv') {
+    const parts = u.pathname.replace(/^\/+/, '').split('/').filter(Boolean);
+    if (parts[0] === 'videos' && parts[1]) {
+      return {
+        kind: 'embed',
+        provider: 'twitch',
+        embedUrl: `https://player.twitch.tv/?video=${encodeURIComponent(parts[1])}&parent=${encodeURIComponent(hostname)}&autoplay=true&muted=${muted ? 'true' : 'false'}`,
+        defaultName: `Twitch VOD (${parts[1]})`,
+      };
+    }
+    if (parts[0] && !['directory', 'downloads', 'jobs', 'turbo', 'settings'].includes(parts[0].toLowerCase())) {
+      return {
+        kind: 'embed',
+        provider: 'twitch',
+        embedUrl: `https://player.twitch.tv/?channel=${encodeURIComponent(parts[0])}&parent=${encodeURIComponent(hostname)}&autoplay=true&muted=${muted ? 'true' : 'false'}`,
+        defaultName: `Twitch · ${parts[0]}`,
+      };
+    }
+  }
+
+  // Vimeo
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+    const m = u.pathname.match(/\/(?:video\/)?(\d+)/);
+    if (m) {
+      return {
+        kind: 'embed',
+        provider: 'vimeo',
+        embedUrl: `https://player.vimeo.com/video/${m[1]}?autoplay=1&muted=${muted ? '1' : '0'}&background=1&loop=${loop ? '1' : '0'}`,
+        defaultName: `Vimeo (${m[1]})`,
+      };
+    }
+  }
+
+  return null;
+}
+
+export async function loadTvPlaylistItemSource(item, { muted = true, loop = true } = {}) {
   if (!item || item.kind === 'sitcom') return null;
   if (item.kind === 'url' && item.url) {
+    const embed = resolveEmbedStreamUrl(item.url, { muted, loop });
+    if (embed) {
+      return {
+        hasMedia: true,
+        url: embed.embedUrl,
+        rawUrl: item.url,
+        name: item.name || embed.defaultName,
+        provider: embed.provider,
+        type: 'text/html',
+        kind: 'embed',
+        updatedAt: item.updatedAt || Date.now(),
+        isObjectUrl: false,
+      };
+    }
     const lower = String(item.url).toLowerCase().split('?')[0];
     const isVideo = /\.(mp4|webm|mov|m4v|ogv)$/.test(lower);
     return {

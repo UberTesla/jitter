@@ -6,6 +6,7 @@ import {
   saveTvPlaylistItemBlob,
   deleteTvPlaylistItemBlob,
   parseGifDurationSec,
+  resolveEmbedStreamUrl,
 } from '../state/mediaStore.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
 import Scoreboard from '../components/Scoreboard.jsx';
@@ -260,12 +261,14 @@ export default function ControlView({
     e.preventDefault();
     const cleanedUrl = tvUrlInput.trim();
     if (!cleanedUrl) return;
+    const embedInfo = resolveEmbedStreamUrl(cleanedUrl);
     const derivedName =
       tvUrlNameInput.trim() ||
+      embedInfo?.defaultName ||
       cleanedUrl.split('/').pop()?.split('?')[0] ||
       'Web Media';
-    let detectedSec = null;
-    if (/\.gif(\?|$)/i.test(cleanedUrl)) {
+    let detectedSec = embedInfo ? 60 : null;
+    if (!embedInfo && /\.gif(\?|$)/i.test(cleanedUrl)) {
       try {
         const res = await fetch(cleanedUrl);
         if (res.ok) {
@@ -284,12 +287,17 @@ export default function ControlView({
       durationSec: detectedSec || 12,
       updatedAt: Date.now(),
     });
-    trackUsageEvent('tv:playlist_add_url', { category: 'control' });
+    trackUsageEvent('tv:playlist_add_url', {
+      category: 'control',
+      provider: embedInfo?.provider || 'direct',
+    });
     setTvUrlInput('');
     setTvUrlNameInput('');
     setShowAddUrlRow(false);
     showToast(
-      detectedSec
+      embedInfo
+        ? `Added ${embedInfo.provider.toUpperCase()} stream "${derivedName}" to CRT TV playlist`
+        : detectedSec
         ? `Added "${derivedName}" (${detectedSec}s GIF loop) to CRT TV playlist`
         : `Added "${derivedName}" to CRT TV playlist`
     );
@@ -779,7 +787,7 @@ export default function ControlView({
                           className="panel-input"
                           value={tvUrlInput}
                           onChange={(e) => setTvUrlInput(e.target.value)}
-                          placeholder="Direct image, GIF, or MP4/WebM URL..."
+                          placeholder="YouTube, Twitch, Vimeo, or direct GIF/image/MP4 URL..."
                           style={{ flex: '2 1 180px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
                           required
                         />
@@ -875,9 +883,13 @@ export default function ControlView({
                     >
                       {tvPlaylist.map((item, idx) => {
                         const isActive = idx === tvPlaylistIndex;
+                        const isEmbedStream =
+                          item.kind === 'url' && Boolean(resolveEmbedStreamUrl(item.url));
                         const icon =
                           item.kind === 'sitcom'
                             ? '📺'
+                            : isEmbedStream
+                            ? '📡'
                             : item.kind === 'video'
                             ? '🎬'
                             : item.kind === 'url'
@@ -962,7 +974,7 @@ export default function ControlView({
                                 <input
                                   type="number"
                                   min={1}
-                                  max={300}
+                                  max={3600}
                                   value={item.durationSec ?? 12}
                                   onChange={(e) =>
                                     tournamentStore.updateTvPlaylistItem(item.id, {

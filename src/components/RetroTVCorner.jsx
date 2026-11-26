@@ -41,6 +41,7 @@ export default function RetroTVCorner({
   const canvasRef = useRef(null);
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
+  const iframeRef = useRef(null);
   const objectUrlRef = useRef(null);
   const mediaSourceRef = useRef(null);
 
@@ -233,7 +234,10 @@ export default function RetroTVCorner({
       applyMediaSource(null);
       return undefined;
     }
-    loadTvPlaylistItemSource(currentPlaylistItem).then((source) => {
+    loadTvPlaylistItemSource(currentPlaylistItem, {
+      muted: Boolean(tvMuted),
+      loop: tvPlaylist.length <= 1 || tvPlaylistMode === 'single' || tvPlaylistPaused,
+    }).then((source) => {
       if (active) {
         applyMediaSource(source);
       }
@@ -349,6 +353,25 @@ export default function RetroTVCorner({
     ensureVideoPlaying(videoEl);
   }, [tvMuted, mediaSource, collapsedToMug, ensureVideoPlaying]);
 
+  // Live mute/unmute for YouTube embed iframes without reloading the stream
+  useEffect(() => {
+    if (mediaSource?.kind !== 'embed' || mediaSource?.provider !== 'youtube') return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage(
+        JSON.stringify({
+          event: 'command',
+          func: tvMuted || collapsedToMug ? 'mute' : 'unMute',
+          args: [],
+        }),
+        '*'
+      );
+    } catch {
+      // Ignore cross-origin postMessage errors
+    }
+  }, [tvMuted, collapsedToMug, mediaSource?.kind, mediaSource?.provider]);
+
   const safeScale = Math.max(0.4, Math.min(1.5, Number(scale) || 1.0));
   const safeOpacity = Math.max(0.15, Math.min(1.0, Number(opacity) || 1.0));
   const scaledWidthPx = Math.round(LOGICAL_WIDTH * safeScale);
@@ -375,7 +398,19 @@ export default function RetroTVCorner({
         {/* Real visible DOM media underlay positioned directly behind the 4:3 CRT glass cutout */}
         {mediaSource && !collapsedToMug && (
           <div className="retro-tv-screen-underlay" aria-hidden="true">
-            {mediaSource.kind === 'video' ? (
+            {mediaSource.kind === 'embed' ? (
+              <iframe
+                key={mediaSource.url}
+                ref={iframeRef}
+                src={mediaSource.url}
+                title={mediaSource.name || 'CRT TV Stream'}
+                className="retro-tv-media-el"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                referrerPolicy="strict-origin-when-cross-origin"
+                style={{ border: 0, pointerEvents: 'none' }}
+                onLoad={() => setDomMediaReady(true)}
+              />
+            ) : mediaSource.kind === 'video' ? (
               <video
                 key={mediaSource.url}
                 ref={videoRef}
