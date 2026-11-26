@@ -6427,6 +6427,7 @@ export class TournamentStore {
           name: String(item.name || 'TV Media').trim() || 'TV Media',
           type: item.type || '',
           url: item.url || '',
+          gcsObject: item.gcsObject || '',
           durationSec: Math.max(1, Math.min(3600, Math.round(Number(item.durationSec) || 12))),
           updatedAt: Number(item.updatedAt) || Date.now(),
         };

@@ -236,6 +236,7 @@ export default function ControlView({
 
     showToast(`Adding ${files.length} file${files.length === 1 ? '' : 's'} to TV playlist...`);
     let failedCount = 0;
+    let gcsCount = 0;
     for (const file of files) {
       const saved = await saveTvPlaylistItemBlob(file, { senderId: tournamentStore.getTabId() });
       tournamentStore.addTvPlaylistItem({
@@ -243,15 +244,23 @@ export default function ControlView({
         kind: saved.kind,
         name: saved.name,
         type: saved.type,
+        gcsObject: saved.gcsObject || '',
         durationSec: saved.detectedDurationSec || (saved.kind === 'video' ? 15 : 12),
         updatedAt: saved.updatedAt,
       });
+      if (saved.storageBackend === 'gcs') gcsCount += 1;
       if (saved.remoteError) failedCount += 1;
     }
-    trackUsageEvent('tv:playlist_add_files', { category: 'control', count: files.length });
+    trackUsageEvent('tv:playlist_add_files', {
+      category: 'control',
+      count: files.length,
+      storage: gcsCount > 0 ? 'gcs' : 'local',
+    });
     setMediaRefreshToken((n) => n + 1);
     if (failedCount > 0) {
-      showToast(`Added to TV playlist locally (${failedCount} failed to sync to LAN)`);
+      showToast(`Added to TV playlist locally (${failedCount} failed to sync)`);
+    } else if (gcsCount > 0) {
+      showToast(`Uploaded ${gcsCount} item${gcsCount === 1 ? '' : 's'} to Google Cloud Storage`);
     } else {
       showToast(`Added ${files.length} item${files.length === 1 ? '' : 's'} to 4:3 CRT TV playlist`);
     }
@@ -305,7 +314,10 @@ export default function ControlView({
 
   const handleRemoveTvPlaylistItem = async (item) => {
     if (item.kind === 'video' || item.kind === 'image') {
-      await deleteTvPlaylistItemBlob(item.id, { senderId: tournamentStore.getTabId() });
+      await deleteTvPlaylistItemBlob(item.id, {
+        senderId: tournamentStore.getTabId(),
+        gcsObject: item.gcsObject || '',
+      });
     }
     tournamentStore.removeTvPlaylistItem(item.id);
     trackUsageEvent('tv:playlist_remove', { category: 'control' });

@@ -29,6 +29,12 @@ import {
 } from '../engine/bracketGenerator.js';
 import { isMatchNearingEnd } from '../engine/scoringEngine.js';
 import { resolveMessageTemplate } from '../engine/grandmaVariables.js';
+import {
+  buildGcsObjectName,
+  buildGcsPublicUrl,
+  getGcsConfig,
+  signGcsV4Url,
+} from './gcsMediaSigner.js';
 
 const DESTROY_GRACE_MS = 5 * 60 * 1000;
 
@@ -4053,6 +4059,51 @@ export function createLanSyncHandler({
       }
     }
 
+    // 11a. Direct-to-GCS Signed URL endpoint for large CRT TV playlist uploads
+    if (pathname === '/__sync/media/sign' && req.method === 'POST') {
+      const gcs = getGcsConfig();
+      if (!gcs) {
+        return sendJson(res, 200, { gcsEnabled: false });
+      }
+      try {
+        const body = await readJsonBody(req);
+        const mediaId = String(body?.mediaId || `tvm-${Date.now()}`).trim();
+        const fileName = String(body?.name || 'tv-media').trim();
+        const contentType = String(body?.type || 'application/octet-stream').trim();
+        const objectName = buildGcsObjectName(gcs.prefix, mediaId, fileName);
+        const uploadUrl = signGcsV4Url({
+          bucket: gcs.bucket,
+          objectName,
+          clientEmail: gcs.clientEmail,
+          privateKey: gcs.privateKey,
+          method: 'PUT',
+          contentType,
+          expiresSec: 900, // 15 minutes to complete upload
+        });
+        const streamUrl = gcs.publicRead
+          ? buildGcsPublicUrl(gcs.bucket, objectName)
+          : signGcsV4Url({
+              bucket: gcs.bucket,
+              objectName,
+              clientEmail: gcs.clientEmail,
+              privateKey: gcs.privateKey,
+              method: 'GET',
+              expiresSec: 21600, // 6 hours
+            });
+        return sendJson(res, 200, {
+          gcsEnabled: true,
+          bucket: gcs.bucket,
+          objectName,
+          uploadUrl,
+          streamUrl,
+          contentType,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        return sendJson(res, 400, { error: err?.message || 'Could not sign GCS upload URL' });
+      }
+    }
+
     // 11. Custom CRT TV Media Sync Across Devices (with HTTP 206 Byte-Range streaming for MP4/WebM)
     // Supports both legacy single activeMedia (/__sync/media) and multi-item playlist library (/__sync/media?id=<mediaId>)
     if (!store.tvMediaLibrary) {
@@ -4060,10 +4111,34 @@ export function createLanSyncHandler({
     }
     if (pathname === '/__sync/media') {
       const mediaIdParam = String(urlObj.searchParams.get('id') || req.headers['x-media-id'] || '').trim();
+      const gcsObjectParam = String(urlObj.searchParams.get('gcsObject') || req.headers['x-gcs-object'] || '').trim();
       const targetRecord = mediaIdParam ? store.tvMediaLibrary.get(mediaIdParam) || null : activeMedia;
 
       if (req.method === 'GET') {
         if (urlObj.searchParams.get('meta') === '1') {
+          if (gcsObjectParam) {
+            const gcs = getGcsConfig();
+            if (gcs) {
+              const streamUrl = gcs.publicRead
+                ? buildGcsPublicUrl(gcs.bucket, gcsObjectParam)
+                : signGcsV4Url({
+                    bucket: gcs.bucket,
+                    objectName: gcsObjectParam,
+                    clientEmail: gcs.clientEmail,
+                    privateKey: gcs.privateKey,
+                    method: 'GET',
+                    expiresSec: 21600, // 6 hours
+                  });
+              return sendJson(res, 200, {
+                hasMedia: true,
+                storage: 'gcs',
+                id: mediaIdParam || null,
+                gcsObject: gcsObjectParam,
+                streamUrl,
+                updatedAt: Date.now(),
+              });
+            }
+          }
           if (!targetRecord) {
             return sendJson(res, 200, { hasMedia: false });
           }
@@ -4173,6 +4248,24 @@ export function createLanSyncHandler({
 
       if (req.method === 'DELETE') {
         const sender = String(req.headers['x-sync-sender'] || '');
+        if (gcsObjectParam) {
+          const gcs = getGcsConfig();
+          if (gcs && (!gcs.prefix || gcsObjectParam.startsWith(gcs.prefix))) {
+            try {
+              const delUrl = signGcsV4Url({
+                bucket: gcs.bucket,
+                objectName: gcsObjectParam,
+                clientEmail: gcs.clientEmail,
+                privateKey: gcs.privateKey,
+                method: 'DELETE',
+                expiresSec: 300,
+              });
+              await fetch(delUrl, { method: 'DELETE' }).catch(() => {});
+            } catch {
+              // Ignore GCS delete errors
+            }
+          }
+        }
         if (mediaIdParam) {
           store.tvMediaLibrary.delete(mediaIdParam);
           broadcastSSE('MEDIA_UPDATE', { sender, action: 'delete_item', mediaId: mediaIdParam, updatedAt: Date.now() });

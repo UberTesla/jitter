@@ -302,32 +302,76 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
 
   let syncedRemote = false;
   let remoteError = null;
+  let gcsObject = '';
+  let storageBackend = 'local';
+
   if (typeof fetch !== 'undefined' && dataBuffer) {
     const baseUrl = getSyncBaseUrl();
     if (baseUrl) {
+      // 1. Try direct-to-GCS signed upload first when configured on the server (0 RAM on Render!)
+      let usedGcs = false;
       try {
-        const res = await fetch(`${baseUrl}/__sync/media?id=${encodeURIComponent(id)}`, {
+        const signRes = await fetch(`${baseUrl}/__sync/media/sign`, {
           method: 'POST',
-          headers: {
-            'Content-Type': inferredType,
-            'X-Media-Id': id,
-            'X-Media-Name': encodeURIComponent(file.name || 'tv-media'),
-            'X-Media-Type': inferredType,
-            'X-Media-Kind': kind,
-            ...(senderId ? { 'X-Sync-Sender': senderId } : {}),
-          },
-          body: dataBuffer,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mediaId: id,
+            name: file.name || 'tv-media',
+            type: inferredType,
+          }),
         });
-        if (res.ok) {
-          syncedRemote = true;
-          const payload = await res.json().catch(() => null);
-          if (payload?.updatedAt) updatedAt = Number(payload.updatedAt) || updatedAt;
-        } else {
-          const payload = await res.json().catch(() => null);
-          remoteError = payload?.error || `Upload failed (${res.status})`;
+        if (signRes.ok) {
+          const signData = await signRes.json().catch(() => null);
+          if (signData?.gcsEnabled && signData?.uploadUrl && signData?.objectName) {
+            usedGcs = true;
+            const putRes = await fetch(signData.uploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': inferredType },
+              body: dataBuffer,
+            });
+            if (putRes.ok) {
+              syncedRemote = true;
+              gcsObject = signData.objectName;
+              storageBackend = 'gcs';
+              if (signData.updatedAt) updatedAt = Number(signData.updatedAt) || updatedAt;
+            } else {
+              remoteError = `GCS upload failed (${putRes.status}) — check bucket CORS & permissions`;
+            }
+          }
         }
       } catch (err) {
-        remoteError = err?.message || 'Could not reach LAN sync server';
+        if (usedGcs) {
+          remoteError = err?.message || 'GCS direct upload failed (check bucket CORS)';
+        }
+      }
+
+      // 2. Fallback to local LAN sync server RAM upload when GCS is not configured
+      if (!usedGcs) {
+        try {
+          const res = await fetch(`${baseUrl}/__sync/media?id=${encodeURIComponent(id)}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': inferredType,
+              'X-Media-Id': id,
+              'X-Media-Name': encodeURIComponent(file.name || 'tv-media'),
+              'X-Media-Type': inferredType,
+              'X-Media-Kind': kind,
+              ...(senderId ? { 'X-Sync-Sender': senderId } : {}),
+            },
+            body: dataBuffer,
+          });
+          if (res.ok) {
+            syncedRemote = true;
+            storageBackend = 'server';
+            const payload = await res.json().catch(() => null);
+            if (payload?.updatedAt) updatedAt = Number(payload.updatedAt) || updatedAt;
+          } else {
+            const payload = await res.json().catch(() => null);
+            remoteError = payload?.error || `Upload failed (${res.status})`;
+          }
+        } catch (err) {
+          remoteError = err?.message || 'Could not reach LAN sync server';
+        }
       }
     }
   }
@@ -337,6 +381,8 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
     name: file.name || 'TV Media',
     type: inferredType,
     kind,
+    gcsObject,
+    storageBackend,
     detectedDurationSec,
     updatedAt,
     syncedRemote,
@@ -344,14 +390,16 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
   };
 }
 
-export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '' } = {}) {
+export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '', gcsObject = '' } = {}) {
   if (!mediaId) return;
   await writeLocalMediaRecordByKey(`playlist:${mediaId}`, null);
   if (typeof fetch !== 'undefined') {
     const baseUrl = getSyncBaseUrl();
     if (baseUrl) {
       try {
-        await fetch(`${baseUrl}/__sync/media?id=${encodeURIComponent(mediaId)}`, {
+        const qs = new URLSearchParams({ id: mediaId });
+        if (gcsObject) qs.set('gcsObject', gcsObject);
+        await fetch(`${baseUrl}/__sync/media?${qs.toString()}`, {
           method: 'DELETE',
           headers: senderId ? { 'X-Sync-Sender': senderId } : undefined,
         });
@@ -500,12 +548,14 @@ export async function loadTvPlaylistItemSource(item, { muted = true, loop = true
   const mediaId = item.id;
   if (!mediaId) return null;
 
-  // Prefer remote streaming URL so videos get HTTP 206 range support & remote clients sync seamlessly
+  // Prefer remote streaming URL (GCS signed URL or local LAN HTTP 206 stream)
   if (typeof fetch !== 'undefined') {
     const baseUrl = getSyncBaseUrl();
     if (baseUrl) {
       try {
-        const res = await fetch(`${baseUrl}/__sync/media?meta=1&id=${encodeURIComponent(mediaId)}`, {
+        const qs = new URLSearchParams({ meta: '1', id: mediaId });
+        if (item.gcsObject) qs.set('gcsObject', item.gcsObject);
+        const res = await fetch(`${baseUrl}/__sync/media?${qs.toString()}`, {
           cache: 'no-store',
         });
         if (res.ok) {
@@ -513,7 +563,7 @@ export async function loadTvPlaylistItemSource(item, { muted = true, loop = true
           if (meta?.hasMedia) {
             return {
               hasMedia: true,
-              url: buildRemoteMediaUrl(meta.updatedAt || item.updatedAt, mediaId),
+              url: meta.streamUrl || buildRemoteMediaUrl(meta.updatedAt || item.updatedAt, mediaId),
               name: meta.name || item.name || 'tv-media',
               type: meta.type || item.type || 'application/octet-stream',
               kind: meta.kind || item.kind || 'image',
