@@ -311,6 +311,7 @@ export function createLanSyncHandler({
   const mediaMetaPath = path.join(rootDir, MEDIA_META_FILENAME);
   const sseClients = new Map(); // res -> { tabId, deviceId, deviceName, ip, viewMode, tournamentId, connectedAt }
   const destructionTimers = new Map(); // tournamentId -> Timeout
+  const serverBootId = `boot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
   let store = {
     activeTournamentId: null,
@@ -1139,9 +1140,13 @@ export function createLanSyncHandler({
       });
 
       const clientsList = getConnectedClientsList();
+      const { totalCloudTournaments } = getLibraryStats();
       res.write(
         `event: CONNECTED\ndata: ${JSON.stringify({
           serverTime: Date.now(),
+          serverBootId,
+          totalCloudTournaments,
+          tournamentIds: Object.keys(store.tournaments || {}),
           clients: sseClients.size,
           connectedClientsList: clientsList,
         })}\n\n`
@@ -1673,6 +1678,7 @@ export function createLanSyncHandler({
         connectedClients: sseClients.size,
         clients: getConnectedClientsList(),
         serverTime: Date.now(),
+        serverBootId,
       });
     }
 

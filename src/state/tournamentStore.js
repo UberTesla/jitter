@@ -97,6 +97,7 @@ export const DEVICE_NAME_CUSTOM_KEY = 'pingpong-device-name-custom-v1';
 export const GUEST_KEYS_STORAGE_KEY = 'pingpong-guest-unlocked-keys-v1';
 export const SESSION_PICKED_STORAGE_KEY = 'pingpong-tournament-picked-v1';
 export const SESSION_TAB_ID_STORAGE_KEY = 'pingpong-tab-id-v1';
+export const LAST_SERVER_BOOT_ID_KEY = 'pingpong-last-server-boot-id-v1';
 export const DISCONNECTED_STORAGE_KEY = 'pingpong-disconnected-v1';
 
 function readDisconnectedNotice() {
@@ -1523,6 +1524,13 @@ export class TournamentStore {
           };
           this.emit();
           this.pushClientStatusToRemote();
+          if (data.serverBootId) {
+            this.resyncHostedTournamentIfNeeded({
+              serverBootId: data.serverBootId,
+              tournamentIds: Array.isArray(data.tournamentIds) ? data.tournamentIds : null,
+              totalCloudTournaments: data.totalCloudTournaments,
+            });
+          }
         } catch {
           // Ignore parse error
         }
@@ -2237,6 +2245,14 @@ export class TournamentStore {
 
       this.hasCompletedInitialRemoteSync = true;
       this.emit();
+      await this.resyncHostedTournamentIfNeeded({
+        serverBootId: data.serverBootId || null,
+        tournamentIds: visibleCloud.map((t) => t.id),
+        totalCloudTournaments:
+          data.totalCloudTournaments !== undefined
+            ? Number(data.totalCloudTournaments)
+            : visibleCloud.length,
+      });
       return data;
     } catch {
       this.remoteSync = {
@@ -2246,6 +2262,83 @@ export class TournamentStore {
       };
       this.emit();
       return null;
+    }
+  }
+
+  /**
+   * Automatically re-pushes this device's active hosted tournament back to the server
+   * when the server restarts/redeploys with an empty ephemeral disk (e.g. Render Free tier).
+   * Safe against resurrecting intentionally deleted tournaments: only runs when the server
+   * boot ID changed (server restarted) or the server came back completely empty while this
+   * device still holds an active hosted tournament in memory/localStorage.
+   */
+  async resyncHostedTournamentIfNeeded({
+    serverBootId = null,
+    tournamentIds = null,
+    totalCloudTournaments = null,
+  } = {}) {
+    if (!this.persistEnabled || !this.remoteSync.connected) return false;
+    if (this.suppressAutoReconnect || readDisconnectedNotice()) return false;
+    if (this._resyncInFlight) return false;
+
+    let prevBootId = this.lastServerBootId || null;
+    if (!prevBootId && typeof localStorage !== 'undefined') {
+      try {
+        prevBootId = localStorage.getItem(LAST_SERVER_BOOT_ID_KEY) || null;
+      } catch {
+        // Ignore
+      }
+    }
+    const serverRestarted = Boolean(serverBootId && prevBootId && serverBootId !== prevBootId);
+    if (serverBootId) {
+      this.lastServerBootId = serverBootId;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(LAST_SERVER_BOOT_ID_KEY, serverBootId);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    const active = this.programState;
+    const isMyHostedTournament = Boolean(
+      active &&
+        active.tournamentId &&
+        !active.destruction &&
+        active.hostDeviceId &&
+        active.hostDeviceId === this.remoteSync.deviceId
+    );
+    if (!isMyHostedTournament) return false;
+
+    const serverHasIt = Array.isArray(tournamentIds)
+      ? tournamentIds.includes(active.tournamentId)
+      : (this.remoteSync.cloudTournaments || []).some((t) => t.id === active.tournamentId);
+    if (serverHasIt) return false;
+
+    const serverIsEmpty =
+      totalCloudTournaments !== null ? Number(totalCloudTournaments) === 0 : false;
+    // Only auto-resync if the server restarted (new bootId) OR if we have an active hosted
+    // tournament on this tab and the server is completely empty (e.g. fresh deploy before bootId existed)
+    const shouldResync =
+      serverRestarted || (this.hasActiveTournament && serverIsEmpty);
+    if (!shouldResync) return false;
+
+    this._resyncInFlight = true;
+    try {
+      const res = await this.pushStateToRemote(active, { activate: true });
+      if (res) {
+        this.remoteSync = {
+          ...this.remoteSync,
+          activeSource: 'cloud',
+          currentRole: 'host',
+        };
+        this.emit();
+        return true;
+      }
+      return false;
+    } finally {
+      this._resyncInFlight = false;
     }
   }
 

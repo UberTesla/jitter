@@ -1066,6 +1066,16 @@ export default function HubView({
                         </div>
 
                         <div className="stc-actions">
+                          {isConnected && (
+                            <button
+                              type="button"
+                              className="btn-amber btn-sm"
+                              onClick={() => handlePublishLocal(t.id)}
+                              title="Upload this local tournament to the live server so phones & TVs can join"
+                            >
+                              ☁ Publish
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn-primary btn-sm"
