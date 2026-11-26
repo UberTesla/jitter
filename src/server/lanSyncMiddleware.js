@@ -69,6 +69,17 @@ function getRequestClientIp(req) {
   return normalizeRemoteIp(req?.socket?.remoteAddress);
 }
 
+function isPrivateLanIp(ip = '') {
+  const s = String(ip || '').trim().toLowerCase();
+  if (!s) return false;
+  if (s === '127.0.0.1' || s === '::1') return true;
+  if (s.startsWith('10.') || s.startsWith('192.168.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(s)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(s)) return true;
+  if (s.startsWith('fe80:') || s.startsWith('fc') || s.startsWith('fd')) return true;
+  return false;
+}
+
 async function resolveClientDeviceName(req, serverInfo) {
   const clientIp = getRequestClientIp(req);
   const localLanIps = new Set((serverInfo?.lanAddresses || []).map((a) => a.address));
@@ -86,21 +97,23 @@ async function resolveClientDeviceName(req, serverInfo) {
     };
   }
 
-  // Try fast local mDNS / router reverse-DNS lookup (capped at 350ms so /__server-info stays snappy)
+  // Only run reverse-DNS for private LAN IPs (avoid slow/ugly ISP PTR records on public cloud deploys)
   let clientDeviceName = '';
-  try {
-    const names = await Promise.race([
-      dns.promises.reverse(clientIp),
-      new Promise((resolve) => {
-        const t = setTimeout(() => resolve([]), 350);
-        if (typeof t.unref === 'function') t.unref();
-      }),
-    ]);
-    if (Array.isArray(names) && names.length > 0) {
-      clientDeviceName = cleanHostnameLabel(names[0]);
+  if (isPrivateLanIp(clientIp)) {
+    try {
+      const names = await Promise.race([
+        dns.promises.reverse(clientIp),
+        new Promise((resolve) => {
+          const t = setTimeout(() => resolve([]), 350);
+          if (typeof t.unref === 'function') t.unref();
+        }),
+      ]);
+      if (Array.isArray(names) && names.length > 0) {
+        clientDeviceName = cleanHostnameLabel(names[0]);
+      }
+    } catch {
+      // Reverse DNS not available for this LAN IP — browser will fall back to model/UA detection
     }
-  } catch {
-    // Reverse DNS not available for this LAN IP — browser will fall back to model/UA detection
   }
 
   return {
@@ -857,6 +870,7 @@ export function createLanSyncHandler({
         tabRoleOverride,
         role: effectiveRole,
         connectedAt: meta.connectedAt,
+        clientInfo: meta.clientInfo || null,
       });
     }
     return list.sort((a, b) => (b.connectedAt || 0) - (a.connectedAt || 0));
@@ -1119,6 +1133,9 @@ export function createLanSyncHandler({
         viewMode,
         tournamentId,
         connectedAt: Date.now(),
+        clientInfo: {
+          userAgent: String(req.headers['user-agent'] || '').slice(0, 320),
+        },
       });
 
       const clientsList = getConnectedClientsList();
@@ -1164,6 +1181,14 @@ export function createLanSyncHandler({
           if ((tabId && meta.tabId === tabId) || (!tabId && deviceId && meta.deviceId === deviceId)) {
             if (body.deviceName) meta.deviceName = String(body.deviceName).trim();
             if (body.viewMode) meta.viewMode = String(body.viewMode).trim();
+            if (body.clientInfo && typeof body.clientInfo === 'object') {
+              const incomingInfo = {};
+              for (const [k, v] of Object.entries(body.clientInfo)) {
+                if (v === undefined) continue;
+                incomingInfo[k] = typeof v === 'string' ? v.slice(0, 320) : v;
+              }
+              meta.clientInfo = { ...(meta.clientInfo || {}), ...incomingInfo };
+            }
             if (body.tournamentId !== undefined) {
               const reqTid = body.tournamentId || null;
               const reqEntry = reqTid ? store.tournaments[reqTid] : null;

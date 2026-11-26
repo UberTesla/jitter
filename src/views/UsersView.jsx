@@ -43,6 +43,7 @@ export default function UsersView({
 }) {
   const [statusMsg, setStatusMsg] = useState('');
   const [expandedDevices, setExpandedDevices] = useState({});
+  const [expandedDetails, setExpandedDetails] = useState({});
   const [messageTarget, setMessageTarget] = useState(null);
   const [messageDraft, setMessageDraft] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -103,6 +104,7 @@ export default function UsersView({
           deviceId: c.deviceId || key,
           deviceName: c.deviceName || 'Device',
           ip: c.ip || '—',
+          clientInfo: c.clientInfo || null,
           tabs: [],
           earliestConnectedAt: c.connectedAt || 0,
         });
@@ -110,6 +112,13 @@ export default function UsersView({
       const grp = byDevice.get(key);
       if (c.deviceName && grp.deviceName === 'Device') grp.deviceName = c.deviceName;
       if (c.ip && grp.ip === '—') grp.ip = c.ip;
+      if (c.clientInfo && typeof c.clientInfo === 'object') {
+        const prevKeys = grp.clientInfo ? Object.keys(grp.clientInfo).length : 0;
+        const nextKeys = Object.keys(c.clientInfo).length;
+        if (nextKeys >= prevKeys) {
+          grp.clientInfo = { ...(grp.clientInfo || {}), ...c.clientInfo };
+        }
+      }
       if (c.connectedAt && (!grp.earliestConnectedAt || c.connectedAt < grp.earliestConnectedAt)) {
         grp.earliestConnectedAt = c.connectedAt;
       }
@@ -123,6 +132,10 @@ export default function UsersView({
 
   const toggleDeviceExpanded = (deviceId) => {
     setExpandedDevices((prev) => ({ ...prev, [deviceId]: !prev[deviceId] }));
+  };
+
+  const toggleDeviceDetails = (deviceId) => {
+    setExpandedDetails((prev) => ({ ...prev, [deviceId]: !prev[deviceId] }));
   };
 
   // Also show any offline/assigned role entries not currently in SSE list so Host/Admin can still demote them
@@ -627,16 +640,27 @@ export default function UsersView({
                     const claimedName = claimedPid
                       ? state.players?.find((p) => p.id === claimedPid)?.name || null
                       : null;
-                    const displayName = claimedName || group.deviceName;
+                    const deviceBrowser =
+                      group.clientInfo?.deviceBrowser ||
+                      (group.deviceName && group.deviceName !== 'Device' ? group.deviceName : '');
+                    const displayName = claimedName || deviceBrowser || group.ip || 'Device';
+                    const secondaryLabel = claimedName
+                      ? deviceBrowser || (group.ip && group.ip !== '—' ? group.ip : '')
+                      : group.deviceName &&
+                        group.deviceName !== 'Device' &&
+                        group.deviceName !== deviceBrowser
+                      ? group.deviceName
+                      : '';
+                    const isDetailsOpen = Boolean(expandedDetails[group.deviceId]);
 
                     return (
                       <React.Fragment key={group.deviceId}>
                         <tr className={isThisDev ? 'is-self-row' : ''}>
                           <td>
                             <strong>{displayName}</strong>
-                            {claimedName && group.deviceName && claimedName !== group.deviceName && (
+                            {secondaryLabel && secondaryLabel !== displayName && (
                               <span className="debug-mono-val" style={{ marginLeft: '0.4rem' }}>
-                                ({group.deviceName})
+                                ({secondaryLabel})
                               </span>
                             )}
                             {isThisDev && (
@@ -761,6 +785,15 @@ export default function UsersView({
                             <div className="inline-actions">
                               <button
                                 type="button"
+                                className={`btn-secondary btn-sm ${isDetailsOpen ? 'is-toggled-on' : ''}`}
+                                onClick={() => toggleDeviceDetails(group.deviceId)}
+                                aria-expanded={isDetailsOpen}
+                                title="View client browser and device environment details"
+                              >
+                                {isDetailsOpen ? '▾ Details' : 'ℹ Details'}
+                              </button>
+                              <button
+                                type="button"
                                 className="btn-secondary btn-sm"
                                 onClick={() => {
                                   setMessageTarget({
@@ -798,6 +831,112 @@ export default function UsersView({
                             </div>
                           </td>
                         </tr>
+
+                        {isDetailsOpen && (() => {
+                          const ci = group.clientInfo || {};
+                          const detailItems = [
+                            ['Device', ci.device || group.deviceName || '—'],
+                            ['Browser', ci.browser || '—'],
+                            ['OS / Platform', ci.platform || '—'],
+                            ci.model ? ['Hardware Model', ci.model] : null,
+                            ci.architecture ? ['Architecture', ci.architecture] : null,
+                            ['Form Factor', ci.mobile ? 'Mobile' : 'Desktop / TV'],
+                            ci.screen
+                              ? ['Screen', `${ci.screen}${ci.dpr ? ` @ ${ci.dpr}x` : ''}`]
+                              : null,
+                            ci.viewport ? ['Viewport', ci.viewport] : null,
+                            ci.touchPoints !== undefined
+                              ? ['Touch Points', String(ci.touchPoints)]
+                              : null,
+                            ci.timezone ? ['Timezone', ci.timezone] : null,
+                            ci.language
+                              ? ['Language', ci.languages || ci.language]
+                              : null,
+                            ci.connection
+                              ? [
+                                  'Network',
+                                  `${ci.connection}${
+                                    ci.downlinkMbps != null ? ` (${ci.downlinkMbps} Mbps)` : ''
+                                  }${ci.saveData ? ' · Save-Data' : ''}`,
+                                ]
+                              : null,
+                            ci.cores || ci.memoryGb
+                              ? [
+                                  'Hardware',
+                                  [
+                                    ci.cores ? `${ci.cores} cores` : null,
+                                    ci.memoryGb ? `${ci.memoryGb} GB RAM` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · '),
+                                ]
+                              : null,
+                            [
+                              'Display Mode',
+                              ci.standalone ? 'PWA (Standalone)' : 'Browser Tab',
+                            ],
+                            ci.colorScheme ? ['Color Scheme', ci.colorScheme] : null,
+                            ci.hostname ? ['LAN Hostname', ci.hostname] : null,
+                            ['Device Name', group.deviceName || '—'],
+                            ['Device ID', group.deviceId || '—'],
+                            ['IP Address', group.ip || '—'],
+                          ].filter(Boolean);
+                          return (
+                            <tr className="users-tab-subrow users-details-subrow">
+                              <td colSpan={8}>
+                                <div
+                                  style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
+                                    gap: '0.45rem 0.9rem',
+                                    padding: '0.5rem 0.65rem',
+                                    background: 'rgba(15, 23, 42, 0.45)',
+                                    borderRadius: '8px',
+                                    fontSize: '0.78rem',
+                                  }}
+                                >
+                                  {detailItems.map(([label, val]) => (
+                                    <div key={label}>
+                                      <div
+                                        style={{
+                                          fontSize: '0.66rem',
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.05em',
+                                          opacity: 0.65,
+                                        }}
+                                      >
+                                        {label}
+                                      </div>
+                                      <div style={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                                        {val}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {ci.userAgent && (
+                                    <div style={{ gridColumn: '1 / -1', marginTop: '0.15rem' }}>
+                                      <div
+                                        style={{
+                                          fontSize: '0.66rem',
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.05em',
+                                          opacity: 0.65,
+                                        }}
+                                      >
+                                        User-Agent
+                                      </div>
+                                      <code
+                                        className="debug-mono-val"
+                                        style={{ fontSize: '0.7rem', wordBreak: 'break-all' }}
+                                      >
+                                        {ci.userAgent}
+                                      </code>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })()}
 
                         {isExpanded &&
                           group.tabs.map((tab, idx) => {

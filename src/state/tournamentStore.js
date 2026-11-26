@@ -220,37 +220,151 @@ export function deduplicateTournamentLists(cloudTournaments = [], localTournamen
   return { localOnly, backedUpCloudIds, backedUpCloudCodes };
 }
 
-function detectFallbackDeviceName() {
-  if (typeof navigator === 'undefined') return 'Browser Device';
-  const ua = navigator.userAgent || '';
-  // Try extracting exact Android hardware model from UA string (e.g. "Android 14; Pixel 8 Build/...")
+function detectBrowserInfo(ua = '') {
+  if (!ua) return { name: 'Browser', version: '', label: 'Browser' };
+  const rules = [
+    { name: 'Edge', re: /Edg(?:A|iOS)?\/([\d.]+)/i },
+    { name: 'Opera', re: /(?:OPR|Opera)\/([\d.]+)/i },
+    { name: 'Samsung Internet', re: /SamsungBrowser\/([\d.]+)/i },
+    { name: 'Silk', re: /Silk\/([\d.]+)/i },
+    { name: 'Firefox', re: /(?:Firefox|FxiOS)\/([\d.]+)/i },
+    { name: 'Chrome', re: /(?:Chrome|CriOS)\/([\d.]+)/i },
+    { name: 'Safari', re: /Version\/([\d.]+).*Safari/i },
+  ];
+  for (const r of rules) {
+    const m = ua.match(r.re);
+    if (m) {
+      const major = (m[1] || '').split('.')[0] || '';
+      return { name: r.name, version: m[1] || '', label: major ? `${r.name} ${major}` : r.name };
+    }
+  }
+  if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return { name: 'Safari', version: '', label: 'Safari' };
+  return { name: 'Browser', version: '', label: 'Browser' };
+}
+
+function detectDeviceLabel(ua = '', modelHint = '') {
+  const cleanModel = String(modelHint || '').trim();
+  if (cleanModel && cleanModel.toUpperCase() !== 'K') return cleanModel;
   const androidModelMatch = ua.match(/Android\s+[^;)]+;\s*([^;)]+?)\s+Build\//i);
   if (androidModelMatch?.[1]) {
     const model = androidModelMatch[1].trim();
     if (model && model.toUpperCase() !== 'K') return model;
   }
+  if (/AFT[A-Z0-9]+|FireTV|Silk/i.test(ua)) return 'Fire TV';
   if (/iPhone/i.test(ua)) return 'iPhone';
-  if (/iPad/i.test(ua)) return 'iPad';
+  if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)) {
+    return 'iPad';
+  }
   if (/Android/i.test(ua)) return /Mobile/i.test(ua) ? 'Android Phone' : 'Android Tablet';
   if (/CrOS/i.test(ua)) return 'Chromebook';
   if (/Macintosh/i.test(ua)) return 'Mac';
   if (/Windows/i.test(ua)) return 'Windows PC';
-  if (/Linux/i.test(ua)) return 'Linux Device';
-  return 'Browser Device';
+  if (/Linux/i.test(ua)) return 'Linux';
+  return 'Device';
 }
 
-async function detectBrowserHighEntropyDeviceName() {
-  if (typeof navigator === 'undefined') return '';
+function detectFallbackDeviceName(modelHint = '') {
+  if (typeof navigator === 'undefined') return 'Browser Device';
+  const ua = navigator.userAgent || '';
+  const device = detectDeviceLabel(ua, modelHint);
+  const browser = detectBrowserInfo(ua);
+  return `${device} · ${browser.name}`;
+}
+
+function collectClientEnvironmentSync(modelHint = '', hostname = '') {
+  if (typeof navigator === 'undefined') return null;
+  const ua = navigator.userAgent || '';
+  const device = detectDeviceLabel(ua, modelHint);
+  const browser = detectBrowserInfo(ua);
+  const scr = typeof window !== 'undefined' && window.screen ? window.screen : null;
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+  let timezone = '';
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    // Ignore
+  }
+  let standalone = false;
+  let colorScheme = '';
+  let reducedMotion = false;
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      standalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        Boolean(navigator.standalone);
+      colorScheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+  } catch {
+    // Ignore
+  }
+
+  return {
+    device,
+    browser: browser.label,
+    browserName: browser.name,
+    deviceBrowser: `${device} · ${browser.name}`,
+    platform: navigator.userAgentData?.platform || navigator.platform || '',
+    mobile:
+      navigator.userAgentData?.mobile !== undefined
+        ? Boolean(navigator.userAgentData.mobile)
+        : /Mobi|Android|iPhone/i.test(ua),
+    screen: scr ? `${scr.width}×${scr.height}` : '',
+    viewport: typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : '',
+    dpr: typeof window !== 'undefined' && window.devicePixelRatio ? Number(window.devicePixelRatio.toFixed(2)) : 1,
+    touchPoints: typeof navigator.maxTouchPoints === 'number' ? navigator.maxTouchPoints : 0,
+    language: navigator.language || '',
+    languages: Array.isArray(navigator.languages) ? navigator.languages.slice(0, 5).join(', ') : '',
+    timezone,
+    connection: conn?.effectiveType || '',
+    downlinkMbps: typeof conn?.downlink === 'number' ? conn.downlink : null,
+    saveData: Boolean(conn?.saveData),
+    cores: typeof navigator.hardwareConcurrency === 'number' ? navigator.hardwareConcurrency : null,
+    memoryGb: typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null,
+    standalone,
+    online: navigator.onLine !== false,
+    colorScheme,
+    reducedMotion,
+    ...(hostname ? { hostname } : {}),
+    userAgent: ua.slice(0, 320),
+  };
+}
+
+async function collectClientEnvironmentHighEntropy(baseEnv = null) {
+  const base = baseEnv || collectClientEnvironmentSync();
+  if (!base || typeof navigator === 'undefined') return base;
+  const enriched = { ...base };
   try {
     if (navigator.userAgentData?.getHighEntropyValues) {
-      const hints = await navigator.userAgentData.getHighEntropyValues(['model', 'platform']);
+      const hints = await navigator.userAgentData.getHighEntropyValues([
+        'model',
+        'platform',
+        'platformVersion',
+        'architecture',
+        'bitness',
+        'fullVersionList',
+      ]);
       const model = String(hints?.model || '').trim();
-      if (model) return model;
+      if (model) {
+        enriched.model = model;
+        enriched.device = detectDeviceLabel(navigator.userAgent || '', model);
+        enriched.deviceBrowser = `${enriched.device} · ${enriched.browserName || 'Browser'}`;
+      }
+      if (hints?.platform) {
+        enriched.platform = hints.platformVersion
+          ? `${hints.platform} ${hints.platformVersion}`
+          : hints.platform;
+      }
+      if (hints?.architecture) {
+        enriched.architecture = hints.bitness
+          ? `${hints.architecture} (${hints.bitness}-bit)`
+          : hints.architecture;
+      }
     }
   } catch {
     // Ignore unsupported client hints
   }
-  return '';
+  return enriched;
 }
 
 function getOrCreateDeviceIdentity() {
@@ -1408,6 +1522,7 @@ export class TournamentStore {
             error: null,
           };
           this.emit();
+          this.pushClientStatusToRemote();
         } catch {
           // Ignore parse error
         }
@@ -1959,15 +2074,17 @@ export class TournamentStore {
       const nextHosts = Array.isArray(data.hosts) ? data.hosts : [];
       const host = data.hostDevice || nextHosts[0] || null;
 
-      // Auto-populate actual device name (server os.hostname() on host, router reverse-DNS on LAN,
-      // or Chromium high-entropy hardware model) unless the user manually customized it
+      // Always collect rich browser environment details and default non-custom deviceName to "Device · Browser"
+      const serverHostname = String(info?.clientDeviceName || '').trim();
+      const baseEnv = collectClientEnvironmentSync('', serverHostname);
+      const enrichedEnv = await collectClientEnvironmentHighEntropy(baseEnv);
+      if (enrichedEnv) {
+        this.clientEnv = enrichedEnv;
+      }
+
       let resolvedDeviceName = this.remoteSync.deviceName;
       if (!this.remoteSync.isDeviceNameCustom) {
-        const serverDetectedName = String(info?.clientDeviceName || '').trim();
-        const clientHintModel = !serverDetectedName
-          ? await detectBrowserHighEntropyDeviceName()
-          : '';
-        const candidate = serverDetectedName || clientHintModel;
+        const candidate = enrichedEnv?.deviceBrowser || detectFallbackDeviceName();
         if (candidate && candidate !== resolvedDeviceName) {
           resolvedDeviceName = candidate;
           try {
@@ -2279,6 +2396,7 @@ export class TournamentStore {
     if (!baseUrl) return;
     const activeTid = this.isOnHub ? null : this.programState?.tournamentId || null;
     const guestCode = activeTid ? this.remoteSync.unlockedGuestKeys?.[activeTid] || '' : '';
+    const clientInfo = this.clientEnv || collectClientEnvironmentSync();
     fetch(`${baseUrl}/__sync/client-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2289,6 +2407,7 @@ export class TournamentStore {
         viewMode: this.isOnHub ? 'hub' : this.activeViewMode,
         tournamentId: activeTid,
         code: guestCode,
+        ...(clientInfo ? { clientInfo } : {}),
       }),
     }).catch(() => { });
   }
