@@ -6,6 +6,7 @@ import {
 } from '../state/tournamentStore.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
+import AppLogPanel from '../components/AppLogPanel.jsx';
 import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
 
 function formatRelativeAgo(ts) {
@@ -795,6 +796,8 @@ export default function AdminView({
         </section>
 
         <UsageStatsPanel onNotify={notify} />
+
+        <AppLogPanel onNotify={notify} />
       </main>
     </div>
   );

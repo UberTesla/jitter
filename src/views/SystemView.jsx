@@ -16,8 +16,10 @@ import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { computeTournamentStats } from '../engine/bracketGenerator.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
+import AppLogPanel from '../components/AppLogPanel.jsx';
 import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
+import { appendAppLog } from '../engine/appLog.js';
 import { rankLanAddresses, resolveShareOrigin } from '../components/ShareTournamentModal.jsx';
 
 const STRESS_TEST_PRESETS = [
@@ -1218,6 +1220,8 @@ export default function SystemView({
             </div>
           </div>
         </section>
+
+        <AppLogPanel onNotify={notify} />
       </main>
     </div>
   );

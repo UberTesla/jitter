@@ -4,6 +4,8 @@
  * them across Control View and Presentation View tabs/windows.
  */
 
+import { appendAppLog } from '../engine/appLog.js';
+
 const DB_NAME = 'pingpong-crt-media-db';
 const STORE_NAME = 'media';
 const MEDIA_KEY = 'active-tv-media';
@@ -337,6 +339,12 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
               gcsObject = signData.objectName;
               storageBackend = 'gcs';
               if (signData.updatedAt) updatedAt = Number(signData.updatedAt) || updatedAt;
+              appendAppLog({
+                level: 'success',
+                category: 'gcs',
+                message: `Uploaded "${file.name}" to Google Cloud Storage`,
+                detail: `${signData.bucket}/${signData.objectName} (${Math.round((dataBuffer?.byteLength || 0) / 1024)} KB)`,
+              });
             } else {
               let gcsDetail = '';
               try {
@@ -352,13 +360,32 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
                 // Ignore body read error
               }
               remoteError = `GCS PUT ${putRes.status}${gcsDetail ? `: ${gcsDetail}` : ' (check bucket CORS & Storage Object Admin permission)'}`;
+              appendAppLog({
+                level: 'error',
+                category: 'gcs',
+                message: `GCS upload failed for "${file.name}" (HTTP ${putRes.status})`,
+                detail: gcsDetail || 'Check bucket CORS and Storage Object Admin permission',
+              });
             }
+          } else if (signData?.gcsConfigError) {
+            appendAppLog({
+              level: 'error',
+              category: 'gcs',
+              message: 'GCS configuration error on server',
+              detail: signData.gcsConfigError,
+            });
           }
         }
       } catch (err) {
         if (usedGcs) {
           console.error('[Jitter GCS Upload Exception]', err);
           remoteError = `GCS direct upload blocked (${err?.message || 'Failed to fetch'}) — check bucket CORS includes ${window.location.origin}`;
+          appendAppLog({
+            level: 'error',
+            category: 'gcs',
+            message: `GCS direct upload blocked for "${file.name}"`,
+            detail: `${err?.message || 'Failed to fetch'} (origin: ${window.location.origin})`,
+          });
         }
       }
 

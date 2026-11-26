@@ -9,6 +9,7 @@ import {
   resolveEmbedStreamUrl,
 } from '../state/mediaStore.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
+import { appendAppLog } from '../engine/appLog.js';
 import Scoreboard from '../components/Scoreboard.jsx';
 import BracketView from '../components/BracketView.jsx';
 import RetroTVCorner from '../components/RetroTVCorner.jsx';
@@ -66,6 +67,11 @@ export default function ControlView({
 
   const showToast = (msg) => {
     setToastMessage(msg);
+    appendAppLog({
+      level: /fail|error|blocked|denied|could not/i.test(String(msg || '')) ? 'warn' : 'info',
+      category: 'control',
+      message: msg,
+    });
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMessage(''), 2800);
   };
