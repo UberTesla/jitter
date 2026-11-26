@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import {
@@ -7,6 +8,24 @@ import {
 } from './src/server/lanSyncMiddleware.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
+function resolveGitSha() {
+  const envSha = String(process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || '').trim();
+  if (envSha) return envSha.slice(0, 7);
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString('utf8')
+      .trim();
+  } catch {
+    return '';
+  }
+}
+
+const appBuildMeta = {
+  version: pkg.version || '1.0.0',
+  gitSha: resolveGitSha(),
+  builtAt: new Date().toISOString(),
+};
 
 function lanSyncPlugin() {
   let activePort = 5173;
@@ -57,6 +76,7 @@ export default defineConfig({
   plugins: [react(), lanSyncPlugin()],
   define: {
     __BUILD_SERVER_INFO__: JSON.stringify(collectLocalServerInfo(5173, pkg)),
+    __APP_BUILD__: JSON.stringify(appBuildMeta),
   },
   server: {
     port: 5173,

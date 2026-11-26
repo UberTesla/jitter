@@ -6,6 +6,7 @@ import {
 } from '../state/tournamentStore.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
+import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
 
 function formatRelativeAgo(ts) {
   if (!ts) return '—';
@@ -164,6 +165,9 @@ export default function AdminView({
               <span className="meta-chip">{hubSettings.hubTitle || 'JITTER'}</span>
               <span className="meta-chip">
                 {ROLE_META.admin.icon} Hub Admin
+              </span>
+              <span className="meta-chip" title={formatBuildTooltip()}>
+                {formatVersionBadge()}
               </span>
               <span className="meta-chip chip-sync">
                 ● {remoteSync.connected ? 'Hub Online' : 'Offline'}

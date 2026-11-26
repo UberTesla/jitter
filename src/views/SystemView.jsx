@@ -16,6 +16,7 @@ import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { computeTournamentStats } from '../engine/bracketGenerator.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
+import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
 import { rankLanAddresses, resolveShareOrigin } from '../components/ShareTournamentModal.jsx';
 
 const STRESS_TEST_PRESETS = [
@@ -339,6 +340,9 @@ export default function SystemView({
               </span>
               <span className="meta-chip">
                 Storage: {(storageBytes / 1024).toFixed(1)} KB
+              </span>
+              <span className="meta-chip" title={formatBuildTooltip()}>
+                {formatVersionBadge()}
               </span>
               <span className="meta-chip chip-sync">● Real-Time Sync</span>
             </div>

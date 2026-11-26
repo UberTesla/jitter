@@ -7,6 +7,7 @@ import {
 import { normalizeFourWordId } from '../engine/tournamentId.js';
 import { clampPlayerCount, MIN_PLAYERS, MAX_PLAYERS } from '../engine/bracketGenerator.js';
 import { resolveShareOrigin } from '../components/ShareTournamentModal.jsx';
+import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
 
 function formatRelativeTime(ts) {
   if (!ts) return 'Just now';
@@ -635,6 +636,19 @@ export default function HubView({
                   ⬆ Import JSON
                 </button>
               </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                fontSize: '0.72rem',
+                opacity: 0.65,
+                marginTop: '0.25rem',
+              }}
+              title={formatBuildTooltip()}
+            >
+              <span>Jitter {formatVersionBadge()}</span>
             </div>
           </section>
         )}

@@ -71,7 +71,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   const info = collectLocalServerInfo(PORT, pkg);
-  console.log(`\n🏓 Jitter Server running on port ${PORT}`);
+  const sha = String(process.env.RENDER_GIT_COMMIT || '').trim().slice(0, 7);
+  console.log(`\n🏓 Jitter v${pkg.version || '1.0.0'}${sha ? ` (${sha})` : ''} Server running on port ${PORT}`);
   console.log(`   Local:   http://localhost:${PORT}`);
   for (const lan of info.lanAddresses) {
     console.log(`   Network: http://${lan.address}:${PORT}  (${lan.interfaceName})`);
