@@ -1255,8 +1255,12 @@ export function createLanSyncHandler({
         bucket.liveMessages = bucket.liveMessages.slice(-250);
       }
       scheduleDiskSave();
+      const tEntryForChat = store.tournaments[tid] || null;
       for (const [clientRes, meta] of sseClients.entries()) {
-        if (meta.tournamentId && meta.tournamentId !== tid) continue;
+        const isClaimedInT = Boolean(meta.deviceId && tEntryForChat?.playerClaims?.[meta.deviceId]);
+        if (meta.tournamentId && meta.tournamentId !== tid && meta.viewMode !== 'hub' && !isClaimedInT) {
+          continue;
+        }
         try {
           clientRes.write(`event: CHAT_LIVE\ndata: ${JSON.stringify({ tournamentId: tid, message: msg })}\n\n`);
         } catch {
@@ -1311,8 +1315,12 @@ export function createLanSyncHandler({
           bucket.liveMessages = bucket.liveMessages.slice(-250);
         }
         scheduleDiskSave();
+        const tEntryForLive = store.tournaments[tid] || null;
         for (const [clientRes, meta] of sseClients.entries()) {
-          if (meta.tournamentId && meta.tournamentId !== tid) continue;
+          const isClaimedInT = Boolean(meta.deviceId && tEntryForLive?.playerClaims?.[meta.deviceId]);
+          if (meta.tournamentId && meta.tournamentId !== tid && meta.viewMode !== 'hub' && !isClaimedInT) {
+            continue;
+          }
           try {
             clientRes.write(`event: CHAT_LIVE\ndata: ${JSON.stringify({ tournamentId: tid, message: msg })}\n\n`);
           } catch {

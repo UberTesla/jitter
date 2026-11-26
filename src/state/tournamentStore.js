@@ -1349,6 +1349,7 @@ export class TournamentStore {
       chatThreads: [],
       unreadLiveChat: 0,
       unreadThreadCounts: {},
+      unreadByTournament: {},
       joinResolutionNotice: null,
       scorekeeperResolutionNotice: null,
       serverInfo: null,
@@ -1578,20 +1579,38 @@ export class TournamentStore {
           const data = JSON.parse(ev.data || '{}');
           const msg = data?.message;
           if (!msg || !msg.id) return;
-          if (data.tournamentId && this.programState?.tournamentId && data.tournamentId !== this.programState.tournamentId) {
+          const isFromMe = msg.fromDeviceId === this.remoteSync.deviceId;
+          const tid = data.tournamentId || this.programState?.tournamentId || '';
+          const isActiveTournament =
+            !data.tournamentId ||
+            !this.programState?.tournamentId ||
+            data.tournamentId === this.programState.tournamentId;
+
+          const nextByT = { ...(this.remoteSync.unreadByTournament || {}) };
+          if (!isFromMe && tid) {
+            const prevT = nextByT[tid] || { live: 0, dm: 0 };
+            nextByT[tid] = { ...prevT, live: (prevT.live || 0) + 1 };
+          }
+
+          if (!isActiveTournament) {
+            if (!isFromMe && tid) {
+              this.remoteSync = { ...this.remoteSync, unreadByTournament: nextByT };
+              this.emit();
+            }
             return;
           }
+
           const prev = Array.isArray(this.remoteSync.chatLiveMessages)
             ? this.remoteSync.chatLiveMessages
             : [];
           if (prev.some((m) => m.id === msg.id)) return;
-          const isFromMe = msg.fromDeviceId === this.remoteSync.deviceId;
           this.remoteSync = {
             ...this.remoteSync,
             chatLiveMessages: [...prev, msg].slice(-250),
             unreadLiveChat: isFromMe
               ? this.remoteSync.unreadLiveChat || 0
               : (this.remoteSync.unreadLiveChat || 0) + 1,
+            unreadByTournament: nextByT,
           };
           this.emit();
         } catch {
@@ -1619,16 +1638,33 @@ export class TournamentStore {
       const handleIncomingThreadEvent = (data) => {
         const thread = data?.thread;
         if (!thread || !thread.id) return;
-        if (data.tournamentId && this.programState?.tournamentId && data.tournamentId !== this.programState.tournamentId) {
+        const msg = data?.message || data?.newMessage || null;
+        const isFromOther = Boolean(msg && msg.fromDeviceId !== this.remoteSync.deviceId);
+        const tid = data.tournamentId || this.programState?.tournamentId || '';
+        const isActiveTournament =
+          !data.tournamentId ||
+          !this.programState?.tournamentId ||
+          data.tournamentId === this.programState.tournamentId;
+
+        const nextByT = { ...(this.remoteSync.unreadByTournament || {}) };
+        if (isFromOther && tid) {
+          const prevT = nextByT[tid] || { live: 0, dm: 0 };
+          nextByT[tid] = { ...prevT, dm: (prevT.dm || 0) + 1 };
+        }
+
+        if (!isActiveTournament) {
+          if (isFromOther && tid) {
+            this.remoteSync = { ...this.remoteSync, unreadByTournament: nextByT };
+            this.emit();
+          }
           return;
         }
+
         const prev = Array.isArray(this.remoteSync.chatThreads) ? this.remoteSync.chatThreads : [];
         const without = prev.filter((t) => t.id !== thread.id);
         const nextThreads = [thread, ...without].sort(
           (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
         );
-        const msg = data?.message || data?.newMessage || null;
-        const isFromOther = Boolean(msg && msg.fromDeviceId !== this.remoteSync.deviceId);
         const nextUnread = { ...(this.remoteSync.unreadThreadCounts || {}) };
         if (isFromOther) {
           nextUnread[thread.id] = (nextUnread[thread.id] || 0) + 1;
@@ -1637,6 +1673,7 @@ export class TournamentStore {
           ...this.remoteSync,
           chatThreads: nextThreads,
           unreadThreadCounts: nextUnread,
+          unreadByTournament: nextByT,
         };
         this.emit();
       };
@@ -4225,16 +4262,39 @@ export class TournamentStore {
   }
 
   markLiveChatRead() {
-    if (!this.remoteSync.unreadLiveChat) return;
-    this.remoteSync = { ...this.remoteSync, unreadLiveChat: 0 };
+    const tid = this.programState?.tournamentId || this.state?.tournamentId || '';
+    const hasTUnread = Boolean(tid && this.remoteSync.unreadByTournament?.[tid]?.live);
+    if (!this.remoteSync.unreadLiveChat && !hasTUnread) return;
+    const nextByT = { ...(this.remoteSync.unreadByTournament || {}) };
+    if (tid && nextByT[tid]) {
+      nextByT[tid] = { ...nextByT[tid], live: 0 };
+    }
+    this.remoteSync = {
+      ...this.remoteSync,
+      unreadLiveChat: 0,
+      unreadByTournament: nextByT,
+    };
     this.emit();
   }
 
   markThreadRead(threadId) {
     if (!threadId || !this.remoteSync.unreadThreadCounts?.[threadId]) return;
+    const cleared = Number(this.remoteSync.unreadThreadCounts[threadId]) || 0;
     const next = { ...(this.remoteSync.unreadThreadCounts || {}) };
     delete next[threadId];
-    this.remoteSync = { ...this.remoteSync, unreadThreadCounts: next };
+    const tid = this.programState?.tournamentId || this.state?.tournamentId || '';
+    const nextByT = { ...(this.remoteSync.unreadByTournament || {}) };
+    if (tid && nextByT[tid]) {
+      nextByT[tid] = {
+        ...nextByT[tid],
+        dm: Math.max(0, (nextByT[tid].dm || 0) - cleared),
+      };
+    }
+    this.remoteSync = {
+      ...this.remoteSync,
+      unreadThreadCounts: next,
+      unreadByTournament: nextByT,
+    };
     this.emit();
   }
 

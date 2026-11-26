@@ -478,12 +478,6 @@ export default function HubView({
           </div>
 
           <div className="simple-hub-actions">
-            <span
-              className="nav-tab-id-pill"
-              title={`Current Session ID: ${tournamentStore.getTabId()}`}
-            >
-              {tournamentStore.getTabId()}
-            </span>
             {isThisDeviceAdmin && onOpenAdminPanel && (
               <button
                 type="button"
@@ -510,6 +504,13 @@ export default function HubView({
             >
               + New Tournament
             </button>
+            <span
+              className="nav-tab-id-pill"
+              style={{ marginLeft: 0 }}
+              title={`Current Session ID: ${tournamentStore.getTabId()}`}
+            >
+              {tournamentStore.getTabId()}
+            </span>
           </div>
         </header>
 
@@ -812,6 +813,41 @@ export default function HubView({
                               </span>
                             )}
                             {isOwnHosted && <span className="stc-tag is-host">Host</span>}
+                            {(() => {
+                              const u = remoteSync?.unreadByTournament?.[t.id];
+                              const dmCount = u?.dm || 0;
+                              const liveCount = u?.live || 0;
+                              const total = dmCount + liveCount;
+                              if (total <= 0) return null;
+                              const tip = [
+                                dmCount > 0 ? `${dmCount} unread DM${dmCount === 1 ? '' : 's'}` : '',
+                                liveCount > 0
+                                  ? `${liveCount} unread live chat message${liveCount === 1 ? '' : 's'}`
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ');
+                              return (
+                                <span
+                                  className="stc-tag"
+                                  title={tip}
+                                  style={{
+                                    background:
+                                      dmCount > 0
+                                        ? 'rgba(245, 158, 11, 0.24)'
+                                        : 'rgba(56, 189, 248, 0.22)',
+                                    borderColor:
+                                      dmCount > 0
+                                        ? 'rgba(251, 191, 36, 0.7)'
+                                        : 'rgba(56, 189, 248, 0.6)',
+                                    color: dmCount > 0 ? '#fde68a' : '#7dd3fc',
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {dmCount > 0 ? '💬' : '🗣️'} {total}
+                                </span>
+                              );
+                            })()}
                             {t.destruction?.destroyAt && (
                               <span className="stc-tag is-danger">
                                 💣 {formatDestroyCountdown(t.destruction.destroyAt, nowMs)}
