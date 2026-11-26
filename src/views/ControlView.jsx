@@ -48,6 +48,7 @@ export default function ControlView({
   const [showAddUrlRow, setShowAddUrlRow] = useState(false);
   const [tvUrlInput, setTvUrlInput] = useState('');
   const [tvUrlNameInput, setTvUrlNameInput] = useState('');
+  const [tvUploadLog, setTvUploadLog] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
   const fileInputRef = useRef(null);
   const toastTimerRef = useRef(null);
@@ -238,6 +239,8 @@ export default function ControlView({
     let failedCount = 0;
     let firstError = '';
     let gcsCount = 0;
+    const newLogs = [];
+    const nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
     for (const file of files) {
       const saved = await saveTvPlaylistItemBlob(file, { senderId: tournamentStore.getTabId() });
       tournamentStore.addTvPlaylistItem({
@@ -249,11 +252,34 @@ export default function ControlView({
         durationSec: saved.detectedDurationSec || (saved.kind === 'video' ? 15 : 12),
         updatedAt: saved.updatedAt,
       });
-      if (saved.storageBackend === 'gcs') gcsCount += 1;
-      if (saved.remoteError) {
+      if (saved.storageBackend === 'gcs') {
+        gcsCount += 1;
+        newLogs.push({
+          id: `${Date.now()}-${Math.random()}`,
+          time: nowStr,
+          ok: true,
+          text: `☁ GCS uploaded "${file.name}" → ${saved.gcsObject}`,
+        });
+      } else if (saved.remoteError) {
         failedCount += 1;
         if (!firstError) firstError = saved.remoteError;
+        newLogs.push({
+          id: `${Date.now()}-${Math.random()}`,
+          time: nowStr,
+          ok: false,
+          text: `❌ "${file.name}": ${saved.remoteError}`,
+        });
+      } else {
+        newLogs.push({
+          id: `${Date.now()}-${Math.random()}`,
+          time: nowStr,
+          ok: true,
+          text: `💾 "${file.name}" saved to ${saved.storageBackend === 'server' ? 'LAN server' : 'local browser'}`,
+        });
       }
+    }
+    if (newLogs.length > 0) {
+      setTvUploadLog((prev) => [...newLogs, ...prev].slice(0, 10));
     }
     trackUsageEvent('tv:playlist_add_files', {
       category: 'control',
@@ -1058,6 +1084,61 @@ export default function ControlView({
                         );
                       })}
                     </div>
+
+                    {tvUploadLog.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: '0.45rem',
+                          padding: '0.4rem 0.55rem',
+                          borderRadius: '7px',
+                          background: 'rgba(15, 23, 42, 0.72)',
+                          border: '1px solid rgba(148, 163, 184, 0.22)',
+                          fontSize: '0.72rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.22rem',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            opacity: 0.75,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <span>Upload Log</span>
+                          <button
+                            type="button"
+                            onClick={() => setTvUploadLog([])}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'inherit',
+                              cursor: 'pointer',
+                              fontSize: '0.7rem',
+                              padding: 0,
+                            }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                        {tvUploadLog.map((entry) => (
+                          <div
+                            key={entry.id}
+                            style={{
+                              color: entry.ok ? '#a7f3d0' : '#fca5a5',
+                              wordBreak: 'break-word',
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            <span style={{ opacity: 0.6, marginRight: '0.35rem' }}>{entry.time}</span>
+                            {entry.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -338,13 +338,27 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
               storageBackend = 'gcs';
               if (signData.updatedAt) updatedAt = Number(signData.updatedAt) || updatedAt;
             } else {
-              remoteError = `GCS upload failed (${putRes.status}) — check bucket CORS & permissions`;
+              let gcsDetail = '';
+              try {
+                const rawErr = await putRes.text();
+                const codeMatch = rawErr.match(/<Code>([^<]+)<\/Code>/i);
+                const msgMatch = rawErr.match(/<Message>([^<]+)<\/Message>/i);
+                const detailsMatch = rawErr.match(/<Details>([^<]+)<\/Details>/i);
+                gcsDetail = [codeMatch?.[1], msgMatch?.[1], detailsMatch?.[1]]
+                  .filter(Boolean)
+                  .join(' — ');
+                console.error('[Jitter GCS Upload Error]', putRes.status, rawErr);
+              } catch {
+                // Ignore body read error
+              }
+              remoteError = `GCS PUT ${putRes.status}${gcsDetail ? `: ${gcsDetail}` : ' (check bucket CORS & Storage Object Admin permission)'}`;
             }
           }
         }
       } catch (err) {
         if (usedGcs) {
-          remoteError = err?.message || 'GCS direct upload failed (check bucket CORS)';
+          console.error('[Jitter GCS Upload Exception]', err);
+          remoteError = `GCS direct upload blocked (${err?.message || 'Failed to fetch'}) — check bucket CORS includes ${window.location.origin}`;
         }
       }
 
