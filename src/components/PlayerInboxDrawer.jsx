@@ -40,7 +40,27 @@ export default function PlayerInboxDrawer({
   onEnableDesktopAlerts,
 }) {
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('live'); // 'live' | 'messages' | 'alerts'
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem('pingpong-inbox-last-tab-v1')
+          : null;
+      return ['live', 'messages', 'ondeck', 'alerts'].includes(saved) ? saved : 'live';
+    } catch {
+      return 'live';
+    }
+  }); // 'live' | 'messages' | 'ondeck' | 'alerts'
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('pingpong-inbox-last-tab-v1', activeTab);
+      }
+    } catch {
+      // Ignore
+    }
+  }, [activeTab]);
 
   // Player Claim state
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
@@ -87,12 +107,33 @@ export default function PlayerInboxDrawer({
   const canModerateChat = (ROLE_LEVEL[myRole] ?? 0) >= ROLE_LEVEL.moderator;
 
   const [inboxNowMs, setInboxNowMs] = useState(() => tournamentStore.getServerNow());
-  const [dismissedBannerIds, setDismissedBannerIds] = useState(() => new Set());
+  const [dismissedBannerIds, setDismissedBannerIds] = useState(() => {
+    try {
+      const raw =
+        typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem('pingpong-dismissed-banners-v1')
+          : null;
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
+  });
   const dismissBanner = (id) => {
     if (!id) return;
     setDismissedBannerIds((prev) => {
       const next = new Set(prev);
       next.add(id);
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(
+            'pingpong-dismissed-banners-v1',
+            JSON.stringify(Array.from(next).slice(-50))
+          );
+        }
+      } catch {
+        // Ignore
+      }
       return next;
     });
     trackUsageEvent('chat:dismiss_banner', { category: 'chat' });
@@ -403,13 +444,6 @@ export default function PlayerInboxDrawer({
     setConfirmingClaim(false);
     setChatError('');
     trackUsageEvent('chat:open_drawer', { category: 'chat' });
-    if (unreadThreadsTotal > 0) {
-      setActiveTab('messages');
-    } else if (unreadInbox > 0 && unreadLive === 0) {
-      setActiveTab('alerts');
-    } else {
-      setActiveTab('live');
-    }
   };
 
   const handleConfirmClaim = async () => {
