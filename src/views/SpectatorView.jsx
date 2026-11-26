@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ROLE_META, SLIDE_DEFINITIONS, tournamentStore } from '../state/tournamentStore.js';
+import {
+  ROLE_META,
+  SLIDE_DEFINITIONS,
+  normalizeAutoRotateSlides,
+  tournamentStore,
+} from '../state/tournamentStore.js';
 import PresentationView from './PresentationView.jsx';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import { useFullscreenMenu } from '../hooks/useFullscreenMenu.js';
@@ -21,7 +26,31 @@ export default function SpectatorView({
   onNavigateMode,
   onOpenTournamentChooser,
 }) {
-  const liveSlide = state.presentation?.activeSlide || 'title';
+  const baseLiveSlide = state.presentation?.activeSlide || 'title';
+  const autoRotateOn = Boolean(state.presentation?.autoRotate);
+  const rotateList = useMemo(
+    () => normalizeAutoRotateSlides(state.presentation?.autoRotateSlides),
+    [state.presentation?.autoRotateSlides]
+  );
+  const rotateSec = Math.max(5, Number(state.presentation?.autoRotateSec) || 18);
+  const [rotateSlot, setRotateSlot] = useState(() =>
+    Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000))
+  );
+  useEffect(() => {
+    if (!autoRotateOn || rotateList.length < 2) return undefined;
+    const syncSlot = () => {
+      const next = Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
+      setRotateSlot((prev) => (prev === next ? prev : next));
+    };
+    syncSlot();
+    const id = setInterval(syncSlot, 250);
+    return () => clearInterval(id);
+  }, [autoRotateOn, rotateList, rotateSec]);
+
+  const liveSlide =
+    autoRotateOn && rotateList.length > 0
+      ? rotateList[rotateSlot % rotateList.length]
+      : baseLiveSlide;
   const [syncPresentation, setSyncPresentation] = useState(true);
   const [localSlide, setLocalSlide] = useState(liveSlide);
   const [feedback, setFeedback] = useState('');
@@ -74,17 +103,16 @@ export default function SpectatorView({
 
   // Build local-only presentation state copy (never mutates or broadcasts slide changes!)
   const spectatorState = useMemo(() => {
-    if ((state.presentation?.activeSlide || 'title') === activeLocalSlide) {
-      return state;
-    }
     return {
       ...state,
       presentation: {
         ...(state.presentation || {}),
         activeSlide: activeLocalSlide,
+        autoRotate: syncPresentation ? Boolean(state.presentation?.autoRotate) : false,
+        followLiveAutomation: syncPresentation,
       },
     };
-  }, [state, activeLocalSlide]);
+  }, [state, activeLocalSlide, syncPresentation]);
 
   const handleSelectSlide = (slideId) => {
     setLocalSlide(slideId);

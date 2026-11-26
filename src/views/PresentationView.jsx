@@ -77,21 +77,24 @@ export default function PresentationView({
   }, [liveChatMessages.length]);
 
   const baseSlide = state.presentation?.activeSlide || 'title';
-  const autoRotateOn = Boolean(state.presentation?.autoRotate) && !embedded;
+  const allowLiveAutomation = !embedded || Boolean(state.presentation?.followLiveAutomation);
+  const autoRotateOn = Boolean(state.presentation?.autoRotate) && allowLiveAutomation;
   const rotateList = React.useMemo(
     () => normalizeAutoRotateSlides(state.presentation?.autoRotateSlides),
     [state.presentation?.autoRotateSlides]
   );
   const rotateSec = Math.max(5, Number(state.presentation?.autoRotateSec) || 18);
-  const [rotateIdx, setRotateIdx] = useState(0);
-  // When operator explicitly selects a slide that is in rotateList, jump rotation to it immediately
-  useEffect(() => {
-    const idx = rotateList.indexOf(baseSlide);
-    if (idx !== -1) setRotateIdx(idx);
-  }, [baseSlide, rotateList]);
+  const computeSyncedRotateSlot = () =>
+    Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
+  const [rotateIdx, setRotateIdx] = useState(computeSyncedRotateSlot);
   useEffect(() => {
     if (!autoRotateOn || rotateList.length < 2) return undefined;
-    const id = setInterval(() => setRotateIdx((n) => n + 1), rotateSec * 1000);
+    const syncSlot = () => {
+      const next = Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
+      setRotateIdx((prev) => (prev === next ? prev : next));
+    };
+    syncSlot();
+    const id = setInterval(syncSlot, 250);
     return () => clearInterval(id);
   }, [autoRotateOn, rotateList, rotateSec]);
   const activeMatchForSlide = state.matches?.[state.activeMatchId] || null;
@@ -129,7 +132,7 @@ export default function PresentationView({
     state.presentation?.spotlightBetweenMatches &&
     isBetweenMatches &&
     !manualBetweenOverride &&
-    !embedded &&
+    allowLiveAutomation &&
     baseSlide !== 'title' &&
     baseSlide !== 'bracket'
   );
