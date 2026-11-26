@@ -54,11 +54,6 @@ export default function ControlView({
   const isStudio = syncMeta?.syncMode === 'studio';
   const hasUnpublished = Boolean(syncMeta?.hasUnpublishedChanges);
 
-  const allPanelsCollapsed =
-    Boolean(collapsed.presentation) &&
-    (!grandmaEnabled || Boolean(collapsed.grandma)) &&
-    Boolean(collapsed.bracket);
-
   const showToast = (msg) => {
     setToastMessage(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -377,15 +372,6 @@ export default function ControlView({
                 👵 {state.ui.showCornerScene ? 'Hide Grandma' : 'Show Grandma'}
               </button>
             )}
-
-            <button
-              type="button"
-              className="btn-secondary btn-sm"
-              onClick={() => tournamentStore.setAllPanelsCollapsed(!allPanelsCollapsed)}
-              title="Collapse or expand all control panels"
-            >
-              {allPanelsCollapsed ? '⊞ Expand' : '⊟ Collapse'}
-            </button>
           </div>
         </div>
       </header>
