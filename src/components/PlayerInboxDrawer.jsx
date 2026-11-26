@@ -783,51 +783,6 @@ export default function PlayerInboxDrawer({
               </button>
             )}
 
-            {/* 4-Tab Switcher: Live Chat | Direct & Groups | On Deck / Roster | Alerts & Player */}
-            <div className="segmented-control compact" style={{ marginBottom: 0 }}>
-              <button
-                type="button"
-                className={activeTab === 'live' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('live');
-                  setChatError('');
-                }}
-              >
-                🗣️ Chat{unreadLive > 0 ? ` (${unreadLive})` : ''}
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'messages' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('messages');
-                  setChatError('');
-                }}
-              >
-                💬 Direct{unreadThreadsTotal > 0 ? ` (${unreadThreadsTotal})` : ''}
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'ondeck' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('ondeck');
-                  setChatError('');
-                  trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
-                }}
-              >
-                ⏳ On Deck
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'alerts' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('alerts');
-                  setChatError('');
-                }}
-              >
-                📬 Alerts{unreadInbox > 0 ? ` (${unreadInbox})` : ''}
-              </button>
-            </div>
-
             {/* Mini Announcement Banner (dismissible; includes active sticky announcements for newly joined users) */}
             {latestAnnouncement && (
               <div
@@ -976,6 +931,54 @@ export default function PlayerInboxDrawer({
                 </button>
               </div>
             )}
+
+            {/* 4-Tab Switcher: Live Chat | Direct & Groups | On Deck / Roster | Alerts & Player */}
+            <div
+              className="segmented-control compact"
+              style={{ marginTop: '0.35rem', marginBottom: 0 }}
+            >
+              <button
+                type="button"
+                className={activeTab === 'live' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('live');
+                  setChatError('');
+                }}
+              >
+                🗣️ Chat{unreadLive > 0 ? ` (${unreadLive})` : ''}
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'messages' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('messages');
+                  setChatError('');
+                }}
+              >
+                💬 Direct{unreadThreadsTotal > 0 ? ` (${unreadThreadsTotal})` : ''}
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'ondeck' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('ondeck');
+                  setChatError('');
+                  trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
+                }}
+              >
+                ⏳ On Deck
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'alerts' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('alerts');
+                  setChatError('');
+                }}
+              >
+                📬 Alerts{unreadInbox > 0 ? ` (${unreadInbox})` : ''}
+              </button>
+            </div>
 
             {chatError && (
               <p className="inbox-feedback" style={{ margin: '0 0 0.35rem', color: '#f87171' }}>
