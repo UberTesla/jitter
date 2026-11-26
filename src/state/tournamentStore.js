@@ -1322,7 +1322,7 @@ export class TournamentStore {
       isThisDeviceAdmin: false,
       adminKey: null,
       hubSettings: {
-        hubTitle: 'PING PONG HUB',
+        hubTitle: 'JITTER',
         allowPublicCreation: true,
         defaultIsPublic: true,
         defaultIsSecure: true,
@@ -6414,7 +6414,7 @@ export class TournamentStore {
   exportBackupJSON() {
     const payload = {
       exportedAt: new Date().toISOString(),
-      app: 'Ping Pong Championship & Retro 4:3 CRT Live Scoreboard',
+      app: 'Jitter — Live Tournament & Scoreboard',
       championshipMatchId: getChampionshipMatchId(this.state.playerCount, this.state.format),
       state: this.state,
     };

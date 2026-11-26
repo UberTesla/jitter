@@ -45,7 +45,7 @@ export default function AdminView({
   const myDeviceId = remoteSync.deviceId || '';
   const admins = Array.isArray(remoteSync.admins) ? remoteSync.admins : [];
   const hubSettings = remoteSync.hubSettings || {
-    hubTitle: 'PING PONG HUB',
+    hubTitle: 'JITTER',
     allowPublicCreation: true,
     defaultIsPublic: true,
     defaultIsSecure: true,
@@ -60,12 +60,12 @@ export default function AdminView({
   const allClients = Array.isArray(remoteSync.clients) ? remoteSync.clients : [];
 
   const [statusMsg, setStatusMsg] = useState('');
-  const [hubTitleDraft, setHubTitleDraft] = useState(hubSettings.hubTitle || 'PING PONG HUB');
+  const [hubTitleDraft, setHubTitleDraft] = useState(hubSettings.hubTitle || 'JITTER');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
-    setHubTitleDraft(hubSettings.hubTitle || 'PING PONG HUB');
+    setHubTitleDraft(hubSettings.hubTitle || 'JITTER');
   }, [hubSettings.hubTitle]);
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function AdminView({
   const handleSaveHubTitle = async (e) => {
     e.preventDefault();
     const res = await tournamentStore.updateHubSettings({
-      hubTitle: hubTitleDraft.trim() || 'PING PONG HUB',
+      hubTitle: hubTitleDraft.trim() || 'JITTER',
     });
     if (res.ok) notify(`Updated Hub title to "${res.hubSettings?.hubTitle}"`);
     else notify(res.error || 'Could not update Hub title');
@@ -161,7 +161,7 @@ export default function AdminView({
           <div>
             <h1 className="brand-title">HUB ADMIN PANEL</h1>
             <div className="brand-meta">
-              <span className="meta-chip">{hubSettings.hubTitle || 'PING PONG HUB'}</span>
+              <span className="meta-chip">{hubSettings.hubTitle || 'JITTER'}</span>
               <span className="meta-chip">
                 {ROLE_META.admin.icon} Hub Admin
               </span>
@@ -258,7 +258,7 @@ export default function AdminView({
                     type="text"
                     value={hubTitleDraft}
                     onChange={(e) => setHubTitleDraft(e.target.value)}
-                    placeholder="PING PONG HUB"
+                    placeholder="JITTER"
                   />
                 </div>
                 <button type="submit" className="btn-primary btn-sm">

@@ -130,7 +130,7 @@ const ANALYTICS_FILENAME = '.pingpong-usage-stats.json';
 const MAX_ANALYTICS_EVENTS = 15000;
 
 const DEFAULT_HUB_SETTINGS = Object.freeze({
-  hubTitle: 'PING PONG HUB',
+  hubTitle: 'JITTER',
   allowPublicCreation: true,
   defaultIsPublic: true,
   defaultIsSecure: true,

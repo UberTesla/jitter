@@ -1,6 +1,6 @@
 {
-  "name": "Ping Pong Championship Scoreboard",
-  "short_name": "Ping Pong",
+  "name": "Jitter — Live Tournament & Scoreboard",
+  "short_name": "Jitter",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#060912",

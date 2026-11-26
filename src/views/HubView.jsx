@@ -56,7 +56,7 @@ export default function HubView({
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const hubSettings = remoteSync?.hubSettings || {
-    hubTitle: 'PING PONG HUB',
+    hubTitle: 'JITTER',
     allowPublicCreation: true,
     defaultIsPublic: true,
     defaultIsSecure: true,
@@ -464,7 +464,7 @@ export default function HubView({
               🏓
             </span>
             <div>
-              <h1 className="simple-hub-title">{hubSettings.hubTitle || 'PING PONG HUB'}</h1>
+              <h1 className="simple-hub-title">{hubSettings.hubTitle || 'JITTER'}</h1>
               <div className="simple-hub-subrow">
                 <span className={`simple-dot ${isConnected ? 'is-online' : 'is-offline'}`} />
                 <span>{isConnected ? 'Connected' : 'Offline Mode'}</span>

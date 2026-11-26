@@ -71,7 +71,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   const info = collectLocalServerInfo(PORT, pkg);
-  console.log(`\n🏓 Ping Pong Championship Server running on port ${PORT}`);
+  console.log(`\n🏓 Jitter Server running on port ${PORT}`);
   console.log(`   Local:   http://localhost:${PORT}`);
   for (const lan of info.lanAddresses) {
     console.log(`   Network: http://${lan.address}:${PORT}  (${lan.interfaceName})`);
