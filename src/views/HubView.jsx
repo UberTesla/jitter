@@ -332,11 +332,14 @@ export default function HubView({
     e.preventDefault();
     const isTeams = newEntryMode === 'teams';
     const minNeeded = isTeams ? 4 : MIN_PLAYERS;
-    if (newRoster.length < minNeeded) return;
-    const cleanedRoster = newRoster.map((p, idx) => ({
-      id: p.id || `r${idx + 1}`,
-      name: p.name.trim() || `Player ${idx + 1}`,
-    }));
+    const targetCount = Math.max(minNeeded, newRoster.length);
+    const cleanedRoster = Array.from({ length: targetCount }, (_, idx) => {
+      const p = newRoster[idx];
+      return {
+        id: p?.id || `r${idx + 1}`,
+        name: p?.name?.trim() || `Player ${idx + 1}`,
+      };
+    });
     const humans = cleanedRoster.length;
     const entrants = isTeams ? Math.max(2, Math.ceil(humans / 2)) : humans;
     const initialPlayers = isTeams
@@ -1340,9 +1343,9 @@ export default function HubView({
                 + Add
               </button>
             </div>
-            {newRoster.length < (newEntryMode === 'teams' ? 4 : MIN_PLAYERS) && (
+            {newRoster.length === 0 && (
               <p className="panel-subtitle" style={{ margin: '0.35rem 0 0' }}>
-                Add at least {newEntryMode === 'teams' ? 4 : MIN_PLAYERS} players to start
+                Optional — you can add or edit players anytime after creating the tournament.
               </p>
             )}
             {newRoster.length > 0 && (
@@ -1457,11 +1460,7 @@ export default function HubView({
             >
               Cancel
             </button>
-              <button
-                type="submit"
-                className="btn-amber"
-                disabled={newRoster.length < (newEntryMode === 'teams' ? 4 : MIN_PLAYERS)}
-              >
+              <button type="submit" className="btn-amber">
                 Create Tournament
               </button>
             </div>
