@@ -379,6 +379,7 @@ export default function HubView({
         return;
       }
       setLocalTournaments(tournamentStore.listTournaments());
+      setShowSettingsDrawer(false);
       const label =
         res.count > 1
           ? `Imported ${res.count} tournaments (opened "${res.tournament.tournamentName}")`
@@ -447,21 +448,6 @@ export default function HubView({
               title="Device name, LAN share URL, sync server & Hub Admin access"
             >
               ⚙ Settings
-            </button>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              style={{ display: 'none' }}
-              onChange={handleImportJsonFile}
-            />
-            <button
-              type="button"
-              className="btn-secondary btn-sm"
-              onClick={() => importFileInputRef.current?.click()}
-              title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
-            >
-              ⬆ Import JSON
             </button>
             <button
               type="button"
@@ -575,6 +561,31 @@ export default function HubView({
                 )}
               </div>
             )}
+
+            {/* Import Tournament JSON Backup */}
+            <div className="ssd-admin-block">
+              <span className="ssd-label">📦 Tournament Backup</span>
+              <div className="ssd-admin-row">
+                <span className="ssd-admin-active">
+                  Upload a tournament JSON backup or sync data file.
+                </span>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  style={{ display: 'none' }}
+                  onChange={handleImportJsonFile}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => importFileInputRef.current?.click()}
+                  title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
+                >
+                  ⬆ Import JSON
+                </button>
+              </div>
+            </div>
           </section>
         )}
 
