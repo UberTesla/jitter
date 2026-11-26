@@ -234,6 +234,17 @@ export default function App() {
     tournamentStore.setHubPresence(showHub);
   }, [showHub]);
 
+  // Dynamic browser tab title: "Jitter" in the Hub, or the active tournament's name inside a tournament
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (showHub) {
+      document.title = 'Jitter';
+    } else {
+      const tName = String(state?.tournamentName || '').trim();
+      document.title = tName || 'Jitter';
+    }
+  }, [showHub, state?.tournamentName]);
+
   // Embedded Usage Analytics: auto-capture views, time-on-view, and button interactions
   const analyticsContextRef = useRef({});
   const analyticsViewName = showHub
