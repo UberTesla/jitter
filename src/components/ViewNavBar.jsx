@@ -196,35 +196,14 @@ export default function ViewNavBar({
               title="Return to Jitter Hub"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.38rem' }}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 120 120"
-                fill="none"
+              <img
+                src="/favicon.svg"
+                alt=""
                 width="16"
                 height="16"
                 aria-hidden="true"
-                style={{ flexShrink: 0, display: 'block' }}
-              >
-                <rect width="120" height="120" rx="26" fill="#0b1324" />
-                <path
-                  d="M14 68 H36 L44 82 L60 18 L75 100 L84 68 H106"
-                  stroke="#38bdf8"
-                  strokeWidth="9"
-                  strokeLinecap="round"
-                  strokeLinejoin="miter"
-                  strokeMiterlimit="16"
-                  transform="translate(-4 0)"
-                  opacity="0.5"
-                />
-                <path
-                  d="M14 68 H36 L44 82 L60 18 L75 100 L84 68 H106"
-                  stroke="#f59e0b"
-                  strokeWidth="9"
-                  strokeLinecap="round"
-                  strokeLinejoin="miter"
-                  strokeMiterlimit="16"
-                />
-              </svg>
+                style={{ flexShrink: 0, display: 'block', borderRadius: '4px' }}
+              />
               <span>Hub</span>
             </button>
           )}
