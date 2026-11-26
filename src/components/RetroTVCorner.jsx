@@ -260,7 +260,7 @@ export default function RetroTVCorner({
       currentPlaylistItem.kind === 'video' ||
       (currentPlaylistItem.kind === 'url' && mediaSource?.kind === 'video');
     if (isVideoItem) return undefined;
-    const durationMs = Math.max(3, Number(currentPlaylistItem.durationSec) || 12) * 1000;
+    const durationMs = Math.max(1, Number(currentPlaylistItem.durationSec) || 12) * 1000;
     const timer = setTimeout(() => {
       advancePlaylistItem();
     }, durationMs);

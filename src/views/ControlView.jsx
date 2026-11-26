@@ -5,6 +5,7 @@ import { hasGrandmaVariables, resolveGrandmaPhrase } from '../engine/grandmaVari
 import {
   saveTvPlaylistItemBlob,
   deleteTvPlaylistItemBlob,
+  parseGifDurationSec,
 } from '../state/mediaStore.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
 import Scoreboard from '../components/Scoreboard.jsx';
@@ -241,7 +242,7 @@ export default function ControlView({
         kind: saved.kind,
         name: saved.name,
         type: saved.type,
-        durationSec: saved.kind === 'video' ? 15 : 12,
+        durationSec: saved.detectedDurationSec || (saved.kind === 'video' ? 15 : 12),
         updatedAt: saved.updatedAt,
       });
       if (saved.remoteError) failedCount += 1;
@@ -255,7 +256,7 @@ export default function ControlView({
     }
   };
 
-  const handleAddTvUrl = (e) => {
+  const handleAddTvUrl = async (e) => {
     e.preventDefault();
     const cleanedUrl = tvUrlInput.trim();
     if (!cleanedUrl) return;
@@ -263,19 +264,35 @@ export default function ControlView({
       tvUrlNameInput.trim() ||
       cleanedUrl.split('/').pop()?.split('?')[0] ||
       'Web Media';
+    let detectedSec = null;
+    if (/\.gif(\?|$)/i.test(cleanedUrl)) {
+      try {
+        const res = await fetch(cleanedUrl);
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          detectedSec = parseGifDurationSec(buf);
+        }
+      } catch {
+        // CORS or network error — fall back to 12s
+      }
+    }
     tournamentStore.addTvPlaylistItem({
       id: `tvu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       kind: 'url',
       name: derivedName,
       url: cleanedUrl,
-      durationSec: 12,
+      durationSec: detectedSec || 12,
       updatedAt: Date.now(),
     });
     trackUsageEvent('tv:playlist_add_url', { category: 'control' });
     setTvUrlInput('');
     setTvUrlNameInput('');
     setShowAddUrlRow(false);
-    showToast(`Added "${derivedName}" to CRT TV playlist`);
+    showToast(
+      detectedSec
+        ? `Added "${derivedName}" (${detectedSec}s GIF loop) to CRT TV playlist`
+        : `Added "${derivedName}" to CRT TV playlist`
+    );
   };
 
   const handleRemoveTvPlaylistItem = async (item) => {
@@ -944,7 +961,7 @@ export default function ControlView({
                               >
                                 <input
                                   type="number"
-                                  min={3}
+                                  min={1}
                                   max={300}
                                   value={item.durationSec ?? 12}
                                   onChange={(e) =>

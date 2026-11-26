@@ -189,6 +189,80 @@ async function readLocalMediaRecordByKey(key) {
   }
 }
 
+/**
+ * Parses a GIF87a/GIF89a ArrayBuffer and calculates its exact single-loop duration in seconds
+ * by walking all blocks and summing Graphic Control Extension frame delays (matching browser
+ * clamping of <20ms delays to 100ms). Returns `null` for non-GIFs or single-frame GIFs.
+ */
+export function parseGifDurationSec(arrayBuffer) {
+  if (!arrayBuffer || arrayBuffer.byteLength < 14) return null;
+  const bytes = new Uint8Array(arrayBuffer);
+  // Check "GIF87a" or "GIF89a"
+  if (
+    bytes[0] !== 0x47 ||
+    bytes[1] !== 0x49 ||
+    bytes[2] !== 0x46 ||
+    bytes[3] !== 0x38 ||
+    (bytes[4] !== 0x37 && bytes[4] !== 0x39) ||
+    bytes[5] !== 0x61
+  ) {
+    return null;
+  }
+
+  let pos = 13; // 6-byte header + 7-byte Logical Screen Descriptor
+  const gctPacked = bytes[10];
+  if (gctPacked & 0x80) {
+    pos += 3 * (1 << ((gctPacked & 0x07) + 1));
+  }
+
+  const len = bytes.length;
+  let totalMs = 0;
+  let frameCount = 0;
+
+  while (pos < len) {
+    const block = bytes[pos++];
+    if (block === 0x3b) break; // GIF Trailer
+
+    if (block === 0x21) {
+      // Extension block
+      if (pos >= len) break;
+      const label = bytes[pos++];
+      if (label === 0xf9 && pos + 5 < len && bytes[pos] === 0x04) {
+        const delayCs = bytes[pos + 2] | (bytes[pos + 3] << 8);
+        totalMs += (delayCs < 2 ? 10 : delayCs) * 10;
+        frameCount += 1;
+      }
+      // Skip extension sub-blocks
+      while (pos < len) {
+        const subSize = bytes[pos++];
+        if (!subSize) break;
+        pos += subSize;
+      }
+    } else if (block === 0x2c) {
+      // Image Descriptor (9 bytes)
+      if (pos + 9 > len) break;
+      const lctPacked = bytes[pos + 8];
+      pos += 9;
+      if (lctPacked & 0x80) {
+        pos += 3 * (1 << ((lctPacked & 0x07) + 1));
+      }
+      if (pos >= len) break;
+      pos += 1; // LZW Minimum Code Size
+      // Skip image data sub-blocks
+      while (pos < len) {
+        const subSize = bytes[pos++];
+        if (!subSize) break;
+        pos += subSize;
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (frameCount <= 1 || totalMs <= 0) return null;
+  return Math.max(1, Math.min(300, Math.round(totalMs / 1000)));
+}
+
 export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = '' } = {}) {
   const id = mediaId || `tvm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const lowerName = String(file.name || '').toLowerCase();
@@ -212,6 +286,8 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
   } catch {
     dataBuffer = null;
   }
+  const detectedDurationSec =
+    inferredType === 'image/gif' && dataBuffer ? parseGifDurationSec(dataBuffer) : null;
   let updatedAt = Date.now();
   const persistedRecord = {
     id,
@@ -261,6 +337,7 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
     name: file.name || 'TV Media',
     type: inferredType,
     kind,
+    detectedDurationSec,
     updatedAt,
     syncedRemote,
     remoteError,

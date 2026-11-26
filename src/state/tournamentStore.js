@@ -6427,7 +6427,7 @@ export class TournamentStore {
           name: String(item.name || 'TV Media').trim() || 'TV Media',
           type: item.type || '',
           url: item.url || '',
-          durationSec: Math.max(3, Math.min(300, Math.round(Number(item.durationSec) || 12))),
+          durationSec: Math.max(1, Math.min(300, Math.round(Number(item.durationSec) || 12))),
           updatedAt: Number(item.updatedAt) || Date.now(),
         };
         const nextList = [...cur, entry];
@@ -6516,7 +6516,7 @@ export class TournamentStore {
                 ...x,
                 ...(partial.name !== undefined ? { name: String(partial.name).trim() || x.name } : {}),
                 ...(partial.durationSec !== undefined
-                  ? { durationSec: Math.max(3, Math.min(300, Math.round(Number(partial.durationSec) || 12))) }
+                  ? { durationSec: Math.max(1, Math.min(300, Math.round(Number(partial.durationSec) || 12))) }
                   : {}),
               }
             : x
