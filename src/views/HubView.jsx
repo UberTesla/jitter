@@ -822,10 +822,11 @@ export default function HubView({
                             <div
                               className="stc-subtitle"
                               style={{
-                                fontSize: '0.8rem',
-                                opacity: 0.78,
-                                marginTop: '0.1rem',
-                                marginBottom: '0.15rem',
+                                fontSize: '0.88rem',
+                                fontWeight: 600,
+                                color: '#a7f3d0',
+                                marginTop: '0.14rem',
+                                marginBottom: '0.2rem',
                                 lineHeight: 1.25,
                               }}
                             >
@@ -1138,10 +1139,11 @@ export default function HubView({
                               <div
                                 className="stc-subtitle"
                                 style={{
-                                  fontSize: '0.8rem',
-                                  opacity: 0.78,
-                                  marginTop: '0.1rem',
-                                  marginBottom: '0.15rem',
+                                  fontSize: '0.88rem',
+                                  fontWeight: 600,
+                                  color: '#a7f3d0',
+                                  marginTop: '0.14rem',
+                                  marginBottom: '0.2rem',
                                   lineHeight: 1.25,
                                 }}
                               >

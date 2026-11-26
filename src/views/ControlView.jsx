@@ -304,15 +304,19 @@ export default function ControlView({
             🏓
           </div>
           <div>
-            <h1 className="brand-title">{state.tournamentName}</h1>
-            {Boolean(state.tournamentSubtitle?.trim()) && (
-              <div
-                className="brand-subtitle"
-                style={{ fontSize: '0.82rem', opacity: 0.78, marginTop: '0.08rem' }}
-              >
-                {state.tournamentSubtitle}
-              </div>
-            )}
+            <h1 className="brand-title">
+              {state.tournamentName}
+              {Boolean(state.tournamentSubtitle?.trim()) && (
+                <>
+                  <span style={{ opacity: 0.55, margin: '0 0.45rem' }} aria-hidden="true">
+                    ·
+                  </span>
+                  <span style={{ color: '#a7f3d0', fontWeight: 700, fontSize: '0.86em' }}>
+                    {state.tournamentSubtitle}
+                  </span>
+                </>
+              )}
+            </h1>
             <div className="brand-meta">
               <span className="meta-chip">
                 {isTeams ? 'Teams · Doubles' : 'Singles · 1v1'}

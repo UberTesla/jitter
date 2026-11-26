@@ -94,8 +94,26 @@
 .pres-brand {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.65rem;
   min-width: 0;
+}
+
+.pres-subtitle-dot {
+  color: rgba(148, 163, 184, 0.72);
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pres-subtitle {
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: #a7f3d0;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pres-live-pill {
@@ -443,6 +461,13 @@
   font-size: 1.32rem;
   line-height: 1.35;
   color: var(--text-secondary);
+}
+
+.title-sub-banner.is-tournament-subtitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #a7f3d0;
+  letter-spacing: 0.02em;
 }
 
 .title-rules-strip {

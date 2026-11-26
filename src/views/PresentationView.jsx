@@ -486,18 +486,12 @@ export default function PresentationView({
                 {themeDef.icon} {state.tournamentName}
               </h1>
               {Boolean(state.tournamentSubtitle?.trim()) && (
-                <span
-                  className="pres-subtitle"
-                  style={{
-                    fontSize: '0.92rem',
-                    opacity: 0.78,
-                    fontWeight: 500,
-                    marginLeft: '0.65rem',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  {state.tournamentSubtitle}
-                </span>
+                <>
+                  <span className="pres-subtitle-dot" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="pres-subtitle">{state.tournamentSubtitle}</span>
+                </>
               )}
             </div>
 
@@ -549,7 +543,9 @@ export default function PresentationView({
 
                 <h2 className="title-mega-heading">{state.tournamentName}</h2>
                 {Boolean(state.tournamentSubtitle?.trim()) && (
-                  <p className="title-sub-banner">{state.tournamentSubtitle}</p>
+                  <p className="title-sub-banner is-tournament-subtitle">
+                    {state.tournamentSubtitle}
+                  </p>
                 )}
                 {Boolean(state.presentation?.titleSubtitle?.trim()) &&
                   state.presentation.titleSubtitle.trim() !==
