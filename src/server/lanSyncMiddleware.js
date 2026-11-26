@@ -136,6 +136,7 @@ const DEFAULT_HUB_SETTINGS = Object.freeze({
   defaultIsSecure: true,
   defaultRequireScorekeeperApproval: true,
   allowedKeyTypos: 2,
+  telemetryEnabled: true,
 });
 
 function normalizeHubSettings(raw) {
@@ -166,6 +167,10 @@ function normalizeHubSettings(raw) {
         ? Boolean(src.defaultRequireScorekeeperApproval)
         : DEFAULT_HUB_SETTINGS.defaultRequireScorekeeperApproval,
     allowedKeyTypos,
+    telemetryEnabled:
+      src.telemetryEnabled !== undefined
+        ? Boolean(src.telemetryEnabled)
+        : DEFAULT_HUB_SETTINGS.telemetryEnabled,
   };
 }
 

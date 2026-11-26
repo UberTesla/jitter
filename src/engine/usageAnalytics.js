@@ -10,16 +10,73 @@
  */
 
 const LOCAL_USAGE_STORAGE_KEY = 'pingpong-usage-analytics-v1';
+const LOCAL_TELEMETRY_ENABLED_KEY = 'pingpong-telemetry-enabled-v1';
 const MAX_LOCAL_EVENTS = 2500;
-const FLUSH_INTERVAL_MS = 10000;
-const MAX_QUEUE_BEFORE_FLUSH = 25;
+const FLUSH_INTERVAL_MS = 12000;
+const MAX_QUEUE_BEFORE_FLUSH = 30;
 
 let contextProvider = () => ({});
 let baseUrlProvider = () => '';
 let pendingQueue = [];
+let pendingLocalQueue = [];
 let flushTimer = null;
+let localFlushScheduled = false;
 let clickListenerAttached = false;
 let currentViewTracker = { view: null, startedAt: 0 };
+let telemetryEnabled = (() => {
+  if (typeof localStorage === 'undefined') return true;
+  try {
+    const raw = localStorage.getItem(LOCAL_TELEMETRY_ENABLED_KEY);
+    return raw === '0' ? false : true;
+  } catch {
+    return true;
+  }
+})();
+
+export function isTelemetryEnabled() {
+  return telemetryEnabled;
+}
+
+export function setTelemetryEnabled(enabled) {
+  const next = Boolean(enabled);
+  telemetryEnabled = next;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(LOCAL_TELEMETRY_ENABLED_KEY, next ? '1' : '0');
+    } catch {
+      // Ignore
+    }
+  }
+  if (!next) {
+    pendingQueue = [];
+    pendingLocalQueue = [];
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+  }
+}
+
+function runWhenIdle(fn) {
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(fn, { timeout: 2000 });
+  } else if (typeof setTimeout !== 'undefined') {
+    setTimeout(fn, 0);
+  } else {
+    fn();
+  }
+}
+
+function scheduleLocalMirrorFlush() {
+  if (localFlushScheduled || pendingLocalQueue.length === 0) return;
+  localFlushScheduled = true;
+  runWhenIdle(() => {
+    localFlushScheduled = false;
+    if (pendingLocalQueue.length === 0) return;
+    const batch = pendingLocalQueue.splice(0, pendingLocalQueue.length);
+    appendLocalEvents(batch);
+  });
+}
 
 function readLocalEvents() {
   if (typeof localStorage === 'undefined') return [];
@@ -87,7 +144,11 @@ function buildEvent(type, name, extra = {}) {
 }
 
 export function flushUsageAnalytics({ useBeacon = false } = {}) {
-  if (pendingQueue.length === 0) return;
+  if (pendingLocalQueue.length > 0) {
+    const localBatch = pendingLocalQueue.splice(0, pendingLocalQueue.length);
+    appendLocalEvents(localBatch);
+  }
+  if (!telemetryEnabled || pendingQueue.length === 0) return;
   const batch = pendingQueue.splice(0, pendingQueue.length);
   const baseUrl = typeof baseUrlProvider === 'function' ? baseUrlProvider() : '';
   if (!baseUrl) return;
@@ -106,33 +167,39 @@ export function flushUsageAnalytics({ useBeacon = false } = {}) {
   }
 
   if (typeof fetch === 'function') {
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-      keepalive: true,
-    }).catch(() => {});
+    const send = () => {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {});
+    };
+    if (useBeacon) send();
+    else runWhenIdle(send);
   }
 }
 
 function scheduleFlush() {
+  if (!telemetryEnabled) return;
   if (pendingQueue.length >= MAX_QUEUE_BEFORE_FLUSH) {
-    flushUsageAnalytics();
+    runWhenIdle(() => flushUsageAnalytics());
     return;
   }
   if (flushTimer || typeof setTimeout === 'undefined') return;
   flushTimer = setTimeout(() => {
     flushTimer = null;
-    flushUsageAnalytics();
+    runWhenIdle(() => flushUsageAnalytics());
   }, FLUSH_INTERVAL_MS);
   if (typeof flushTimer?.unref === 'function') flushTimer.unref();
 }
 
 export function trackUsageEvent(name, { type = 'action', category = 'ui', view, durationMs } = {}) {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined' || !telemetryEnabled) return null;
   const ev = buildEvent(type, name, { category, view, durationMs });
-  appendLocalEvents([ev]);
+  pendingLocalQueue.push(ev);
   pendingQueue.push(ev);
+  scheduleLocalMirrorFlush();
   scheduleFlush();
   return ev;
 }

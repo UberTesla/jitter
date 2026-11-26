@@ -6,6 +6,7 @@ import {
   tournamentStore,
 } from '../state/tournamentStore.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
+import { trackUsageEvent } from '../engine/usageAnalytics.js';
 
 function formatMsgTime(ts) {
   if (!ts) return '';
@@ -178,6 +179,7 @@ export default function PlayerInboxDrawer({
     setClaimFeedback('');
     setConfirmingClaim(false);
     setChatError('');
+    trackUsageEvent('chat:open_drawer', { category: 'chat' });
     if (unreadThreadsTotal > 0) {
       setActiveTab('messages');
     } else if (unreadInbox > 0 && unreadLive === 0) {
@@ -194,6 +196,7 @@ export default function PlayerInboxDrawer({
     try {
       const res = await tournamentStore.claimPlayer(selectedPlayerId);
       if (res.ok) {
+        trackUsageEvent('chat:claim_player', { category: 'player' });
         setConfirmingClaim(false);
         setSelectedPlayerId('');
         setClaimFeedback(`Claimed ${selectedPlayerObj?.name || 'player'}!`);
@@ -214,6 +217,7 @@ export default function PlayerInboxDrawer({
     try {
       const res = await tournamentStore.sendLiveChatMessage(liveDraft);
       if (res.ok) {
+        trackUsageEvent('chat:send_live', { category: 'chat' });
         setLiveDraft('');
       } else {
         setChatError(res.error || 'Could not post comment');
@@ -241,6 +245,10 @@ export default function PlayerInboxDrawer({
         initialMessage: newChatInitialMsg.trim(),
       });
       if (res.ok && res.thread) {
+        trackUsageEvent(
+          res.thread.kind === 'group' ? 'chat:create_group' : 'chat:create_dm',
+          { category: 'chat' }
+        );
         setShowNewChatComposer(false);
         setSelectedRecipients([]);
         setGroupNameDraft('');
@@ -262,6 +270,10 @@ export default function PlayerInboxDrawer({
     try {
       const res = await tournamentStore.sendThreadMessage(activeThreadId, threadReplyDraft);
       if (res.ok) {
+        trackUsageEvent(
+          activeThread?.kind === 'group' ? 'chat:send_group' : 'chat:send_dm',
+          { category: 'chat' }
+        );
         setThreadReplyDraft('');
       } else {
         setChatError(res.error || 'Could not send message');

@@ -27,7 +27,11 @@ import {
   subscribeToWebPush,
 } from './engine/notificationService.js';
 import { renderLiveMessageText } from './engine/grandmaVariables.js';
-import { initUsageAnalytics, trackViewTransition } from './engine/usageAnalytics.js';
+import {
+  initUsageAnalytics,
+  setTelemetryEnabled,
+  trackViewTransition,
+} from './engine/usageAnalytics.js';
 
 const SESSION_PICKED_KEY = SESSION_PICKED_STORAGE_KEY;
 
@@ -263,6 +267,13 @@ export default function App() {
       getBaseUrl: () => tournamentStore.getSyncBaseUrl?.() || '',
     });
   }, []);
+
+  const hubTelemetryFlag = syncMeta?.remoteSync?.hubSettings?.telemetryEnabled;
+  useEffect(() => {
+    if (hubTelemetryFlag !== undefined) {
+      setTelemetryEnabled(hubTelemetryFlag !== false);
+    }
+  }, [hubTelemetryFlag]);
 
   useEffect(() => {
     trackViewTransition(analyticsViewName);

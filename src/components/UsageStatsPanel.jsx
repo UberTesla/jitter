@@ -3,6 +3,8 @@ import {
   clearLocalUsageEvents,
   flushUsageAnalytics,
   getLocalUsageEvents,
+  isTelemetryEnabled,
+  setTelemetryEnabled,
   summarizeUsageEvents,
 } from '../engine/usageAnalytics.js';
 import { tournamentStore } from '../state/tournamentStore.js';
@@ -34,7 +36,20 @@ export default function UsageStatsPanel({ onNotify }) {
   const [events, setEvents] = useState(() => getLocalUsageEvents());
   const [loading, setLoading] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [telemetryOn, setTelemetryOn] = useState(() => isTelemetryEnabled());
   const [demoFilter, setDemoFilter] = useState('real'); // 'real' | 'all' | 'demo'
+
+  const handleToggleTelemetry = async (nextVal) => {
+    setTelemetryOn(nextVal);
+    setTelemetryEnabled(nextVal);
+    const meta = tournamentStore.getSyncMeta?.();
+    if (meta?.remoteSync?.isThisDeviceAdmin && meta?.remoteSync?.connected) {
+      await tournamentStore.updateHubSettings({ telemetryEnabled: nextVal });
+      onNotify?.(`Usage telemetry turned ${nextVal ? 'ON' : 'OFF'} across all devices`);
+    } else {
+      onNotify?.(`Usage telemetry turned ${nextVal ? 'ON' : 'OFF'} on this device`);
+    }
+  };
   const [roleFilter, setRoleFilter] = useState('all');
   const [entryModeFilter, setEntryModeFilter] = useState('all');
   const [formatFilter, setFormatFilter] = useState('all');
@@ -150,6 +165,14 @@ export default function UsageStatsPanel({ onNotify }) {
           </p>
         </div>
         <div className="inline-actions">
+          <label className="toggle-label" style={{ margin: 0, marginRight: '0.35rem' }}>
+            <input
+              type="checkbox"
+              checked={telemetryOn}
+              onChange={(e) => handleToggleTelemetry(e.target.checked)}
+            />
+            <span>{telemetryOn ? 'Telemetry ON' : 'Telemetry OFF'}</span>
+          </label>
           <button
             type="button"
             className="btn-secondary btn-sm"
