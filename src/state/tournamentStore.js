@@ -683,6 +683,8 @@ export function createInitialState(overrides = {}) {
         : {},
     createdAt: overrides.createdAt || Date.now(),
     tournamentName: overrides.tournamentName || 'GRAND RETRO PING PONG CHAMPIONSHIP',
+    tournamentSubtitle:
+      typeof overrides.tournamentSubtitle === 'string' ? overrides.tournamentSubtitle.trim() : '',
     entryMode,
     demoMode,
     autoTeamNames,
@@ -938,6 +940,8 @@ function normalizePersistedState(parsed) {
     deniedDevices: Array.isArray(parsed.deniedDevices) ? [...parsed.deniedDevices] : [],
     kickedDevices: Array.isArray(parsed.kickedDevices) ? [...parsed.kickedDevices] : [],
     createdAt: parsed.createdAt || parsed.updatedAt || Date.now(),
+    tournamentSubtitle:
+      typeof parsed.tournamentSubtitle === 'string' ? parsed.tournamentSubtitle.trim() : '',
     matches: normalizedMatches,
     lastCompletedEvent: parsed.lastCompletedEvent || null,
     entryMode,
@@ -1147,6 +1151,8 @@ function summarizeTournamentEntry(stateObj) {
     isSecure: stateObj.access?.isSecure !== undefined ? Boolean(stateObj.access.isSecure) : true,
     isPublic: stateObj.access?.isPublic !== undefined ? Boolean(stateObj.access.isPublic) : true,
     tournamentName: stateObj.tournamentName || 'Ping Pong Championship',
+    tournamentSubtitle:
+      typeof stateObj.tournamentSubtitle === 'string' ? stateObj.tournamentSubtitle.trim() : '',
     entryMode: stateObj.entryMode === 'teams' ? 'teams' : 'singles',
     format: stateObj.format === 'double' ? 'double' : 'single',
     playerCount: stateObj.playerCount || (stateObj.players || []).length,
@@ -5740,6 +5746,7 @@ export class TournamentStore {
 
   applyFullSetup({
     tournamentName,
+    tournamentSubtitle,
     entryMode,
     demoMode,
     autoTeamNames,
@@ -5897,6 +5904,10 @@ export class TournamentStore {
           tournamentName !== undefined && tournamentName.trim()
             ? tournamentName.trim()
             : s.tournamentName,
+        tournamentSubtitle:
+          tournamentSubtitle !== undefined
+            ? String(tournamentSubtitle).trim()
+            : s.tournamentSubtitle || '',
         entryMode: nextEntryMode,
         demoMode: nextDemoMode,
         autoTeamNames: nextAutoTeamNames,

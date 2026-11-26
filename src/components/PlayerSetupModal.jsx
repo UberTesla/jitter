@@ -229,6 +229,7 @@ export default function PlayerSetupModal({
   const initData = useMemo(() => extractInitialRosterAndTeams(state), []);
 
   const [draftName, setDraftName] = useState(state.tournamentName);
+  const [draftSubtitle, setDraftSubtitle] = useState(state.tournamentSubtitle || '');
   const [draftFormat, setDraftFormat] = useState(state.format);
   const [draftEntryMode, setDraftEntryMode] = useState(state.entryMode || 'singles');
   const [draftAutoTeamNames, setDraftAutoTeamNames] = useState(Boolean(state.autoTeamNames));
@@ -272,6 +273,7 @@ export default function PlayerSetupModal({
     if (open && !wasOpenRef.current) {
       const { roster, teams } = extractInitialRosterAndTeams(state);
       setDraftName(state.tournamentName);
+      setDraftSubtitle(state.tournamentSubtitle || '');
       setDraftFormat(state.format);
       setDraftEntryMode(state.entryMode || 'singles');
       setDraftAutoTeamNames(Boolean(state.autoTeamNames));
@@ -554,6 +556,7 @@ export default function PlayerSetupModal({
 
     onApplySetup({
       tournamentName: draftName,
+      tournamentSubtitle: draftSubtitle.trim(),
       entryMode: draftEntryMode,
       autoTeamNames: draftAutoTeamNames,
       format: draftFormat,
@@ -827,6 +830,17 @@ export default function PlayerSetupModal({
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
                 placeholder="Grand Retro Ping Pong Championship"
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="tournament-subtitle-input">Tournament Subtitle (optional)</label>
+              <input
+                id="tournament-subtitle-input"
+                type="text"
+                value={draftSubtitle}
+                onChange={(e) => setDraftSubtitle(e.target.value)}
+                placeholder="e.g. Spring Showdown · Basement Table"
               />
             </div>
 

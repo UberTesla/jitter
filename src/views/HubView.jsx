@@ -69,6 +69,7 @@ export default function HubView({
 
   // New Tournament Modal form state
   const [newName, setNewName] = useState('');
+  const [newSubtitle, setNewSubtitle] = useState('');
   const [newEntryMode, setNewEntryMode] = useState('singles');
   const [newFormat, setNewFormat] = useState('single');
   const [newRoster, setNewRoster] = useState([]);
@@ -364,6 +365,7 @@ export default function HubView({
     const created = tournamentStore.createNewTournament(
       {
         tournamentName: newName.trim() || 'GRAND RETRO PING PONG CHAMPIONSHIP',
+        tournamentSubtitle: newSubtitle.trim(),
         entryMode: newEntryMode,
         format: newFormat,
         playerCount: entrants,
@@ -383,6 +385,7 @@ export default function HubView({
     setLocalTournaments(tournamentStore.listTournaments());
     setShowCreateModal(false);
     setNewName('');
+    setNewSubtitle('');
     setNewRoster([]);
     setNewPlayerDraft('');
     onEnterTournament?.(created.tournamentId);
@@ -815,6 +818,20 @@ export default function HubView({
                               </span>
                             )}
                           </div>
+                          {t.tournamentSubtitle && (
+                            <div
+                              className="stc-subtitle"
+                              style={{
+                                fontSize: '0.8rem',
+                                opacity: 0.78,
+                                marginTop: '0.1rem',
+                                marginBottom: '0.15rem',
+                                lineHeight: 1.25,
+                              }}
+                            >
+                              {t.tournamentSubtitle}
+                            </div>
+                          )}
                           <div className="stc-meta">
                             <span>{t.hostDeviceName || 'Sync Host'}</span>
                             <span>·</span>
@@ -1117,6 +1134,20 @@ export default function HubView({
                               <h3 className="stc-name">{t.tournamentName}</h3>
                               <span className="stc-tag">Local</span>
                             </div>
+                            {t.tournamentSubtitle && (
+                              <div
+                                className="stc-subtitle"
+                                style={{
+                                  fontSize: '0.8rem',
+                                  opacity: 0.78,
+                                  marginTop: '0.1rem',
+                                  marginBottom: '0.15rem',
+                                  lineHeight: 1.25,
+                                }}
+                              >
+                                {t.tournamentSubtitle}
+                              </div>
+                            )}
                             <div className="stc-meta">
                               <span>{t.totalPlayers} players</span>
                               <span>·</span>
@@ -1278,6 +1309,17 @@ export default function HubView({
               onChange={(e) => setNewName(e.target.value)}
               placeholder="e.g. Friday Night Ping Pong"
               autoFocus
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="simple-new-subtitle">Subtitle (optional)</label>
+            <input
+              id="simple-new-subtitle"
+              type="text"
+              value={newSubtitle}
+              onChange={(e) => setNewSubtitle(e.target.value)}
+              placeholder="e.g. Spring Showdown · Basement Table"
             />
           </div>
 

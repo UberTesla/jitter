@@ -239,6 +239,8 @@ function summarizeTournament(stateObj) {
     id,
     joinCode,
     tournamentName: stateObj.tournamentName || 'Ping Pong Championship',
+    tournamentSubtitle:
+      typeof stateObj.tournamentSubtitle === 'string' ? stateObj.tournamentSubtitle.trim() : '',
     entryMode: stateObj.entryMode === 'teams' ? 'teams' : 'singles',
     format: stateObj.format === 'double' ? 'double' : 'single',
     playerCount: stateObj.playerCount || (stateObj.players || []).length,

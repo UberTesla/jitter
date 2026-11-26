@@ -470,6 +470,20 @@ export default function PresentationView({
               <h1 className="pres-title">
                 {themeDef.icon} {state.tournamentName}
               </h1>
+              {Boolean(state.tournamentSubtitle?.trim()) && (
+                <span
+                  className="pres-subtitle"
+                  style={{
+                    fontSize: '0.92rem',
+                    opacity: 0.78,
+                    fontWeight: 500,
+                    marginLeft: '0.65rem',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {state.tournamentSubtitle}
+                </span>
+              )}
             </div>
 
             <div className="pres-meta-right">
@@ -519,9 +533,14 @@ export default function PresentationView({
                 </div>
 
                 <h2 className="title-mega-heading">{state.tournamentName}</h2>
-                {Boolean(state.presentation?.titleSubtitle?.trim()) && (
-                  <p className="title-sub-banner">{state.presentation.titleSubtitle}</p>
+                {Boolean(state.tournamentSubtitle?.trim()) && (
+                  <p className="title-sub-banner">{state.tournamentSubtitle}</p>
                 )}
+                {Boolean(state.presentation?.titleSubtitle?.trim()) &&
+                  state.presentation.titleSubtitle.trim() !==
+                    (state.tournamentSubtitle || '').trim() && (
+                    <p className="title-sub-banner">{state.presentation.titleSubtitle}</p>
+                  )}
 
                 <div className="title-rules-strip">
                   <div className="title-rule-chip">
@@ -836,6 +855,9 @@ export default function PresentationView({
                   <h2 className="spotlight-headline">
                     {champion ? champion.name : state.tournamentName}
                   </h2>
+                  {!champion && Boolean(state.tournamentSubtitle?.trim()) && (
+                    <div className="spotlight-team-members">{state.tournamentSubtitle}</div>
+                  )}
                   {champion && isTeams && (
                     <div className="spotlight-team-members">
                       {formatTeamMembers(champion, ' & ')}
