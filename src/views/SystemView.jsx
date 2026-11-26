@@ -15,6 +15,7 @@ import { loadTvMediaBlob } from '../state/mediaStore.js';
 import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { computeTournamentStats } from '../engine/bracketGenerator.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
+import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
 import { rankLanAddresses, resolveShareOrigin } from '../components/ShareTournamentModal.jsx';
 
 const STRESS_TEST_PRESETS = [
@@ -971,6 +972,8 @@ export default function SystemView({
             )}
           </section>
         </div>
+
+        <UsageStatsPanel onNotify={notify} />
 
         {/* 4. Server IP / URL & Technical Environment Details (Diagnostics at Bottom) */}
         <section className="panel-card debug-tech-panel" aria-label="Server Network and Technical Details">

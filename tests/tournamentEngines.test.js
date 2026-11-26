@@ -3454,3 +3454,30 @@ test('importBackupJSON imports exported backup, raw tournament state, and multi-
   const bad = await target3.importBackupJSON('{not valid json', { hostOnCloud: false });
   assert.equal(bad.ok, false);
 });
+
+test('summarizeUsageEvents filters by Demo Mode, role, tournament type, and ranks views & actions', async () => {
+  const { summarizeUsageEvents } = await import('../src/engine/usageAnalytics.js');
+  const sampleEvents = [
+    { ts: 1, type: 'view', name: 'view:control', view: 'control', role: 'host', demoMode: false, entryMode: 'singles', format: 'single', deviceType: 'desktop', deviceId: 'd1' },
+    { ts: 2, type: 'view_duration', name: 'view:control', view: 'control', durationMs: 45000, role: 'host', demoMode: false, entryMode: 'singles', format: 'single', deviceType: 'desktop', deviceId: 'd1' },
+    { ts: 3, type: 'action', name: '+1 Point', view: 'scorekeeper', role: 'scorekeeper', demoMode: false, entryMode: 'singles', format: 'single', deviceType: 'mobile', deviceId: 'd2' },
+    { ts: 4, type: 'action', name: '+1 Point', view: 'scorekeeper', role: 'scorekeeper', demoMode: false, entryMode: 'singles', format: 'single', deviceType: 'mobile', deviceId: 'd2' },
+    { ts: 5, type: 'action', name: 'Sim Entire Tournament', view: 'host', role: 'admin', demoMode: true, entryMode: 'teams', format: 'double', deviceType: 'desktop', deviceId: 'd1' },
+  ];
+
+  const realOnly = summarizeUsageEvents(sampleEvents, { demoFilter: 'real' });
+  assert.equal(realOnly.totalEvents, 4);
+  assert.equal(realOnly.uniqueDevices, 2);
+  assert.equal(realOnly.views[0].view, 'control');
+  assert.equal(realOnly.views[0].durationMs, 45000);
+  assert.equal(realOnly.topActions[0].name, '+1 Point');
+  assert.equal(realOnly.topActions[0].count, 2);
+
+  const demoOnly = summarizeUsageEvents(sampleEvents, { demoFilter: 'demo' });
+  assert.equal(demoOnly.totalEvents, 1);
+  assert.equal(demoOnly.topActions[0].name, 'Sim Entire Tournament');
+
+  const mobileOnly = summarizeUsageEvents(sampleEvents, { demoFilter: 'all', deviceType: 'mobile' });
+  assert.equal(mobileOnly.totalEvents, 2);
+  assert.equal(mobileOnly.byRole[0].role, 'scorekeeper');
+});

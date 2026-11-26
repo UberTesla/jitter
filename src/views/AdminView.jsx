@@ -5,6 +5,7 @@ import {
   tournamentStore,
 } from '../state/tournamentStore.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
+import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
 
 function formatRelativeAgo(ts) {
   if (!ts) return '—';
@@ -788,6 +789,8 @@ export default function AdminView({
             </div>
           )}
         </section>
+
+        <UsageStatsPanel onNotify={notify} />
       </main>
     </div>
   );

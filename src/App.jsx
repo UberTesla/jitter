@@ -27,6 +27,7 @@ import {
   subscribeToWebPush,
 } from './engine/notificationService.js';
 import { renderLiveMessageText } from './engine/grandmaVariables.js';
+import { initUsageAnalytics, trackViewTransition } from './engine/usageAnalytics.js';
 
 const SESSION_PICKED_KEY = SESSION_PICKED_STORAGE_KEY;
 
@@ -228,6 +229,44 @@ export default function App() {
   useEffect(() => {
     tournamentStore.setHubPresence(showHub);
   }, [showHub]);
+
+  // Embedded Usage Analytics: auto-capture views, time-on-view, and button interactions
+  const analyticsContextRef = useRef({});
+  const analyticsViewName = showHub
+    ? 'hub'
+    : viewMode === 'system'
+    ? 'host'
+    : viewMode || 'control';
+  const liveStateForRole = syncMeta?.programState || state;
+  const effectiveRoleForAnalytics = resolveEffectiveRole(
+    liveStateForRole,
+    syncMeta?.remoteSync?.deviceId || '',
+    tournamentStore.getTabId(),
+    { adminDeviceIds: syncMeta?.remoteSync?.admins || [] }
+  );
+  analyticsContextRef.current = {
+    view: analyticsViewName,
+    role: effectiveRoleForAnalytics,
+    demoMode: Boolean(liveStateForRole?.demoMode),
+    entryMode: showHub ? 'none' : liveStateForRole?.entryMode || 'singles',
+    format: showHub ? 'none' : liveStateForRole?.format || 'single',
+    playerCount: showHub ? 0 : Number(liveStateForRole?.totalPlayers || liveStateForRole?.playerCount || 0),
+    mobile: Boolean(tournamentStore.clientEnv?.mobile),
+    browser: tournamentStore.clientEnv?.browserName || 'Browser',
+    standalone: Boolean(tournamentStore.clientEnv?.standalone),
+    deviceId: syncMeta?.remoteSync?.deviceId || '',
+  };
+
+  useEffect(() => {
+    initUsageAnalytics({
+      getContext: () => analyticsContextRef.current,
+      getBaseUrl: () => tournamentStore.getSyncBaseUrl?.() || '',
+    });
+  }, []);
+
+  useEffect(() => {
+    trackViewTransition(analyticsViewName);
+  }, [analyticsViewName]);
 
   // Apply active seasonal/holiday theme to document root & body
   useEffect(() => {

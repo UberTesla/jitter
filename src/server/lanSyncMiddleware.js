@@ -126,6 +126,8 @@ async function resolveClientDeviceName(req, serverInfo) {
 const DATA_FILENAME = '.pingpong-sync-data.json';
 const MEDIA_BIN_FILENAME = '.pingpong-sync-media.bin';
 const MEDIA_META_FILENAME = '.pingpong-sync-media.json';
+const ANALYTICS_FILENAME = '.pingpong-usage-stats.json';
+const MAX_ANALYTICS_EVENTS = 15000;
 
 const DEFAULT_HUB_SETTINGS = Object.freeze({
   hubTitle: 'PING PONG HUB',
@@ -309,9 +311,35 @@ export function createLanSyncHandler({
   const dataPath = path.join(rootDir, DATA_FILENAME);
   const mediaBinPath = path.join(rootDir, MEDIA_BIN_FILENAME);
   const mediaMetaPath = path.join(rootDir, MEDIA_META_FILENAME);
+  const analyticsPath = path.join(rootDir, ANALYTICS_FILENAME);
   const sseClients = new Map(); // res -> { tabId, deviceId, deviceName, ip, viewMode, tournamentId, connectedAt }
   const destructionTimers = new Map(); // tournamentId -> Timeout
   const serverBootId = `boot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+  let analyticsEvents = [];
+  let analyticsSaveTimer = null;
+  try {
+    if (fs.existsSync(analyticsPath)) {
+      const parsedAnalytics = JSON.parse(fs.readFileSync(analyticsPath, 'utf8'));
+      if (Array.isArray(parsedAnalytics)) {
+        analyticsEvents = parsedAnalytics.slice(-MAX_ANALYTICS_EVENTS);
+      }
+    }
+  } catch {
+    analyticsEvents = [];
+  }
+  const scheduleAnalyticsSave = () => {
+    if (analyticsSaveTimer) return;
+    analyticsSaveTimer = setTimeout(() => {
+      analyticsSaveTimer = null;
+      try {
+        fs.writeFileSync(analyticsPath, JSON.stringify(analyticsEvents), 'utf8');
+      } catch {
+        // Ignore disk errors
+      }
+    }, 500);
+    if (typeof analyticsSaveTimer.unref === 'function') analyticsSaveTimer.unref();
+  };
 
   let store = {
     activeTournamentId: null,
@@ -1094,6 +1122,57 @@ export function createLanSyncHandler({
     // 1b. Lightweight healthcheck & Render Free keepalive ping
     if (pathname === '/__sync/ping' && req.method === 'GET') {
       return sendJson(res, 200, { ok: true, serverTime: Date.now() });
+    }
+
+    // 1c. Embedded Usage Analytics (batched client telemetry + dashboard read/clear)
+    if (pathname === '/__sync/analytics') {
+      if (req.method === 'GET') {
+        return sendJson(res, 200, {
+          ok: true,
+          count: analyticsEvents.length,
+          events: analyticsEvents,
+        });
+      }
+      if (req.method === 'POST') {
+        try {
+          const body = await readJsonBody(req);
+          const incoming = Array.isArray(body?.events) ? body.events : [];
+          for (const raw of incoming.slice(0, 100)) {
+            if (!raw || typeof raw !== 'object') continue;
+            analyticsEvents.push({
+              ts: Number(raw.ts) || Date.now(),
+              type: String(raw.type || 'action').slice(0, 24),
+              name: String(raw.name || 'unknown').slice(0, 64),
+              category: String(raw.category || 'ui').slice(0, 24),
+              ...(typeof raw.durationMs === 'number' && raw.durationMs > 0
+                ? { durationMs: Math.round(raw.durationMs) }
+                : {}),
+              view: String(raw.view || 'hub').slice(0, 24),
+              role: String(raw.role || 'spectator').slice(0, 24),
+              demoMode: Boolean(raw.demoMode),
+              entryMode: String(raw.entryMode || 'none').slice(0, 16),
+              format: String(raw.format || 'none').slice(0, 16),
+              playerCount: Number(raw.playerCount) || 0,
+              deviceType: raw.deviceType === 'mobile' ? 'mobile' : 'desktop',
+              browser: String(raw.browser || 'Browser').slice(0, 32),
+              standalone: Boolean(raw.standalone),
+              deviceId: String(raw.deviceId || '').slice(0, 40),
+            });
+          }
+          if (analyticsEvents.length > MAX_ANALYTICS_EVENTS) {
+            analyticsEvents = analyticsEvents.slice(-MAX_ANALYTICS_EVENTS);
+          }
+          scheduleAnalyticsSave();
+          return sendJson(res, 200, { ok: true, count: analyticsEvents.length });
+        } catch {
+          return sendJson(res, 400, { error: 'Invalid analytics payload' });
+        }
+      }
+      if (req.method === 'DELETE') {
+        analyticsEvents = [];
+        scheduleAnalyticsSave();
+        return sendJson(res, 200, { ok: true, count: 0 });
+      }
     }
 
     // 2. Real-Time Server-Sent Events Stream (tracks live connected clients!)

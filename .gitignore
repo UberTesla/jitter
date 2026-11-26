@@ -6,6 +6,7 @@ dist/
 
 # Local runtime sync state & uploaded media
 .pingpong-sync-data.json
+.pingpong-usage-stats.json
 .pingpong-media/
 
 # Environment & secrets
