@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { tournamentStore } from '../state/tournamentStore.js';
 import { formatTeamMembers } from '../engine/bracketGenerator.js';
 import { hasGrandmaVariables, resolveGrandmaPhrase } from '../engine/grandmaVariables.js';
-import { saveTvMediaBlob, clearTvMediaBlob } from '../state/mediaStore.js';
+import {
+  saveTvPlaylistItemBlob,
+  deleteTvPlaylistItemBlob,
+} from '../state/mediaStore.js';
+import { trackUsageEvent } from '../engine/usageAnalytics.js';
 import Scoreboard from '../components/Scoreboard.jsx';
 import BracketView from '../components/BracketView.jsx';
 import RetroTVCorner from '../components/RetroTVCorner.jsx';
@@ -39,6 +43,9 @@ export default function ControlView({
   const [switchConfirmRequest, setSwitchConfirmRequest] = useState(null);
   const [liveQuoteInput, setLiveQuoteInput] = useState('');
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
+  const [showAddUrlRow, setShowAddUrlRow] = useState(false);
+  const [tvUrlInput, setTvUrlInput] = useState('');
+  const [tvUrlNameInput, setTvUrlNameInput] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const fileInputRef = useRef(null);
   const toastTimerRef = useRef(null);
@@ -210,37 +217,86 @@ export default function ControlView({
     showToast(`Grandma live cue: "${resolved}"`);
   };
 
-  const handleSwapTvMedia = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const tvPlaylist = Array.isArray(state.ui?.tvPlaylist) && state.ui.tvPlaylist.length > 0
+    ? state.ui.tvPlaylist
+    : [{ id: 'builtin-sitcom', kind: 'sitcom', name: 'Retro Sitcom (Built-in)', durationSec: 20 }];
+  const tvPlaylistIndex = Math.min(
+    Math.max(0, Number(state.ui?.tvPlaylistIndex) || 0),
+    tvPlaylist.length - 1
+  );
+  const tvPlaylistMode = state.ui?.tvPlaylistMode || 'loop';
+  const tvPlaylistPaused = Boolean(state.ui?.tvPlaylistPaused);
+
+  const handleAddTvFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     e.target.value = '';
 
-    showToast(`Uploading "${file.name}" to CRT TV...`);
-    const saved = await saveTvMediaBlob(file, { senderId: tournamentStore.getTabId() });
-    tournamentStore.setTvMediaStatus({
-      hasCustomTvMedia: true,
-      tvMediaLabel: file.name,
-      tvMediaUpdatedAt: saved?.updatedAt || Date.now(),
-      tvMuted: true,
-    });
+    showToast(`Adding ${files.length} file${files.length === 1 ? '' : 's'} to TV playlist...`);
+    let failedCount = 0;
+    for (const file of files) {
+      const saved = await saveTvPlaylistItemBlob(file, { senderId: tournamentStore.getTabId() });
+      tournamentStore.addTvPlaylistItem({
+        id: saved.id,
+        kind: saved.kind,
+        name: saved.name,
+        type: saved.type,
+        durationSec: saved.kind === 'video' ? 15 : 12,
+        updatedAt: saved.updatedAt,
+      });
+      if (saved.remoteError) failedCount += 1;
+    }
+    trackUsageEvent('tv:playlist_add_files', { category: 'control', count: files.length });
     setMediaRefreshToken((n) => n + 1);
-    if (saved?.remoteError) {
-      showToast(`Loaded "${file.name}" locally only — sync failed: ${saved.remoteError}`);
+    if (failedCount > 0) {
+      showToast(`Added to TV playlist locally (${failedCount} failed to sync to LAN)`);
     } else {
-      showToast(`Loaded "${file.name}" onto 4:3 CRT TV & synced across screens`);
+      showToast(`Added ${files.length} item${files.length === 1 ? '' : 's'} to 4:3 CRT TV playlist`);
     }
   };
 
-  const handleResetSitcom = async () => {
-    await clearTvMediaBlob({ senderId: tournamentStore.getTabId() });
-    tournamentStore.setTvMediaStatus({
-      hasCustomTvMedia: false,
-      tvMediaLabel: 'Default Sitcom (6s Loop)',
-      tvMediaUpdatedAt: Date.now(),
-      tvMuted: true,
+  const handleAddTvUrl = (e) => {
+    e.preventDefault();
+    const cleanedUrl = tvUrlInput.trim();
+    if (!cleanedUrl) return;
+    const derivedName =
+      tvUrlNameInput.trim() ||
+      cleanedUrl.split('/').pop()?.split('?')[0] ||
+      'Web Media';
+    tournamentStore.addTvPlaylistItem({
+      id: `tvu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'url',
+      name: derivedName,
+      url: cleanedUrl,
+      durationSec: 12,
+      updatedAt: Date.now(),
     });
+    trackUsageEvent('tv:playlist_add_url', { category: 'control' });
+    setTvUrlInput('');
+    setTvUrlNameInput('');
+    setShowAddUrlRow(false);
+    showToast(`Added "${derivedName}" to CRT TV playlist`);
+  };
+
+  const handleRemoveTvPlaylistItem = async (item) => {
+    if (item.kind === 'video' || item.kind === 'image') {
+      await deleteTvPlaylistItemBlob(item.id, { senderId: tournamentStore.getTabId() });
+    }
+    tournamentStore.removeTvPlaylistItem(item.id);
+    trackUsageEvent('tv:playlist_remove', { category: 'control' });
     setMediaRefreshToken((n) => n + 1);
-    showToast('Restored default 1990s Sitcom loop across screens');
+  };
+
+  const handleAddBuiltInSitcom = () => {
+    tournamentStore.addTvPlaylistItem({
+      id: `sitcom-${Date.now()}`,
+      kind: 'sitcom',
+      name: 'Retro Sitcom (Built-in)',
+      durationSec: 20,
+      updatedAt: Date.now(),
+    });
+    trackUsageEvent('tv:playlist_add_sitcom', { category: 'control' });
+    showToast('Added Built-in Retro Sitcom to TV playlist');
   };
 
   const handleOpenPresentationWindow = () => {
@@ -634,45 +690,315 @@ export default function ControlView({
                     </div>
                   </div>
 
-                  {/* Subsection 3: 4:3 CRT TV Media & Audio */}
+                  {/* Subsection 3: 4:3 CRT TV Media Playlist & Audio */}
                   <div className="grandma-subsection">
                     <div className="grandma-subhead">
-                      <span className="grandma-sub-title">📺 4:3 CRT TV Media &amp; Audio</span>
-                      <span className="grandma-sub-meta">{state.ui.tvMediaLabel}</span>
+                      <span className="grandma-sub-title">📺 4:3 CRT TV Playlist &amp; Audio</span>
+                      <span className="grandma-sub-meta">
+                        {tvPlaylist.length} item{tvPlaylist.length === 1 ? '' : 's'} ·{' '}
+                        {tvPlaylistMode === 'shuffle'
+                          ? 'Shuffle'
+                          : tvPlaylistMode === 'single'
+                          ? 'Hold'
+                          : 'Loop'}
+                      </span>
                     </div>
 
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="video/*,image/*"
-                      onChange={handleSwapTvMedia}
+                      multiple
+                      onChange={handleAddTvFiles}
                       className="sr-only"
-                      aria-label="Upload custom TV video or animated GIF"
+                      aria-label="Add videos, images, or GIFs to CRT TV playlist"
                     />
 
-                    <div className="crt-controls-row" style={{ marginBottom: 0 }}>
+                    <div className="crt-controls-row" style={{ marginBottom: '0.45rem' }}>
                       <button
                         type="button"
                         className="btn-primary btn-sm"
                         onClick={() => fileInputRef.current?.click()}
                       >
-                        📂 Swap TV Media
+                        ➕ Add Files
                       </button>
                       <button
                         type="button"
-                        className="btn-secondary btn-sm"
-                        onClick={handleResetSitcom}
-                        disabled={!state.ui.hasCustomTvMedia}
+                        className={`btn-secondary btn-sm ${showAddUrlRow ? 'is-toggled-on' : ''}`}
+                        onClick={() => setShowAddUrlRow((v) => !v)}
                       >
-                        ↺ Reset Sitcom
+                        🔗 Add URL
                       </button>
+                      {!tvPlaylist.some((x) => x.kind === 'sitcom') && (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={handleAddBuiltInSitcom}
+                        >
+                          📺 + Sitcom
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-secondary btn-sm"
                         onClick={() => tournamentStore.setTvMuted(!state.ui.tvMuted)}
                       >
-                        {state.ui.tvMuted ? '🔇 Muted (Unmute)' : '🔊 Audio On (Mute)'}
+                        {state.ui.tvMuted ? '🔇 Muted' : '🔊 Audio On'}
                       </button>
+                    </div>
+
+                    {showAddUrlRow && (
+                      <form
+                        onSubmit={handleAddTvUrl}
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '0.35rem',
+                          marginBottom: '0.5rem',
+                        }}
+                      >
+                        <input
+                          type="url"
+                          className="panel-input"
+                          value={tvUrlInput}
+                          onChange={(e) => setTvUrlInput(e.target.value)}
+                          placeholder="Direct image, GIF, or MP4/WebM URL..."
+                          style={{ flex: '2 1 180px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
+                          required
+                        />
+                        <input
+                          type="text"
+                          className="panel-input"
+                          value={tvUrlNameInput}
+                          onChange={(e) => setTvUrlNameInput(e.target.value)}
+                          placeholder="Label (optional)"
+                          style={{ flex: '1 1 100px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
+                        />
+                        <button type="submit" className="btn-amber btn-sm">
+                          Add
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Playback Controls Row */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.35rem',
+                        marginBottom: '0.45rem',
+                      }}
+                    >
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          disabled={tvPlaylist.length <= 1}
+                          onClick={() =>
+                            tournamentStore.setTvPlaylistPlayback({ index: tvPlaylistIndex - 1 })
+                          }
+                          title="Previous playlist item"
+                        >
+                          ⏮
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn-secondary btn-sm ${tvPlaylistPaused ? 'is-toggled-on' : ''}`}
+                          disabled={tvPlaylist.length <= 1}
+                          onClick={() =>
+                            tournamentStore.setTvPlaylistPlayback({ paused: !tvPlaylistPaused })
+                          }
+                          title={tvPlaylistPaused ? 'Resume auto-advance' : 'Hold on current item'}
+                        >
+                          {tvPlaylistPaused ? '▶ Resume' : '⏸ Hold'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          disabled={tvPlaylist.length <= 1}
+                          onClick={() =>
+                            tournamentStore.setTvPlaylistPlayback({ index: tvPlaylistIndex + 1 })
+                          }
+                          title="Next playlist item"
+                        >
+                          ⏭
+                        </button>
+                      </div>
+
+                      <div className="segmented-control compact">
+                        {[
+                          { id: 'loop', label: '🔁 Loop' },
+                          { id: 'shuffle', label: '🔀 Shuffle' },
+                          { id: 'single', label: '🔂 Single' },
+                        ].map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            className={tvPlaylistMode === m.id ? 'is-selected' : ''}
+                            onClick={() => tournamentStore.setTvPlaylistPlayback({ mode: m.id })}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Playlist Queue */}
+                    <div
+                      className="scroller"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.28rem',
+                        maxHeight: '175px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {tvPlaylist.map((item, idx) => {
+                        const isActive = idx === tvPlaylistIndex;
+                        const icon =
+                          item.kind === 'sitcom'
+                            ? '📺'
+                            : item.kind === 'video'
+                            ? '🎬'
+                            : item.kind === 'url'
+                            ? '🔗'
+                            : '🖼️';
+                        const isVideo =
+                          item.kind === 'video' ||
+                          (item.kind === 'url' && /\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(item.url || ''));
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              padding: '0.28rem 0.45rem',
+                              borderRadius: '7px',
+                              background: isActive
+                                ? 'rgba(245, 158, 11, 0.16)'
+                                : 'rgba(15, 23, 42, 0.5)',
+                              border: `1px solid ${
+                                isActive ? 'rgba(251, 191, 36, 0.55)' : 'rgba(148, 163, 184, 0.18)'
+                              }`,
+                              fontSize: '0.78rem',
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => tournamentStore.setTvPlaylistPlayback({ index: idx })}
+                              title="Play this item now"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                flex: 1,
+                                minWidth: 0,
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                color: 'inherit',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                fontWeight: isActive ? 700 : 500,
+                              }}
+                            >
+                              <span style={{ flexShrink: 0 }}>{isActive ? '▶' : icon}</span>
+                              <span
+                                style={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {item.name}
+                              </span>
+                            </button>
+
+                            {isVideo ? (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  opacity: 0.65,
+                                  padding: '0 0.25rem',
+                                  flexShrink: 0,
+                                }}
+                                title="Advances automatically when video finishes"
+                              >
+                                Auto
+                              </span>
+                            ) : (
+                              <label
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.15rem',
+                                  fontSize: '0.7rem',
+                                  opacity: 0.85,
+                                  flexShrink: 0,
+                                }}
+                                title="Display duration in seconds"
+                              >
+                                <input
+                                  type="number"
+                                  min={3}
+                                  max={300}
+                                  value={item.durationSec ?? 12}
+                                  onChange={(e) =>
+                                    tournamentStore.updateTvPlaylistItem(item.id, {
+                                      durationSec: e.target.value,
+                                    })
+                                  }
+                                  style={{
+                                    width: '42px',
+                                    padding: '0.12rem 0.25rem',
+                                    borderRadius: '4px',
+                                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                                    background: 'rgba(15, 23, 42, 0.85)',
+                                    color: 'inherit',
+                                    fontSize: '0.72rem',
+                                    textAlign: 'center',
+                                  }}
+                                />
+                                <span>s</span>
+                              </label>
+                            )}
+
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              disabled={idx === 0}
+                              onClick={() => tournamentStore.moveTvPlaylistItem(item.id, -1)}
+                              title="Move up"
+                              style={{ padding: '0.12rem 0.32rem', fontSize: '0.68rem' }}
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              disabled={idx === tvPlaylist.length - 1}
+                              onClick={() => tournamentStore.moveTvPlaylistItem(item.id, 1)}
+                              title="Move down"
+                              style={{ padding: '0.12rem 0.32rem', fontSize: '0.68rem' }}
+                            >
+                              ▼
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => handleRemoveTvPlaylistItem(item)}
+                              title="Remove from playlist"
+                              style={{ padding: '0.12rem 0.35rem', fontSize: '0.7rem' }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -828,6 +1154,10 @@ export default function ControlView({
           tvMuted={state.ui.tvMuted}
           hasCustomTvMedia={state.ui.hasCustomTvMedia}
           tvMediaSyncKey={`${state.ui.hasCustomTvMedia ? '1' : '0'}:${state.ui.tvMediaLabel || ''}:${state.ui.tvMediaUpdatedAt || 0}`}
+          tvPlaylist={tvPlaylist}
+          tvPlaylistIndex={tvPlaylistIndex}
+          tvPlaylistMode={tvPlaylistMode}
+          tvPlaylistPaused={tvPlaylistPaused}
           visible={state.ui.showCornerScene}
           scale={cornerScale}
           opacity={cornerOpacity}

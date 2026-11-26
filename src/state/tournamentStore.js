@@ -743,6 +743,23 @@ export function createInitialState(overrides = {}) {
       tvMuted: overrides.ui?.tvMuted ?? true,
       tvMediaLabel: overrides.ui?.tvMediaLabel ?? 'Default Sitcom (6s Loop)',
       hasCustomTvMedia: overrides.ui?.hasCustomTvMedia ?? false,
+      tvPlaylist:
+        Array.isArray(overrides.ui?.tvPlaylist) && overrides.ui.tvPlaylist.length > 0
+          ? overrides.ui.tvPlaylist
+          : [
+              {
+                id: 'builtin-sitcom',
+                kind: 'sitcom',
+                name: 'Retro Sitcom (Built-in)',
+                durationSec: 20,
+                updatedAt: 0,
+              },
+            ],
+      tvPlaylistIndex: Math.max(0, Number(overrides.ui?.tvPlaylistIndex) || 0),
+      tvPlaylistMode: ['loop', 'shuffle', 'single'].includes(overrides.ui?.tvPlaylistMode)
+        ? overrides.ui.tvPlaylistMode
+        : 'loop',
+      tvPlaylistPaused: Boolean(overrides.ui?.tvPlaylistPaused),
       collapsedPanels: {
         ...DEFAULT_COLLAPSED_PANELS,
         ...(overrides.ui?.collapsedPanels || {}),
@@ -6397,6 +6414,149 @@ export class TournamentStore {
         tvMuted: tvMuted !== undefined ? Boolean(tvMuted) : s.ui.tvMuted,
       },
     }));
+  }
+
+  addTvPlaylistItem(item) {
+    if (!item || !item.id) return this.state;
+    return this.commit(
+      (s) => {
+        const cur = Array.isArray(s.ui?.tvPlaylist) ? s.ui.tvPlaylist : [];
+        const entry = {
+          id: String(item.id),
+          kind: ['sitcom', 'video', 'image', 'url'].includes(item.kind) ? item.kind : 'image',
+          name: String(item.name || 'TV Media').trim() || 'TV Media',
+          type: item.type || '',
+          url: item.url || '',
+          durationSec: Math.max(3, Math.min(300, Math.round(Number(item.durationSec) || 12))),
+          updatedAt: Number(item.updatedAt) || Date.now(),
+        };
+        const nextList = [...cur, entry];
+        return {
+          ...s,
+          ui: {
+            ...s.ui,
+            tvPlaylist: nextList,
+            tvPlaylistIndex: nextList.length - 1,
+            hasCustomTvMedia: nextList.some((x) => x.kind !== 'sitcom'),
+            tvMediaLabel:
+              nextList.length === 1 ? entry.name : `Playlist (${nextList.length} items)`,
+            tvMediaUpdatedAt: Date.now(),
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  removeTvPlaylistItem(itemId) {
+    return this.commit(
+      (s) => {
+        const cur = Array.isArray(s.ui?.tvPlaylist) ? s.ui.tvPlaylist : [];
+        const filtered = cur.filter((x) => x.id !== itemId);
+        const nextList =
+          filtered.length > 0
+            ? filtered
+            : [
+                {
+                  id: 'builtin-sitcom',
+                  kind: 'sitcom',
+                  name: 'Retro Sitcom (Built-in)',
+                  durationSec: 20,
+                  updatedAt: 0,
+                },
+              ];
+        const curIdx = Number(s.ui?.tvPlaylistIndex) || 0;
+        const nextIdx = Math.min(curIdx, nextList.length - 1);
+        return {
+          ...s,
+          ui: {
+            ...s.ui,
+            tvPlaylist: nextList,
+            tvPlaylistIndex: Math.max(0, nextIdx),
+            hasCustomTvMedia: nextList.some((x) => x.kind !== 'sitcom'),
+            tvMediaLabel:
+              nextList.length === 1 ? nextList[0].name : `Playlist (${nextList.length} items)`,
+            tvMediaUpdatedAt: Date.now(),
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  moveTvPlaylistItem(itemId, delta) {
+    return this.commit(
+      (s) => {
+        const cur = Array.isArray(s.ui?.tvPlaylist) ? [...s.ui.tvPlaylist] : [];
+        const idx = cur.findIndex((x) => x.id === itemId);
+        const target = idx + delta;
+        if (idx === -1 || target < 0 || target >= cur.length) return s;
+        const [moved] = cur.splice(idx, 1);
+        cur.splice(target, 0, moved);
+        return {
+          ...s,
+          ui: {
+            ...s.ui,
+            tvPlaylist: cur,
+            tvMediaUpdatedAt: Date.now(),
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  updateTvPlaylistItem(itemId, partial = {}) {
+    return this.commit(
+      (s) => {
+        const cur = Array.isArray(s.ui?.tvPlaylist) ? s.ui.tvPlaylist : [];
+        const nextList = cur.map((x) =>
+          x.id === itemId
+            ? {
+                ...x,
+                ...(partial.name !== undefined ? { name: String(partial.name).trim() || x.name } : {}),
+                ...(partial.durationSec !== undefined
+                  ? { durationSec: Math.max(3, Math.min(300, Math.round(Number(partial.durationSec) || 12))) }
+                  : {}),
+              }
+            : x
+        );
+        return {
+          ...s,
+          ui: {
+            ...s.ui,
+            tvPlaylist: nextList,
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  setTvPlaylistPlayback({ index, mode, paused } = {}) {
+    return this.commit(
+      (s) => {
+        const list = Array.isArray(s.ui?.tvPlaylist) ? s.ui.tvPlaylist : [];
+        const len = Math.max(1, list.length);
+        const nextIndex =
+          index !== undefined ? ((Number(index) % len) + len) % len : s.ui?.tvPlaylistIndex ?? 0;
+        const nextMode =
+          mode !== undefined && ['loop', 'shuffle', 'single'].includes(mode)
+            ? mode
+            : s.ui?.tvPlaylistMode || 'loop';
+        const nextPaused = paused !== undefined ? Boolean(paused) : Boolean(s.ui?.tvPlaylistPaused);
+        return {
+          ...s,
+          ui: {
+            ...s.ui,
+            tvPlaylistIndex: nextIndex,
+            tvPlaylistMode: nextMode,
+            tvPlaylistPaused: nextPaused,
+          },
+        };
+      },
+      { forcePublish: true }
+    );
   }
 
   // ---- Grandma Speech & Categorized Phrase Manager ----

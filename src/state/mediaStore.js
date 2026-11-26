@@ -147,10 +147,205 @@ export async function saveTvMediaBlob(file, { senderId = '' } = {}) {
   return liveRecord;
 }
 
-export function buildRemoteMediaUrl(updatedAt = Date.now()) {
+export function buildRemoteMediaUrl(updatedAt = Date.now(), mediaId = '') {
   const baseUrl = getSyncBaseUrl();
   if (!baseUrl) return '';
-  return `${baseUrl}/__sync/media?t=${encodeURIComponent(String(updatedAt || Date.now()))}`;
+  const idPart = mediaId ? `id=${encodeURIComponent(String(mediaId))}&` : '';
+  return `${baseUrl}/__sync/media?${idPart}t=${encodeURIComponent(String(updatedAt || Date.now()))}`;
+}
+
+async function writeLocalMediaRecordByKey(key, persistedRecord) {
+  try {
+    const db = await openMediaDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      if (persistedRecord) {
+        tx.objectStore(STORE_NAME).put(persistedRecord, key);
+      } else {
+        tx.objectStore(STORE_NAME).delete(key);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+async function readLocalMediaRecordByKey(key) {
+  try {
+    const db = await openMediaDB();
+    const record = await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return record;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = '' } = {}) {
+  const id = mediaId || `tvm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const lowerName = String(file.name || '').toLowerCase();
+  const inferredType =
+    file.type ||
+    (lowerName.endsWith('.gif')
+      ? 'image/gif'
+      : lowerName.endsWith('.webp')
+      ? 'image/webp'
+      : lowerName.endsWith('.mp4')
+      ? 'video/mp4'
+      : lowerName.endsWith('.webm')
+      ? 'video/webm'
+      : lowerName.endsWith('.mov')
+      ? 'video/quicktime'
+      : 'image/png');
+  const kind = inferredType.startsWith('video/') ? 'video' : 'image';
+  let dataBuffer = null;
+  try {
+    dataBuffer = await file.arrayBuffer();
+  } catch {
+    dataBuffer = null;
+  }
+  let updatedAt = Date.now();
+  const persistedRecord = {
+    id,
+    data: dataBuffer,
+    blob: dataBuffer ? null : file,
+    name: file.name || 'TV Media',
+    type: inferredType,
+    kind,
+    updatedAt,
+  };
+  await writeLocalMediaRecordByKey(`playlist:${id}`, persistedRecord);
+
+  let syncedRemote = false;
+  let remoteError = null;
+  if (typeof fetch !== 'undefined' && dataBuffer) {
+    const baseUrl = getSyncBaseUrl();
+    if (baseUrl) {
+      try {
+        const res = await fetch(`${baseUrl}/__sync/media?id=${encodeURIComponent(id)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': inferredType,
+            'X-Media-Id': id,
+            'X-Media-Name': encodeURIComponent(file.name || 'tv-media'),
+            'X-Media-Type': inferredType,
+            'X-Media-Kind': kind,
+            ...(senderId ? { 'X-Sync-Sender': senderId } : {}),
+          },
+          body: dataBuffer,
+        });
+        if (res.ok) {
+          syncedRemote = true;
+          const payload = await res.json().catch(() => null);
+          if (payload?.updatedAt) updatedAt = Number(payload.updatedAt) || updatedAt;
+        } else {
+          const payload = await res.json().catch(() => null);
+          remoteError = payload?.error || `Upload failed (${res.status})`;
+        }
+      } catch (err) {
+        remoteError = err?.message || 'Could not reach LAN sync server';
+      }
+    }
+  }
+
+  return {
+    id,
+    name: file.name || 'TV Media',
+    type: inferredType,
+    kind,
+    updatedAt,
+    syncedRemote,
+    remoteError,
+  };
+}
+
+export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '' } = {}) {
+  if (!mediaId) return;
+  await writeLocalMediaRecordByKey(`playlist:${mediaId}`, null);
+  if (typeof fetch !== 'undefined') {
+    const baseUrl = getSyncBaseUrl();
+    if (baseUrl) {
+      try {
+        await fetch(`${baseUrl}/__sync/media?id=${encodeURIComponent(mediaId)}`, {
+          method: 'DELETE',
+          headers: senderId ? { 'X-Sync-Sender': senderId } : undefined,
+        });
+      } catch {
+        // Ignore offline errors
+      }
+    }
+  }
+}
+
+export async function loadTvPlaylistItemSource(item) {
+  if (!item || item.kind === 'sitcom') return null;
+  if (item.kind === 'url' && item.url) {
+    const lower = String(item.url).toLowerCase().split('?')[0];
+    const isVideo = /\.(mp4|webm|mov|m4v|ogv)$/.test(lower);
+    return {
+      hasMedia: true,
+      url: item.url,
+      name: item.name || item.url,
+      type: isVideo ? 'video/mp4' : 'image/*',
+      kind: isVideo ? 'video' : 'image',
+      updatedAt: item.updatedAt || Date.now(),
+      isObjectUrl: false,
+    };
+  }
+  const mediaId = item.id;
+  if (!mediaId) return null;
+
+  // Prefer remote streaming URL so videos get HTTP 206 range support & remote clients sync seamlessly
+  if (typeof fetch !== 'undefined') {
+    const baseUrl = getSyncBaseUrl();
+    if (baseUrl) {
+      try {
+        const res = await fetch(`${baseUrl}/__sync/media?meta=1&id=${encodeURIComponent(mediaId)}`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const meta = await res.json();
+          if (meta?.hasMedia) {
+            return {
+              hasMedia: true,
+              url: buildRemoteMediaUrl(meta.updatedAt || item.updatedAt, mediaId),
+              name: meta.name || item.name || 'tv-media',
+              type: meta.type || item.type || 'application/octet-stream',
+              kind: meta.kind || item.kind || 'image',
+              updatedAt: meta.updatedAt || item.updatedAt || Date.now(),
+              isObjectUrl: false,
+            };
+          }
+        }
+      } catch {
+        // Fall through to local IndexedDB
+      }
+    }
+  }
+
+  const localRec = await readLocalMediaRecordByKey(`playlist:${mediaId}`);
+  if (!localRec) return null;
+  const blob = localRec.data
+    ? new Blob([localRec.data], { type: localRec.type || 'application/octet-stream' })
+    : localRec.blob;
+  if (!blob) return null;
+  return {
+    hasMedia: true,
+    url: URL.createObjectURL(blob),
+    name: localRec.name || item.name || 'tv-media',
+    type: localRec.type || blob.type || 'application/octet-stream',
+    kind: localRec.kind || item.kind || 'image',
+    updatedAt: localRec.updatedAt || item.updatedAt || Date.now(),
+    isObjectUrl: true,
+  };
 }
 
 /**

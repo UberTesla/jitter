@@ -4054,36 +4054,44 @@ export function createLanSyncHandler({
     }
 
     // 11. Custom CRT TV Media Sync Across Devices (with HTTP 206 Byte-Range streaming for MP4/WebM)
+    // Supports both legacy single activeMedia (/__sync/media) and multi-item playlist library (/__sync/media?id=<mediaId>)
+    if (!store.tvMediaLibrary) {
+      store.tvMediaLibrary = new Map();
+    }
     if (pathname === '/__sync/media') {
+      const mediaIdParam = String(urlObj.searchParams.get('id') || req.headers['x-media-id'] || '').trim();
+      const targetRecord = mediaIdParam ? store.tvMediaLibrary.get(mediaIdParam) || null : activeMedia;
+
       if (req.method === 'GET') {
         if (urlObj.searchParams.get('meta') === '1') {
-          if (!activeMedia) {
+          if (!targetRecord) {
             return sendJson(res, 200, { hasMedia: false });
           }
           return sendJson(res, 200, {
             hasMedia: true,
-            name: activeMedia.name || 'media',
-            type: activeMedia.type || 'application/octet-stream',
-            kind: activeMedia.kind || 'image',
-            bytes: activeMedia.buffer.length,
-            updatedAt: activeMedia.updatedAt || Date.now(),
+            id: mediaIdParam || null,
+            name: targetRecord.name || 'media',
+            type: targetRecord.type || 'application/octet-stream',
+            kind: targetRecord.kind || 'image',
+            bytes: targetRecord.buffer.length,
+            updatedAt: targetRecord.updatedAt || Date.now(),
           });
         }
 
-        if (!activeMedia) {
+        if (!targetRecord) {
           setCors(res);
           res.statusCode = 204;
           res.end();
           return;
         }
 
-        const total = activeMedia.buffer.length;
+        const total = targetRecord.buffer.length;
         setCors(res);
-        res.setHeader('Content-Type', activeMedia.type || 'application/octet-stream');
+        res.setHeader('Content-Type', targetRecord.type || 'application/octet-stream');
         res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('X-Media-Name', encodeURIComponent(activeMedia.name || 'media'));
-        res.setHeader('X-Media-Kind', activeMedia.kind || 'image');
-        res.setHeader('X-Media-Updated', String(activeMedia.updatedAt || Date.now()));
+        res.setHeader('X-Media-Name', encodeURIComponent(targetRecord.name || 'media'));
+        res.setHeader('X-Media-Kind', targetRecord.kind || 'image');
+        res.setHeader('X-Media-Updated', String(targetRecord.updatedAt || Date.now()));
 
         const rangeHeader = String(req.headers.range || '').trim();
         if (rangeHeader && rangeHeader.startsWith('bytes=')) {
@@ -4107,7 +4115,7 @@ export function createLanSyncHandler({
             return;
           }
 
-          const chunk = activeMedia.buffer.subarray(start, end + 1);
+          const chunk = targetRecord.buffer.subarray(start, end + 1);
           res.statusCode = 206;
           res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
           res.setHeader('Content-Length', String(chunk.length));
@@ -4117,7 +4125,7 @@ export function createLanSyncHandler({
 
         res.statusCode = 200;
         res.setHeader('Content-Length', String(total));
-        res.end(activeMedia.buffer);
+        res.end(targetRecord.buffer);
         return;
       }
 
@@ -4128,23 +4136,35 @@ export function createLanSyncHandler({
           const type = String(req.headers['x-media-type'] || req.headers['content-type'] || 'application/octet-stream');
           const kind = String(req.headers['x-media-kind'] || (type.startsWith('video/') ? 'video' : 'image'));
           const sender = String(req.headers['x-sync-sender'] || '');
-          activeMedia = { buffer, name, type, kind, updatedAt: Date.now() };
-          persistActiveMediaToDisk(activeMedia);
+          const rec = { id: mediaIdParam || null, buffer, name, type, kind, updatedAt: Date.now() };
+          if (mediaIdParam) {
+            store.tvMediaLibrary.set(mediaIdParam, rec);
+            // Keep memory bounded to most recent 24 uploaded playlist items
+            if (store.tvMediaLibrary.size > 24) {
+              const oldestKey = store.tvMediaLibrary.keys().next().value;
+              if (oldestKey) store.tvMediaLibrary.delete(oldestKey);
+            }
+          } else {
+            activeMedia = rec;
+            persistActiveMediaToDisk(activeMedia);
+          }
           broadcastSSE('MEDIA_UPDATE', {
             sender,
             action: 'set',
+            mediaId: mediaIdParam || null,
             name,
             type,
             kind,
-            updatedAt: activeMedia.updatedAt,
+            updatedAt: rec.updatedAt,
           });
           return sendJson(res, 200, {
             ok: true,
+            id: mediaIdParam || null,
             name,
             type,
             kind,
             bytes: buffer.length,
-            updatedAt: activeMedia.updatedAt,
+            updatedAt: rec.updatedAt,
           });
         } catch (err) {
           return sendJson(res, 413, { error: err.message || 'Media upload failed' });
@@ -4153,9 +4173,14 @@ export function createLanSyncHandler({
 
       if (req.method === 'DELETE') {
         const sender = String(req.headers['x-sync-sender'] || '');
-        activeMedia = null;
-        persistActiveMediaToDisk(null);
-        broadcastSSE('MEDIA_UPDATE', { sender, action: 'clear', updatedAt: Date.now() });
+        if (mediaIdParam) {
+          store.tvMediaLibrary.delete(mediaIdParam);
+          broadcastSSE('MEDIA_UPDATE', { sender, action: 'delete_item', mediaId: mediaIdParam, updatedAt: Date.now() });
+        } else {
+          activeMedia = null;
+          persistActiveMediaToDisk(null);
+          broadcastSSE('MEDIA_UPDATE', { sender, action: 'clear', updatedAt: Date.now() });
+        }
         return sendJson(res, 200, { ok: true });
       }
     }

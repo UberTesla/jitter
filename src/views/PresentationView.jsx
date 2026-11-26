@@ -1021,6 +1021,10 @@ export default function PresentationView({
             tvMuted={state.ui.tvMuted}
             hasCustomTvMedia={state.ui.hasCustomTvMedia}
             tvMediaSyncKey={`${state.ui.hasCustomTvMedia ? '1' : '0'}:${state.ui.tvMediaLabel || ''}:${state.ui.tvMediaUpdatedAt || 0}`}
+            tvPlaylist={state.ui?.tvPlaylist}
+            tvPlaylistIndex={state.ui?.tvPlaylistIndex ?? 0}
+            tvPlaylistMode={state.ui?.tvPlaylistMode || 'loop'}
+            tvPlaylistPaused={Boolean(state.ui?.tvPlaylistPaused)}
             visible={showCorner}
             scale={effectiveCornerScale}
             opacity={state.ui?.cornerOpacity ?? 1.0}

@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RetroTVScene, LOGICAL_WIDTH, LOGICAL_HEIGHT } from '../canvas/RetroTVScene.js';
-import { loadTvMediaSource, subscribeTvMediaSync } from '../state/mediaStore.js';
+import {
+  loadTvMediaSource,
+  loadTvPlaylistItemSource,
+  subscribeTvMediaSync,
+} from '../state/mediaStore.js';
 
 // Per-view local collapse override so clicking the coffee cup only affects THAT local view.
 // Control View defaults to local coffee cup mode so Grandma stays compact on the operator screen.
@@ -21,6 +25,10 @@ export default function RetroTVCorner({
   tvMuted = true,
   hasCustomTvMedia = undefined,
   tvMediaSyncKey = '',
+  tvPlaylist = null,
+  tvPlaylistIndex = 0,
+  tvPlaylistMode = 'loop',
+  tvPlaylistPaused = false,
   visible = true,
   scale = 1.0,
   opacity = 1.0,
@@ -45,6 +53,35 @@ export default function RetroTVCorner({
 
   const [mediaSource, setMediaSource] = useState(null); // { url, kind, name, updatedAt, isObjectUrl }
   const [domMediaReady, setDomMediaReady] = useState(false);
+  const hasPlaylist = Array.isArray(tvPlaylist) && tvPlaylist.length > 0;
+  const [localPlaylistIdx, setLocalPlaylistIdx] = useState(() => Math.max(0, Number(tvPlaylistIndex) || 0));
+
+  // Sync local playback cursor whenever operator jumps or modifies playlist index
+  useEffect(() => {
+    if (!hasPlaylist) return;
+    const len = tvPlaylist.length;
+    const clamped = ((Number(tvPlaylistIndex) || 0) % len + len) % len;
+    setLocalPlaylistIdx(clamped);
+  }, [hasPlaylist, tvPlaylistIndex, tvPlaylist?.length]);
+
+  const currentPlaylistItem = hasPlaylist
+    ? tvPlaylist[localPlaylistIdx % tvPlaylist.length] || tvPlaylist[0]
+    : null;
+
+  const advancePlaylistItem = useCallback(() => {
+    if (!hasPlaylist || tvPlaylist.length <= 1) return;
+    if (tvPlaylistPaused || tvPlaylistMode === 'single') return;
+    setLocalPlaylistIdx((prev) => {
+      const len = tvPlaylist.length;
+      if (len <= 1) return 0;
+      if (tvPlaylistMode === 'shuffle') {
+        let next = Math.floor(Math.random() * len);
+        if (next === prev % len) next = (prev + 1) % len;
+        return next;
+      }
+      return (prev + 1) % len;
+    });
+  }, [hasPlaylist, tvPlaylist, tvPlaylistMode, tvPlaylistPaused]);
   const [localVisibleOverride, setLocalVisibleOverride] = useState(() =>
     localMugOverridesByView.has(resolvedViewKey)
       ? localMugOverridesByView.get(resolvedViewKey)
@@ -188,8 +225,62 @@ export default function RetroTVCorner({
     };
   }, [applyMediaSource]);
 
-  // Re-sync CRT TV media whenever another device swaps or resets TV media in tournament state
+  // Playlist loader: load active playlist item whenever it changes
   useEffect(() => {
+    if (!hasPlaylist || !currentPlaylistItem) return undefined;
+    let active = true;
+    if (currentPlaylistItem.kind === 'sitcom') {
+      applyMediaSource(null);
+      return undefined;
+    }
+    loadTvPlaylistItemSource(currentPlaylistItem).then((source) => {
+      if (active) {
+        applyMediaSource(source);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [
+    hasPlaylist,
+    currentPlaylistItem?.id,
+    currentPlaylistItem?.kind,
+    currentPlaylistItem?.url,
+    currentPlaylistItem?.updatedAt,
+    mediaRefreshToken,
+    applyMediaSource,
+  ]);
+
+  // Playlist timer for non-video items (sitcom, images, GIFs, image URLs)
+  useEffect(() => {
+    if (!hasPlaylist || !currentPlaylistItem) return undefined;
+    if (tvPlaylist.length <= 1 || tvPlaylistPaused || tvPlaylistMode === 'single') return undefined;
+    if (collapsedToMug) return undefined;
+    const isVideoItem =
+      currentPlaylistItem.kind === 'video' ||
+      (currentPlaylistItem.kind === 'url' && mediaSource?.kind === 'video');
+    if (isVideoItem) return undefined;
+    const durationMs = Math.max(3, Number(currentPlaylistItem.durationSec) || 12) * 1000;
+    const timer = setTimeout(() => {
+      advancePlaylistItem();
+    }, durationMs);
+    return () => clearTimeout(timer);
+  }, [
+    hasPlaylist,
+    tvPlaylist?.length,
+    currentPlaylistItem?.id,
+    currentPlaylistItem?.kind,
+    currentPlaylistItem?.durationSec,
+    mediaSource?.kind,
+    tvPlaylistMode,
+    tvPlaylistPaused,
+    collapsedToMug,
+    advancePlaylistItem,
+  ]);
+
+  // Re-sync legacy CRT TV media when playlist is not in use
+  useEffect(() => {
+    if (hasPlaylist) return undefined;
     if (!tvMediaSyncKey) return undefined;
     if (hasCustomTvMedia === false) {
       applyMediaSource(null);
@@ -204,9 +295,10 @@ export default function RetroTVCorner({
     return () => {
       active = false;
     };
-  }, [tvMediaSyncKey, hasCustomTvMedia, applyMediaSource]);
+  }, [hasPlaylist, tvMediaSyncKey, hasCustomTvMedia, applyMediaSource]);
 
   useEffect(() => {
+    if (hasPlaylist) return;
     if (mediaRefreshToken === 0) return;
     let active = true;
     loadTvMediaSource({ preferRemote: true }).then((source) => {
@@ -215,7 +307,7 @@ export default function RetroTVCorner({
     return () => {
       active = false;
     };
-  }, [mediaRefreshToken, applyMediaSource]);
+  }, [hasPlaylist, mediaRefreshToken, applyMediaSource]);
 
   useEffect(() => {
     if (!sceneRef.current || !grandmaConfig) return;
@@ -291,9 +383,14 @@ export default function RetroTVCorner({
                 className="retro-tv-media-el"
                 autoPlay
                 muted
-                loop
+                loop={!hasPlaylist || tvPlaylist.length <= 1 || tvPlaylistMode === 'single' || tvPlaylistPaused}
                 playsInline
                 preload="auto"
+                onEnded={() => {
+                  if (hasPlaylist && tvPlaylist.length > 1 && tvPlaylistMode !== 'single' && !tvPlaylistPaused) {
+                    advancePlaylistItem();
+                  }
+                }}
                 onLoadedData={(e) => {
                   setDomMediaReady(true);
                   ensureVideoPlaying(e.currentTarget);
