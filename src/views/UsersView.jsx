@@ -72,6 +72,10 @@ export default function UsersView({
   const myRoleMeta = ROLE_META[myRole] || ROLE_META.spectator;
   const perms = getRolePermissions(myRole);
   const assignableRoles = useMemo(() => getAssignableRoles(myRole), [myRole]);
+  const tabAssignableRoles = useMemo(
+    () => assignableRoles.filter((r) => r !== 'host' && r !== 'admin'),
+    [assignableRoles]
+  );
 
   const requireScorekeeperApproval = state.rules?.requireScorekeeperApproval !== false;
 
@@ -810,8 +814,8 @@ export default function UsersView({
                               ROLE_META[effectiveTabRole] || ROLE_META.spectator;
                             const canManageTabRole =
                               !isThisTab &&
-                              assignableRoles.length > 0 &&
-                              canAssignTabRole(myRole, deviceRole, assignableRoles[0], {
+                              tabAssignableRoles.length > 0 &&
+                              canAssignTabRole(myRole, deviceRole, tabAssignableRoles[0], {
                                 isOwnOtherTab,
                               });
                             const canKickTab =
@@ -877,13 +881,11 @@ export default function UsersView({
                                       <option value="inherit">
                                         ↩ Inherit ({deviceMeta.icon} {deviceMeta.label})
                                       </option>
-                                      {assignableRoles
-                                        .filter((r) => r !== 'host' && r !== 'admin')
-                                        .map((r) => (
-                                          <option key={r} value={r}>
-                                            {ROLE_META[r].icon} {ROLE_META[r].label} (Session Only)
-                                          </option>
-                                        ))}
+                                      {tabAssignableRoles.map((r) => (
+                                        <option key={r} value={r}>
+                                          {ROLE_META[r].icon} {ROLE_META[r].label} (Session Only)
+                                        </option>
+                                      ))}
                                     </select>
                                   ) : (
                                     <span className={`debug-client-role is-${effectiveTabRole}`}>
