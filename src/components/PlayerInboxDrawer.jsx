@@ -498,7 +498,7 @@ export default function PlayerInboxDrawer({
             </div>
 
             {/* 4-Tab Switcher: Live Chat | Direct & Groups | On Deck / Roster | Alerts & Player */}
-            <div className="segmented-control compact" style={{ marginBottom: '0.28rem' }}>
+            <div className="segmented-control compact" style={{ marginBottom: 0 }}>
               <button
                 type="button"
                 className={activeTab === 'live' ? 'is-selected' : ''}
@@ -555,8 +555,8 @@ export default function PlayerInboxDrawer({
                   gap: '0.45rem',
                   width: '100%',
                   textAlign: 'left',
-                  padding: '0.26rem 0.52rem',
-                  marginBottom: '0.26rem',
+                  padding: '0.24rem 0.5rem',
+                  marginBottom: 0,
                   borderRadius: '7px',
                   border: '1px solid rgba(245, 158, 11, 0.48)',
                   background: 'rgba(245, 158, 11, 0.15)',
@@ -596,8 +596,8 @@ export default function PlayerInboxDrawer({
                   gap: '0.45rem',
                   width: '100%',
                   textAlign: 'left',
-                  padding: '0.26rem 0.52rem',
-                  marginBottom: '0.26rem',
+                  padding: '0.24rem 0.5rem',
+                  marginBottom: 0,
                   borderRadius: '7px',
                   border: '1px solid rgba(244, 63, 94, 0.45)',
                   background: 'rgba(244, 63, 94, 0.14)',
