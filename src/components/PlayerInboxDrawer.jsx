@@ -5,7 +5,12 @@ import {
   resolveEffectiveRole,
   tournamentStore,
 } from '../state/tournamentStore.js';
-import { computeTournamentStats, formatTeamMembersShort } from '../engine/bracketGenerator.js';
+import {
+  computeTournamentStats,
+  formatTeamMembersShort,
+  getClaimablePlayers,
+  resolveClaimedPlayer,
+} from '../engine/bracketGenerator.js';
 import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
@@ -214,9 +219,12 @@ export default function PlayerInboxDrawer({
   const claims = state?.playerClaims || {};
   const myClaimedPlayerId = myDeviceId ? claims[myDeviceId] || null : null;
   const players = Array.isArray(state?.players) ? state.players : [];
-  const claimedPlayerObj = myClaimedPlayerId
-    ? players.find((p) => p.id === myClaimedPlayerId) || null
-    : null;
+  const claimablePlayers = useMemo(() => getClaimablePlayers(state), [state]);
+  const claimedPlayerObj = useMemo(
+    () => (myClaimedPlayerId ? resolveClaimedPlayer(state, myClaimedPlayerId) : null),
+    [state, myClaimedPlayerId]
+  );
+  const claimedEntrantId = claimedPlayerObj?.teamId || null;
   const hasCustomChatName = Boolean(
     remoteSync?.isDeviceNameCustom && String(remoteSync?.deviceName || '').trim()
   );
@@ -235,11 +243,20 @@ export default function PlayerInboxDrawer({
 
   const myPlayerStatus = useMemo(() => {
     if (!claimedPlayerObj || !state?.matches) return null;
-    const pid = claimedPlayerObj.id;
+    const pid = claimedEntrantId;
+    if (!pid) {
+      return {
+        tone: 'waiting',
+        tabLabel: 'Unassigned',
+        headline: '🗓️ NOT ASSIGNED TO A TEAM YET',
+        detail: `${claimedPlayerObj.name} is on the roster — ask the Host to assign your team.`,
+      };
+    }
     const allMatches = Object.values(state.matches || {});
     if (state.championId && state.championId === pid) {
       return {
         tone: 'champion',
+        tabLabel: 'Champ!',
         headline: '🏆 TOURNAMENT CHAMPION!',
         detail: `Congrats ${claimedPlayerObj.name} — you won the tournament!`,
       };
@@ -257,6 +274,7 @@ export default function PlayerInboxDrawer({
       const oppName = players.find((p) => p.id === oppId)?.name || 'Opponent';
       return {
         tone: 'playing',
+        tabLabel: "You're Up",
         headline: '🏓 YOU ARE UP NOW!',
         detail: `${playingNow.roundLabel} (${playingNow.label}) vs ${oppName}${
           playingNow.tableNumber ? ` · Table ${playingNow.tableNumber}` : ''
@@ -280,6 +298,7 @@ export default function PlayerInboxDrawer({
         (oppId ? players.find((p) => p.id === oppId)?.name : null) || oppFallback || 'TBD';
       return {
         tone: 'playing',
+        tabLabel: "You're Up",
         headline: '🏓 YOU ARE UP NOW! (READY)',
         detail: `Head to the table — ${activeReady.roundLabel} (${activeReady.label}) vs ${oppName}${
           activeReady.tableNumber ? ` · Table ${activeReady.tableNumber}` : ''
@@ -297,6 +316,7 @@ export default function PlayerInboxDrawer({
         (oppId ? players.find((p) => p.id === oppId)?.name : null) || oppFallback || 'TBD';
       return {
         tone: 'ondeck',
+        tabLabel: queueIdx === 0 ? 'Up Next' : `#${queueIdx + 1} in Queue`,
         headline: queueIdx === 0 ? '⏳ YOU ARE UP NEXT!' : `⏳ YOU ARE #${queueIdx + 1} IN QUEUE`,
         detail: `${m.roundLabel} (${m.label}) vs ${oppName}`,
       };
@@ -311,16 +331,18 @@ export default function PlayerInboxDrawer({
     if (futureMatch) {
       return {
         tone: 'waiting',
+        tabLabel: 'Waiting',
         headline: '🗓️ WAITING FOR NEXT ROUND',
         detail: `${futureMatch.roundLabel} (${futureMatch.label}) — opponent TBD`,
       };
     }
     return {
       tone: 'done',
+      tabLabel: 'Done',
       headline: '✅ TOURNAMENT RUN COMPLETE',
       detail: 'Thanks for playing — cheer on the remaining matches in Live Chat!',
     };
-  }, [claimedPlayerObj, state?.matches, state?.activeMatchId, state?.championId, upNextMatches, players]);
+  }, [claimedPlayerObj, claimedEntrantId, state?.matches, state?.activeMatchId, state?.championId, upNextMatches, players]);
 
   const isTeams = state?.entryMode === 'teams';
   const getPlayerLabel = (pid, fallback) => {
@@ -460,12 +482,12 @@ export default function PlayerInboxDrawer({
   }, [claims, myDeviceId]);
 
   const availablePlayers = useMemo(
-    () => players.filter((p) => !claimedByOthers.has(p.id)),
-    [players, claimedByOthers]
+    () => claimablePlayers.filter((p) => !claimedByOthers.has(p.id)),
+    [claimablePlayers, claimedByOthers]
   );
 
   const selectedPlayerObj = selectedPlayerId
-    ? players.find((p) => p.id === selectedPlayerId) || null
+    ? claimablePlayers.find((p) => p.id === selectedPlayerId) || null
     : null;
 
   // Connected other users in this tournament for 1-to-1 & Group Chat recipient picking
@@ -477,7 +499,7 @@ export default function PlayerInboxDrawer({
       if (state?.tournamentId && c.tournamentId && c.tournamentId !== state.tournamentId) continue;
       if (byDev.has(c.deviceId)) continue;
       const pid = claims[c.deviceId] || null;
-      const pName = pid ? players.find((p) => p.id === pid)?.name || null : null;
+      const pName = pid ? resolveClaimedPlayer(state, pid)?.name || null : null;
       const devBrowser =
         c.clientInfo?.deviceBrowser || (c.deviceName && c.deviceName !== 'Device' ? c.deviceName : '');
       byDev.set(c.deviceId, {
@@ -488,7 +510,7 @@ export default function PlayerInboxDrawer({
       });
     }
     return Array.from(byDev.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [remoteSync?.clients, myDeviceId, state?.tournamentId, claims, players]);
+  }, [remoteSync?.clients, myDeviceId, state, claims]);
 
   const handleOpen = () => {
     setOpen(true);
@@ -822,9 +844,9 @@ export default function PlayerInboxDrawer({
                       if (myPlayerStatus?.tone === 'ondeck') {
                         const isNextMe =
                           nextM &&
-                          claimedPlayerObj &&
-                          (nextM.player1Id === claimedPlayerObj.id ||
-                            nextM.player2Id === claimedPlayerObj.id);
+                          claimedEntrantId &&
+                          (nextM.player1Id === claimedEntrantId ||
+                            nextM.player2Id === claimedEntrantId);
                         return (
                           <>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
@@ -1061,7 +1083,7 @@ export default function PlayerInboxDrawer({
                   trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
                 }}
               >
-                ⏳ On Deck
+                ⏳ {myPlayerStatus?.tabLabel || 'On Deck'}
               </button>
               <button
                 type="button"
@@ -1522,9 +1544,9 @@ export default function PlayerInboxDrawer({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                       {upNextMatches.map((m, idx) => {
                         const isMine = Boolean(
-                          claimedPlayerObj &&
-                            (m.player1Id === claimedPlayerObj.id ||
-                              m.player2Id === claimedPlayerObj.id)
+                          claimedEntrantId &&
+                            (m.player1Id === claimedEntrantId ||
+                              m.player2Id === claimedEntrantId)
                         );
                         return (
                           <div
@@ -1610,7 +1632,7 @@ export default function PlayerInboxDrawer({
                         : isAlive
                         ? 'Active'
                         : 'Done';
-                      const isMe = claimedPlayerObj?.id === p.id;
+                      const isMe = claimedEntrantId === p.id;
                       return (
                         <div
                           key={p.id}
@@ -1710,7 +1732,11 @@ export default function PlayerInboxDrawer({
                           <option value="">Select your player...</option>
                           {availablePlayers.map((p) => (
                             <option key={p.id} value={p.id}>
-                              #{p.seed} {p.name}
+                              {p.teamName
+                                ? `${p.name} (${p.teamName})`
+                                : p.seed
+                                ? `#${p.seed} ${p.name}`
+                                : p.name}
                             </option>
                           ))}
                         </select>

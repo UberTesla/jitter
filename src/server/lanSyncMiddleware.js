@@ -21,7 +21,12 @@ import {
   resolveEffectiveRole,
 } from '../engine/roles.js';
 import { rankLanAddresses } from '../engine/lanAddress.js';
-import { computeTournamentStats } from '../engine/bracketGenerator.js';
+import {
+  computeTournamentStats,
+  getClaimablePlayers,
+  resolveClaimedEntrantId,
+  resolveClaimedPlayer,
+} from '../engine/bracketGenerator.js';
 import { isMatchNearingEnd } from '../engine/scoringEngine.js';
 import { resolveMessageTemplate } from '../engine/grandmaVariables.js';
 
@@ -1203,7 +1208,7 @@ export function createLanSyncHandler({
     const resolveChatDisplayName = (entry, devId, fallbackName = '') => {
       if (entry && devId && entry.playerClaims?.[devId]) {
         const pid = entry.playerClaims[devId];
-        const player = Array.isArray(entry.players) ? entry.players.find((p) => p.id === pid) : null;
+        const player = resolveClaimedPlayer(entry, pid);
         if (player?.name) return player.name;
       }
       const cleanFallback = String(fallbackName || '').trim();
@@ -2059,7 +2064,7 @@ export function createLanSyncHandler({
         if (!rawPlayerId) {
           delete claims[targetDev];
         } else {
-          const validPlayer = (entry.players || []).some((p) => p.id === rawPlayerId);
+          const validPlayer = getClaimablePlayers(entry).some((p) => p.id === rawPlayerId);
           if (!validPlayer) {
             return sendJson(res, 404, { error: 'Selected player not found in this tournament' });
           }
@@ -2220,6 +2225,7 @@ export function createLanSyncHandler({
             const nextUp = computeTournamentStats(stamped).upNext.slice(0, 2);
             const nameOf = (pid, fallback = 'TBD') =>
               (stamped.players || []).find((p) => p.id === pid)?.name || fallback;
+            const claimEntrantId = (pid) => resolveClaimedEntrantId(stamped, pid) || pid;
 
             const sendSystemAnnouncementToDevices = (devIds, title, message, tag) => {
               const uniqueDevs = Array.from(new Set((devIds || []).filter(Boolean)));
@@ -2283,7 +2289,10 @@ export function createLanSyncHandler({
               if (prevUpIds.has(m.id)) continue;
               const matchup = `${nameOf(m.player1Id, m.source1Label)} vs ${nameOf(m.player2Id, m.source2Label)}`;
               const devs = Object.entries(claims)
-                .filter(([, pid]) => pid === m.player1Id || pid === m.player2Id)
+                .filter(([, pid]) => {
+                  const eid = claimEntrantId(pid);
+                  return eid === m.player1Id || eid === m.player2Id;
+                })
                 .map(([devId]) => devId);
               sendSystemAnnouncementToDevices(
                 devs,
@@ -2304,7 +2313,10 @@ export function createLanSyncHandler({
               const matchup = `${nameOf(nextM.player1Id)} vs ${nameOf(nextM.player2Id)}`;
               const tableStr = nextM.tableNumber ? ` on Table ${nextM.tableNumber}` : '';
               const devs = Object.entries(claims)
-                .filter(([, pid]) => pid === nextM.player1Id || pid === nextM.player2Id)
+                .filter(([, pid]) => {
+                  const eid = claimEntrantId(pid);
+                  return eid === nextM.player1Id || eid === nextM.player2Id;
+                })
                 .map(([devId]) => devId);
               sendSystemAnnouncementToDevices(
                 devs,
@@ -2339,12 +2351,14 @@ export function createLanSyncHandler({
 
               // Notify players who were up on the previous uncompleted match
               const bumpedDevs = Object.entries(claims)
-                .filter(
-                  ([, pid]) =>
-                    (pid === prevActiveForSwitch.player1Id || pid === prevActiveForSwitch.player2Id) &&
-                    pid !== nextActiveForSwitch.player1Id &&
-                    pid !== nextActiveForSwitch.player2Id
-                )
+                .filter(([, pid]) => {
+                  const eid = claimEntrantId(pid);
+                  return (
+                    (eid === prevActiveForSwitch.player1Id || eid === prevActiveForSwitch.player2Id) &&
+                    eid !== nextActiveForSwitch.player1Id &&
+                    eid !== nextActiveForSwitch.player2Id
+                  );
+                })
                 .map(([devId]) => devId);
               sendSystemAnnouncementToDevices(
                 bumpedDevs,
@@ -2356,10 +2370,10 @@ export function createLanSyncHandler({
               // Notify players who are now up instead (skip if Match Started already alerted them this tick)
               if (!justStartedIds.has(nextActiveForSwitch.id)) {
                 const nowUpDevs = Object.entries(claims)
-                  .filter(
-                    ([, pid]) =>
-                      pid === nextActiveForSwitch.player1Id || pid === nextActiveForSwitch.player2Id
-                  )
+                  .filter(([, pid]) => {
+                    const eid = claimEntrantId(pid);
+                    return eid === nextActiveForSwitch.player1Id || eid === nextActiveForSwitch.player2Id;
+                  })
                   .map(([devId]) => devId);
                 sendSystemAnnouncementToDevices(
                   nowUpDevs,
@@ -2391,7 +2405,10 @@ export function createLanSyncHandler({
               const up = nextUp[0];
               const matchup = `${nameOf(up.player1Id, up.source1Label)} vs ${nameOf(up.player2Id, up.source2Label)}`;
               const upDevs = Object.entries(claims)
-                .filter(([, pid]) => pid === up.player1Id || pid === up.player2Id)
+                .filter(([, pid]) => {
+                  const eid = claimEntrantId(pid);
+                  return eid === up.player1Id || eid === up.player2Id;
+                })
                 .map(([devId]) => devId);
               sendSystemAnnouncementToDevices(
                 upDevs,
@@ -2445,7 +2462,7 @@ export function createLanSyncHandler({
 
               if (winnerId) {
                 const winDevs = Object.entries(claims)
-                  .filter(([, pid]) => pid === winnerId)
+                  .filter(([, pid]) => claimEntrantId(pid) === winnerId)
                   .map(([devId]) => devId);
                 if (winDevs.length > 0) {
                   const isChamp = stamped.championId === winnerId;
@@ -2471,7 +2488,7 @@ export function createLanSyncHandler({
 
               if (loserId) {
                 const loseDevs = Object.entries(claims)
-                  .filter(([, pid]) => pid === loserId)
+                  .filter(([, pid]) => claimEntrantId(pid) === loserId)
                   .map(([devId]) => devId);
                 if (loseDevs.length > 0) {
                   const stillAlive = Object.values(stamped.matches || {}).some(

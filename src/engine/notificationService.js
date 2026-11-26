@@ -9,7 +9,7 @@
  * - `dispatchNotification(event, prefs)` for OS desktop notifications + audio chime.
  */
 
-import { computeTournamentStats } from './bracketGenerator.js';
+import { computeTournamentStats, resolveClaimedEntrantId } from './bracketGenerator.js';
 
 const PREFS_STORAGE_PREFIX = 'pp_notify_prefs_v1:';
 
@@ -206,7 +206,10 @@ function matchHasPlayer(match, playerId) {
  */
 export function detectNotificationEvents(prevState, nextState, prefs = DEFAULT_NOTIFICATION_PREFS) {
   if (!prevState || !nextState || !prefs?.enabled) return [];
-  const claimedId = prefs.claimedPlayerId || null;
+  const rawClaimedId = prefs.claimedPlayerId || null;
+  const claimedId = rawClaimedId
+    ? resolveClaimedEntrantId(nextState, rawClaimedId) || rawClaimedId
+    : null;
   const watchAll = Boolean(prefs.notifyAllMatches);
   if (!claimedId && !watchAll) return [];
 

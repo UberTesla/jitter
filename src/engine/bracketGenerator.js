@@ -255,6 +255,92 @@ export function formatTeamMembersShort(entrant, separator = ' & ') {
     .join(separator);
 }
 
+/**
+ * Returns the list of individual human players that can be claimed by users.
+ * In Singles mode, each bracket entrant is a player (`teamId === id`).
+ * In Teams mode, each team's individual members (plus any unassigned roster players)
+ * are returned so users ALWAYS claim a person, never a team.
+ */
+export function getClaimablePlayers(state) {
+  if (!state) return [];
+  const entrants = Array.isArray(state.players) ? state.players : [];
+  if (state.entryMode !== 'teams') {
+    return entrants.map((p) => ({
+      id: p.id,
+      name: p.name,
+      teamId: p.id,
+      teamName: null,
+      seed: p.seed ?? null,
+    }));
+  }
+  const result = [];
+  const seenIds = new Set();
+  for (const team of entrants) {
+    if (!team) continue;
+    const members = Array.isArray(team.members) ? team.members : [];
+    const memberIds = Array.isArray(team.memberIds) ? team.memberIds : [];
+    for (let i = 0; i < members.length; i += 1) {
+      const mName = String(members[i] || '').trim();
+      if (!mName) continue;
+      const mId = String(memberIds[i] || `${team.id}:m${i}`).trim();
+      if (!mId || seenIds.has(mId)) continue;
+      seenIds.add(mId);
+      result.push({
+        id: mId,
+        name: mName,
+        teamId: team.id,
+        teamName: team.name || null,
+        seed: team.seed ?? null,
+      });
+    }
+  }
+  const roster = Array.isArray(state.roster) ? state.roster : [];
+  for (const r of roster) {
+    if (!r || !r.id || seenIds.has(r.id)) continue;
+    const rName = String(r.name || '').trim();
+    if (!rName) continue;
+    seenIds.add(r.id);
+    result.push({
+      id: r.id,
+      name: rName,
+      teamId: null,
+      teamName: null,
+      seed: null,
+    });
+  }
+  return result;
+}
+
+/**
+ * Resolves a claimed player ID to `{ id, name, teamId, teamName, seed }`.
+ * Falls back to matching legacy team IDs directly so older saved claims remain intact.
+ */
+export function resolveClaimedPlayer(state, claimId) {
+  if (!state || !claimId) return null;
+  const list = getClaimablePlayers(state);
+  const direct = list.find((p) => p.id === claimId);
+  if (direct) return direct;
+  const legacyEntrant = (state.players || []).find((p) => p.id === claimId);
+  if (legacyEntrant) {
+    return {
+      id: legacyEntrant.id,
+      name: legacyEntrant.name,
+      teamId: legacyEntrant.id,
+      teamName: state.entryMode === 'teams' ? legacyEntrant.name : null,
+      seed: legacyEntrant.seed ?? null,
+    };
+  }
+  return null;
+}
+
+/**
+ * Resolves a claimed player ID to the bracket entrant ID (`match.player1Id` / `player2Id`).
+ */
+export function resolveClaimedEntrantId(state, claimId) {
+  const resolved = resolveClaimedPlayer(state, claimId);
+  return resolved?.teamId || null;
+}
+
 function getWinnersRoundLabel(round, totalWinnersRounds, format, effectiveDouble) {
   const remaining = totalWinnersRounds - round;
   if (remaining === 0) {

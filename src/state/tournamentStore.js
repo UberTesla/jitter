@@ -14,6 +14,7 @@ import {
   addEntrantsPreservingBracket,
   findNextReadyMatchId,
   getChampionshipMatchId,
+  resolveClaimedPlayer,
 } from '../engine/bracketGenerator.js';
 import {
   adjustMatchScore,
@@ -4338,7 +4339,7 @@ export class TournamentStore {
     const activeState = this.programState || this.state;
     const myClaimPid = activeState?.playerClaims?.[this.remoteSync.deviceId] || null;
     const myClaimName = myClaimPid
-      ? (activeState?.players || []).find((p) => p.id === myClaimPid)?.name || ''
+      ? resolveClaimedPlayer(activeState, myClaimPid)?.name || ''
       : '';
     try {
       const res = await fetch(`${baseUrl}/__sync/notify-client`, {

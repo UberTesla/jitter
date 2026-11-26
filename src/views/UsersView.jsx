@@ -17,6 +17,7 @@ import {
   renderLiveMessageText,
   resolveMessageTemplate,
 } from '../engine/grandmaVariables.js';
+import { getClaimablePlayers, resolveClaimedPlayer } from '../engine/bracketGenerator.js';
 
 function formatRelativeAgo(ts) {
   if (!ts) return '—';
@@ -637,9 +638,8 @@ export default function UsersView({
                       Array.isArray(state.kickedDevices) &&
                       state.kickedDevices.includes(group.deviceId);
                     const claimedPid = state.playerClaims?.[group.deviceId] || null;
-                    const claimedName = claimedPid
-                      ? state.players?.find((p) => p.id === claimedPid)?.name || null
-                      : null;
+                    const claimedObj = claimedPid ? resolveClaimedPlayer(state, claimedPid) : null;
+                    const claimedName = claimedObj?.name || null;
                     const deviceBrowser =
                       group.clientInfo?.deviceBrowser ||
                       (group.deviceName && group.deviceName !== 'Device' ? group.deviceName : '');
@@ -760,7 +760,7 @@ export default function UsersView({
                                 );
                                 if (res.ok) {
                                   const pName = nextPid
-                                    ? state.players?.find((p) => p.id === nextPid)?.name || 'player'
+                                    ? resolveClaimedPlayer(state, nextPid)?.name || 'player'
                                     : null;
                                   notify(
                                     pName
@@ -773,9 +773,13 @@ export default function UsersView({
                               }}
                             >
                               <option value="">— Spectating —</option>
-                              {(state.players || []).map((p) => (
+                              {getClaimablePlayers(state).map((p) => (
                                 <option key={p.id} value={p.id}>
-                                  #{p.seed} {p.name}
+                                  {p.teamName
+                                    ? `${p.name} (${p.teamName})`
+                                    : p.seed
+                                    ? `#${p.seed} ${p.name}`
+                                    : p.name}
                                 </option>
                               ))}
                             </select>
