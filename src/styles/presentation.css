@@ -327,9 +327,9 @@
 }
 
 .pod-matchup.is-teams-dual {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   flex: 1;
   width: 100%;
@@ -337,15 +337,15 @@
 }
 
 .pod-matchup.is-teams-dual em {
-  flex: 0 0 auto;
   margin: 0;
+  text-align: center;
 }
 
 .pod-team-stack {
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
   min-width: 0;
+  width: 100%;
   line-height: 1.15;
 }
 

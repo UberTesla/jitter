@@ -866,9 +866,9 @@ export default function PlayerInboxDrawer({
                         return (
                           <span
                             style={{
-                              display: 'flex',
+                              display: 'grid',
+                              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
                               alignItems: 'center',
-                              justifyContent: 'space-between',
                               gap: '0.45rem',
                               width: '100%',
                               minWidth: 0,
@@ -876,7 +876,9 @@ export default function PlayerInboxDrawer({
                             }}
                           >
                             {renderDrawerOnDeckSide(nextM.player1Id, nextM.source1Label, 'left')}
-                            <span style={{ opacity: 0.6, flexShrink: 0, fontSize: '0.7rem' }}>vs</span>
+                            <span style={{ opacity: 0.6, fontSize: '0.7rem', textAlign: 'center' }}>
+                              vs
+                            </span>
                             {renderDrawerOnDeckSide(nextM.player2Id, nextM.source2Label, 'right')}
                           </span>
                         );
@@ -1573,20 +1575,33 @@ export default function PlayerInboxDrawer({
                               )}
                             </div>
                             <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: isTeams ? 'space-between' : 'flex-start',
-                                gap: '0.45rem',
-                                width: '100%',
-                                minWidth: 0,
-                                fontSize: '0.84rem',
-                                fontWeight: 600,
-                                marginTop: '0.2rem',
-                              }}
+                              style={
+                                isTeams
+                                  ? {
+                                      display: 'grid',
+                                      gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+                                      alignItems: 'center',
+                                      gap: '0.45rem',
+                                      width: '100%',
+                                      minWidth: 0,
+                                      fontSize: '0.84rem',
+                                      fontWeight: 600,
+                                      marginTop: '0.2rem',
+                                    }
+                                  : {
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.45rem',
+                                      width: '100%',
+                                      minWidth: 0,
+                                      fontSize: '0.84rem',
+                                      fontWeight: 600,
+                                      marginTop: '0.2rem',
+                                    }
+                              }
                             >
                               {renderDrawerOnDeckSide(m.player1Id, m.source1Label, 'left')}
-                              <span style={{ opacity: 0.6, flexShrink: 0 }}>vs</span>
+                              <span style={{ opacity: 0.6, textAlign: 'center' }}>vs</span>
                               {renderDrawerOnDeckSide(m.player2Id, m.source2Label, 'right')}
                             </div>
                           </div>
