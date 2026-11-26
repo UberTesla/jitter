@@ -562,7 +562,7 @@ export default function PlayerInboxDrawer({
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="inbox-drawer-card" style={{ display: 'flex', flexDirection: 'column', maxHeight: '86vh' }}>
+          <div className="inbox-drawer-card">
             <div className="inbox-drawer-header">
               <h2>💬 {chatHeaderName}</h2>
               <button
@@ -861,8 +861,7 @@ export default function PlayerInboxDrawer({
                   className="scroller"
                   style={{
                     flex: 1,
-                    minHeight: '220px',
-                    maxHeight: '46vh',
+                    minHeight: 0,
                     overflowY: 'auto',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1091,8 +1090,7 @@ export default function PlayerInboxDrawer({
                       className="scroller"
                       style={{
                         flex: 1,
-                        minHeight: '210px',
-                        maxHeight: '44vh',
+                        minHeight: 0,
                         overflowY: 'auto',
                         display: 'flex',
                         flexDirection: 'column',
@@ -1156,7 +1154,7 @@ export default function PlayerInboxDrawer({
                     </form>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.55rem' }}>
                     <div className="inbox-section-head">
                       <strong>💬 Your Conversations ({threads.length})</strong>
                       <button
@@ -1177,7 +1175,7 @@ export default function PlayerInboxDrawer({
                         one person or start a group chat!
                       </p>
                     ) : (
-                      <div className="inbox-list scroller" style={{ maxHeight: '46vh', overflowY: 'auto' }}>
+                      <div className="inbox-list scroller" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                         {threads.map((th) => {
                           const last = th.messages?.[th.messages.length - 1] || null;
                           const unread = Number(unreadThreadMap[th.id] || 0);

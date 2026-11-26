@@ -434,8 +434,9 @@ kbd {
 .inbox-drawer-card {
   width: 100%;
   max-width: 480px;
-  max-height: 85dvh;
-  overflow-y: auto;
+  height: min(88dvh, 760px);
+  max-height: 88dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
