@@ -5,6 +5,7 @@ import {
   resolveEffectiveRole,
   tournamentStore,
 } from '../state/tournamentStore.js';
+import { computeTournamentStats } from '../engine/bracketGenerator.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
 
@@ -50,6 +51,7 @@ export default function PlayerInboxDrawer({
   // Live Chat state
   const [liveDraft, setLiveDraft] = useState('');
   const [sendingLive, setSendingLive] = useState(false);
+  const [chatNameDraft, setChatNameDraft] = useState('');
   const liveEndRef = useRef(null);
 
   // 2-Way DMs & Group Chats state
@@ -84,7 +86,11 @@ export default function PlayerInboxDrawer({
   const canModerateChat = (ROLE_LEVEL[myRole] ?? 0) >= ROLE_LEVEL.moderator;
 
   const [inboxNowMs, setInboxNowMs] = useState(() => tournamentStore.getServerNow());
-  const hasLiveInboxCountdown = open && activeTab === 'alerts' && inbox.some((m) => m.liveTemplate?.includes('[[CD:'));
+  const latestAlert = inbox[0] || null;
+  const hasLiveInboxCountdown =
+    open &&
+    (latestAlert?.liveTemplate?.includes('[[CD:') ||
+      (activeTab === 'alerts' && inbox.some((m) => m.liveTemplate?.includes('[[CD:'))));
 
   useEffect(() => {
     if (!hasLiveInboxCountdown) return undefined;
@@ -134,6 +140,34 @@ export default function PlayerInboxDrawer({
   const claimedPlayerObj = myClaimedPlayerId
     ? players.find((p) => p.id === myClaimedPlayerId) || null
     : null;
+  const hasCustomChatName = Boolean(
+    remoteSync?.isDeviceNameCustom && String(remoteSync?.deviceName || '').trim()
+  );
+  const hasChatIdentity = Boolean(claimedPlayerObj || hasCustomChatName);
+  const chatHeaderName =
+    claimedPlayerObj?.name || (hasCustomChatName ? remoteSync.deviceName : 'Tournament Chat');
+
+  const upNextMatches = useMemo(() => {
+    try {
+      return computeTournamentStats(state)?.upNext || [];
+    } catch {
+      return [];
+    }
+  }, [state]);
+
+  const getPlayerLabel = (pid, fallback) => {
+    if (!pid) return fallback || 'TBD';
+    return players.find((p) => p.id === pid)?.name || fallback || 'TBD';
+  };
+
+  const handleSaveChatName = (e) => {
+    e.preventDefault();
+    const cleaned = chatNameDraft.trim();
+    if (!cleaned) return;
+    tournamentStore.setDeviceName(cleaned);
+    setChatNameDraft('');
+    trackUsageEvent('chat:set_name', { category: 'chat' });
+  };
 
   const claimedByOthers = useMemo(() => {
     const set = new Set();
@@ -291,7 +325,7 @@ export default function PlayerInboxDrawer({
         onClick={handleOpen}
         aria-label={`Open ${claimedPlayerObj ? `${claimedPlayerObj.name}'s Chat & Inbox` : 'Chat & Inbox'} (${totalUnread} unread)`}
       >
-        <span>💬 {claimedPlayerObj ? claimedPlayerObj.name : 'Chat'}</span>
+        <span>💬 {claimedPlayerObj ? claimedPlayerObj.name : hasCustomChatName ? remoteSync.deviceName : 'Chat'}</span>
         {totalUnread > 0 && <span className="inbox-unread-badge">{totalUnread}</span>}
       </button>
 
@@ -307,7 +341,7 @@ export default function PlayerInboxDrawer({
         >
           <div className="inbox-drawer-card" style={{ display: 'flex', flexDirection: 'column', maxHeight: '86vh' }}>
             <div className="inbox-drawer-header">
-              <h2>💬 {claimedPlayerObj ? claimedPlayerObj.name : 'Tournament Chat'}</h2>
+              <h2>💬 {chatHeaderName}</h2>
               <button
                 type="button"
                 className="btn-secondary btn-sm"
@@ -319,7 +353,7 @@ export default function PlayerInboxDrawer({
             </div>
 
             {/* 3-Tab Switcher: Live Chat | Direct & Groups | Alerts & Player */}
-            <div className="segmented-control compact" style={{ marginBottom: '0.75rem' }}>
+            <div className="segmented-control compact" style={{ marginBottom: '0.55rem' }}>
               <button
                 type="button"
                 className={activeTab === 'live' ? 'is-selected' : ''}
@@ -352,6 +386,46 @@ export default function PlayerInboxDrawer({
               </button>
             </div>
 
+            {/* Mini Last-Alert Banner directly under chat type selection */}
+            {latestAlert && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('alerts')}
+                title="Click to view all alerts"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.5rem',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '0.38rem 0.6rem',
+                  marginBottom: '0.6rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(245, 158, 11, 0.45)',
+                  background: 'rgba(245, 158, 11, 0.14)',
+                  color: 'inherit',
+                  fontSize: '0.76rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                  }}
+                >
+                  <strong>{latestAlert.title || '📢 Alert from Host'}:</strong>{' '}
+                  {renderLiveMessageText(latestAlert, inboxNowMs)}
+                </span>
+                <span style={{ opacity: 0.72, fontSize: '0.7rem', flexShrink: 0 }}>
+                  {formatMsgTime(latestAlert.sentAt)}
+                </span>
+              </button>
+            )}
+
             {chatError && (
               <p className="inbox-feedback" style={{ margin: '0 0 0.5rem', color: '#f87171' }}>
                 {chatError}
@@ -360,13 +434,51 @@ export default function PlayerInboxDrawer({
 
             {/* TAB 1: PUBLIC LIVE GAME CHAT */}
             {activeTab === 'live' && (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.55rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.5rem' }}>
+                {/* Small On Deck Banner at the top of Live Chat */}
+                {upNextMatches.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      padding: '0.32rem 0.55rem',
+                      borderRadius: '7px',
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
+                      ⏳ ON DECK
+                    </span>
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {upNextMatches
+                        .slice(0, 2)
+                        .map(
+                          (m) =>
+                            `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                              m.player2Id,
+                              m.source2Label
+                            )}`
+                        )
+                        .join('  ·  ')}
+                    </span>
+                  </div>
+                )}
+
                 <div
                   className="scroller"
                   style={{
                     flex: 1,
-                    minHeight: '240px',
-                    maxHeight: '48vh',
+                    minHeight: '220px',
+                    maxHeight: '46vh',
                     overflowY: 'auto',
                     display: 'flex',
                     flexDirection: 'column',
@@ -425,30 +537,118 @@ export default function PlayerInboxDrawer({
                   <div ref={liveEndRef} />
                 </div>
 
-                <form onSubmit={handleSendLive} style={{ display: 'flex', gap: '0.45rem' }}>
-                  <input
-                    type="text"
-                    value={liveDraft}
-                    onChange={(e) => setLiveDraft(e.target.value)}
-                    placeholder="Comment on the live match..."
-                    maxLength={500}
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    type="submit"
-                    className="btn-amber btn-sm"
-                    disabled={!liveDraft.trim() || sendingLive}
+                {!hasChatIdentity ? (
+                  <form
+                    onSubmit={handleSaveChatName}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.4rem',
+                      padding: '0.55rem',
+                      borderRadius: '8px',
+                      background: 'rgba(15, 23, 42, 0.55)',
+                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                    }}
                   >
-                    Send
-                  </button>
-                </form>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.76rem' }}>
+                      <strong>Set a display name to chat</strong>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        style={{ padding: '0.15rem 0.45rem', fontSize: '0.7rem' }}
+                        onClick={() => setActiveTab('alerts')}
+                      >
+                        Or Claim Player →
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.45rem' }}>
+                      <input
+                        type="text"
+                        value={chatNameDraft}
+                        onChange={(e) => setChatNameDraft(e.target.value)}
+                        placeholder="Your name (e.g. Uncle Dave)"
+                        maxLength={40}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="submit"
+                        className="btn-amber btn-sm"
+                        disabled={!chatNameDraft.trim()}
+                      >
+                        Save Name
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handleSendLive} style={{ display: 'flex', gap: '0.45rem' }}>
+                    <input
+                      type="text"
+                      value={liveDraft}
+                      onChange={(e) => setLiveDraft(e.target.value)}
+                      placeholder="Comment on the live match..."
+                      maxLength={500}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="submit"
+                      className="btn-amber btn-sm"
+                      disabled={!liveDraft.trim() || sendingLive}
+                    >
+                      Send
+                    </button>
+                  </form>
+                )}
               </div>
             )}
 
             {/* TAB 2: 2-WAY DIRECT & GROUP CHATS */}
             {activeTab === 'messages' && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.55rem' }}>
-                {showNewChatComposer ? (
+                {!hasChatIdentity ? (
+                  <form
+                    onSubmit={handleSaveChatName}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      background: 'rgba(15, 23, 42, 0.55)',
+                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                    }}
+                  >
+                    <strong>Set a display name before messaging</strong>
+                    <p style={{ margin: 0, fontSize: '0.78rem', opacity: 0.8 }}>
+                      Enter your name so people know who is messaging them — or claim your player in
+                      the Alerts tab.
+                    </p>
+                    <div style={{ display: 'flex', gap: '0.45rem' }}>
+                      <input
+                        type="text"
+                        value={chatNameDraft}
+                        onChange={(e) => setChatNameDraft(e.target.value)}
+                        placeholder="Your name (e.g. Uncle Dave)"
+                        maxLength={40}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="submit"
+                        className="btn-primary btn-sm"
+                        disabled={!chatNameDraft.trim()}
+                      >
+                        Save Name
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      style={{ alignSelf: 'flex-start' }}
+                      onClick={() => setActiveTab('alerts')}
+                    >
+                      🏓 Claim My Player Instead →
+                    </button>
+                  </form>
+                ) : showNewChatComposer ? (
                   <form
                     onSubmit={handleCreateThread}
                     style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}

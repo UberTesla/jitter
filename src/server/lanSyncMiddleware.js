@@ -1204,13 +1204,19 @@ export function createLanSyncHandler({
         const player = Array.isArray(entry.players) ? entry.players.find((p) => p.id === pid) : null;
         if (player?.name) return player.name;
       }
+      const cleanFallback = String(fallbackName || '').trim();
+      if (cleanFallback && cleanFallback !== 'Device' && cleanFallback !== 'Connected Device') {
+        return cleanFallback;
+      }
       for (const meta of sseClients.values()) {
         if (meta.deviceId === devId) {
+          if (meta.deviceName && meta.deviceName !== 'Device' && meta.deviceName !== 'Connected Device') {
+            return meta.deviceName;
+          }
           if (meta.clientInfo?.deviceBrowser) return meta.clientInfo.deviceBrowser;
-          if (meta.deviceName) return meta.deviceName;
         }
       }
-      return String(fallbackName || '').trim() || 'Player';
+      return 'Player';
     };
 
     const getVisibleThreadsForDevice = (bucket, devId) =>
@@ -1796,13 +1802,7 @@ export function createLanSyncHandler({
         const dismissalLabel = dismissAt && resolved.countdownLabel ? resolved.countdownLabel : null;
         const isSticky = requestedSticky || Boolean(dismissAt);
 
-        const claimedPid = entry?.playerClaims?.[reqDeviceId] || null;
-        const claimedPlayerName = claimedPid
-          ? (entry?.players || []).find((p) => p.id === claimedPid)?.name || ''
-          : '';
-        const fromName = String(claimedPlayerName || body?.fromName || effectiveActorRole)
-          .trim()
-          .slice(0, 60);
+        const fromName = 'Host';
         const baseId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const basePayload = {
           id: baseId,
@@ -1816,8 +1816,8 @@ export function createLanSyncHandler({
           title: String(
             body?.title ||
               (requestedKind === 'announcement'
-                ? `📢 Announcement from ${fromName}`
-                : `💬 Message from ${fromName}`)
+                ? '📢 Announcement from Host'
+                : '💬 Alert from Host')
           )
             .trim()
             .slice(0, 80),

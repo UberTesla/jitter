@@ -50,6 +50,28 @@ export default function PresentationView({
   const showStageSessionIdPill = Boolean(
     tabId && (!embedded ? isFullscreen || !showRoleMenu : forceSessionIdPill)
   );
+  const [liveChatMessages, setLiveChatMessages] = useState(
+    () => tournamentStore.getSyncMeta()?.remoteSync?.chatLiveMessages || []
+  );
+  const splitChatEndRef = useRef(null);
+
+  useEffect(() => {
+    const syncChat = () => {
+      const msgs = tournamentStore.getSyncMeta()?.remoteSync?.chatLiveMessages;
+      setLiveChatMessages(Array.isArray(msgs) ? msgs : []);
+    };
+    syncChat();
+    const unsub = tournamentStore.subscribe(syncChat);
+    if (state?.tournamentId) {
+      tournamentStore.fetchTournamentChat(state.tournamentId);
+    }
+    return () => unsub?.();
+  }, [state?.tournamentId]);
+
+  useEffect(() => {
+    splitChatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [liveChatMessages.length]);
+
   const baseSlide = state.presentation?.activeSlide || 'title';
   const autoRotateOn = Boolean(state.presentation?.autoRotate) && !embedded;
   const rotateList = React.useMemo(
@@ -641,31 +663,92 @@ export default function PresentationView({
                   )}
                 </div>
 
-                <aside className="split-queue-col" aria-label="On Deck Match Queue">
+                <aside className="split-queue-col" aria-label="Live Tournament Chat">
                   <div className="queue-header">
                     <span className="queue-dot" aria-hidden="true" />
-                    <h2>ON DECK / NEXT UP</h2>
+                    <h2>🗣️ LIVE CHAT</h2>
                   </div>
 
-                  {stats.upNext.length === 0 ? (
+                  {/* Small On Deck Banner at the top of Split View Live Chat */}
+                  {stats.upNext.length > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.55rem',
+                        padding: '0.45rem 0.7rem',
+                        marginBottom: '0.65rem',
+                        borderRadius: '8px',
+                        background: 'rgba(56, 189, 248, 0.14)',
+                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                        fontSize: '0.92rem',
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
+                        ⏳ ON DECK
+                      </span>
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {stats.upNext
+                          .slice(0, 2)
+                          .map(
+                            (m) =>
+                              `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                m.player2Id,
+                                m.source2Label
+                              )}`
+                          )
+                          .join('  ·  ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {liveChatMessages.length === 0 ? (
                     <div className="queue-empty">
-                      <p>All currently ready matches are on the main table.</p>
+                      <p>Scan the QR code to join the live chat and cheer on the players!</p>
                     </div>
                   ) : (
-                    <div className="queue-list">
-                      {stats.upNext.map((m, idx) => (
-                        <div key={m.id} className={`queue-card ${idx === 0 ? 'is-next' : ''}`}>
-                          <div className="queue-card-top">
-                            <span className="queue-round">{m.roundLabel}</span>
-                            <span className="queue-tag">{idx === 0 ? 'NEXT TABLE' : m.label}</span>
+                    <div
+                      className="queue-list scroller"
+                      style={{ overflowY: 'auto', flex: 1, minHeight: 0, gap: '0.55rem' }}
+                    >
+                      {liveChatMessages.slice(-40).map((m) => (
+                        <div
+                          key={m.id}
+                          className="queue-card"
+                          style={{ padding: '0.6rem 0.8rem' }}
+                        >
+                          <div className="queue-card-top" style={{ marginBottom: '0.25rem' }}>
+                            <span className="queue-round" style={{ fontWeight: 800 }}>
+                              {m.fromName}
+                            </span>
+                            <span className="queue-tag">
+                              {m.sentAt
+                                ? new Date(m.sentAt).toLocaleTimeString([], {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })
+                                : ''}
+                            </span>
                           </div>
-                          <div className="queue-matchup">
-                            <span>{getPlayerLabel(m.player1Id, m.source1Label)}</span>
-                            <span className="queue-vs">vs</span>
-                            <span>{getPlayerLabel(m.player2Id, m.source2Label)}</span>
+                          <div
+                            style={{
+                              fontSize: '1.05rem',
+                              lineHeight: 1.35,
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {m.text}
                           </div>
                         </div>
                       ))}
+                      <div ref={splitChatEndRef} />
                     </div>
                   )}
 
