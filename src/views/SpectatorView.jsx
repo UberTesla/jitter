@@ -132,70 +132,74 @@ export default function SpectatorView({
           onNavigateMode={onNavigateMode}
           onOpenTournamentChooser={onOpenTournamentChooser}
           isFullscreen={isFullscreen}
-        >
-          <div className="spectator-slide-pills" role="group" aria-label="Local Slides">
-            {SLIDE_DEFINITIONS.map((slide) => (
-              <button
-                key={slide.id}
-                type="button"
-                className={`spectator-slide-btn ${
-                  activeLocalSlide === slide.id ? 'is-active' : ''
-                }`}
-                onClick={() => handleSelectSlide(slide.id)}
-                aria-pressed={activeLocalSlide === slide.id}
-              >
-                {slide.shortLabel}
-              </button>
-            ))}
+        />
+
+        <div className="spectator-submenu" role="toolbar" aria-label="Spectator Slide Controls">
+          <div className="spectator-submenu-left">
+            <div className="spectator-slide-pills" role="group" aria-label="Local Slides">
+              {SLIDE_DEFINITIONS.map((slide) => (
+                <button
+                  key={slide.id}
+                  type="button"
+                  className={`spectator-slide-btn ${
+                    activeLocalSlide === slide.id ? 'is-active' : ''
+                  }`}
+                  onClick={() => handleSelectSlide(slide.id)}
+                  aria-pressed={activeLocalSlide === slide.id}
+                >
+                  {slide.shortLabel}
+                </button>
+              ))}
+            </div>
+
+            <label
+              className={`spectator-sync-toggle ${syncPresentation ? 'is-synced' : ''}`}
+              title="When enabled, automatically follows the live presentation slide"
+            >
+              <input
+                type="checkbox"
+                checked={syncPresentation}
+                onChange={handleToggleSync}
+              />
+              <span>{syncPresentation ? '🔗 Sync Presentation' : '🔓 Sync Presentation'}</span>
+            </label>
+
+            {!canScoreRole &&
+              (hasPendingRequest ? (
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm spectator-pending-btn"
+                  disabled
+                >
+                  ⏳ Scorekeeper Requested
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-amber btn-sm"
+                  onClick={handleRequestScorekeeper}
+                >
+                  🙋 Request Scorekeeper
+                </button>
+              ))}
+
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
+            >
+              {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
+            </button>
           </div>
 
-          <label
-            className={`spectator-sync-toggle ${syncPresentation ? 'is-synced' : ''}`}
-            title="When enabled, automatically follows the live presentation slide"
-          >
-            <input
-              type="checkbox"
-              checked={syncPresentation}
-              onChange={handleToggleSync}
-            />
-            <span>{syncPresentation ? '🔗 Sync Presentation' : '🔓 Sync Presentation'}</span>
-          </label>
-
-          {!canScoreRole &&
-            (hasPendingRequest ? (
-              <button
-                type="button"
-                className="btn-secondary btn-sm spectator-pending-btn"
-                disabled
-              >
-                ⏳ Scorekeeper Requested
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-amber btn-sm"
-                onClick={handleRequestScorekeeper}
-              >
-                🙋 Request Scorekeeper
-              </button>
-            ))}
-
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
-          >
-            {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
-          </button>
-        </ViewNavBar>
-
-        <div className="spectator-right">
-          <span className="spectator-role-pill">
-            {effectiveRole === 'spectator'
-              ? '👁️ SPECTATOR'
-              : `${roleMeta.icon} ${roleMeta.label.toUpperCase()}`}
-          </span>
+          <div className="spectator-right">
+            <span className="spectator-role-pill">
+              {effectiveRole === 'spectator'
+                ? '👁️ SPECTATOR'
+                : `${roleMeta.icon} ${roleMeta.label.toUpperCase()}`}
+            </span>
+          </div>
         </div>
       </header>
 
