@@ -22,6 +22,7 @@ export default function Scoreboard({
   onCancelPointRemoval,
   onSwitchFirstServer,
   onStartMatch,
+  onCancelMatchStart,
   onChangeMatchTable,
   onCompleteMatch,
   onEditCompletedMatch,
@@ -331,6 +332,21 @@ export default function Scoreboard({
                 : 'P1'}
               )
             </button>
+            {match &&
+              isStarted &&
+              !match.completed &&
+              (match.score1 || 0) === 0 &&
+              (match.score2 || 0) === 0 &&
+              onCancelMatchStart && (
+                <button
+                  type="button"
+                  className="btn-danger-outline"
+                  onClick={() => onCancelMatchStart()}
+                  title="Return this match to Ready (unstarted) state and reset timer"
+                >
+                  ↩ Cancel Start
+                </button>
+              )}
           </div>
 
           {canStartMatch ? (

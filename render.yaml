@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: pingpong-scoreboard
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /__sync/ping
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: VAPID_SUBJECT
+        value: mailto:admin@demarees.com

@@ -397,6 +397,11 @@ export default function ControlView({
             tournamentStore.startMatch();
             if (activeMatch) showToast(`Match ${activeMatch.label} started!`);
           }}
+          onCancelMatchStart={() => {
+            cancelPendingRemoval(true);
+            tournamentStore.cancelMatchStart();
+            if (activeMatch) showToast(`Cancelled start for ${activeMatch.label} — back to Ready`);
+          }}
           onChangeMatchTable={(tableNum) => {
             if (!activeMatch) return;
             tournamentStore.setMatchTable(activeMatch.id, tableNum);

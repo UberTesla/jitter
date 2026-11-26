@@ -10,6 +10,8 @@ import {
 import { computeTournamentStats, formatTeamMembers } from '../engine/bracketGenerator.js';
 import { formatMatchTimer, isMatchNearingEnd } from '../engine/scoringEngine.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
+import { generateQrMatrix, qrMatrixToSvgPath } from '../engine/qrCode.js';
+import { resolveShareOrigin } from '../engine/lanAddress.js';
 import Scoreboard from '../components/Scoreboard.jsx';
 import BracketView from '../components/BracketView.jsx';
 import Ticker from '../components/Ticker.jsx';
@@ -56,6 +58,11 @@ export default function PresentationView({
   );
   const rotateSec = Math.max(5, Number(state.presentation?.autoRotateSec) || 18);
   const [rotateIdx, setRotateIdx] = useState(0);
+  // When operator explicitly selects a slide that is in rotateList, jump rotation to it immediately
+  useEffect(() => {
+    const idx = rotateList.indexOf(baseSlide);
+    if (idx !== -1) setRotateIdx(idx);
+  }, [baseSlide, rotateList]);
   useEffect(() => {
     if (!autoRotateOn || rotateList.length < 2) return undefined;
     const id = setInterval(() => setRotateIdx((n) => n + 1), rotateSec * 1000);
@@ -74,11 +81,31 @@ export default function PresentationView({
           (activeMatchForSlide.score1 || 0) === 0 &&
           (activeMatchForSlide.score2 || 0) === 0))
   );
+  // Allow operator to manually switch to any slide (like Bracket or Split) even while between matches
+  const [manualBetweenOverride, setManualBetweenOverride] = useState(false);
+  const prevBaseSlideRef = useRef(baseSlide);
+  const prevBetweenRef = useRef(isBetweenMatches);
+  useEffect(() => {
+    if (isBetweenMatches && !prevBetweenRef.current) {
+      // Freshly entered between-matches window -> engage auto-spotlight
+      setManualBetweenOverride(false);
+    } else if (!isBetweenMatches) {
+      setManualBetweenOverride(false);
+    } else if (baseSlide !== prevBaseSlideRef.current) {
+      // Operator explicitly clicked a slide while between matches -> honor it!
+      setManualBetweenOverride(true);
+    }
+    prevBaseSlideRef.current = baseSlide;
+    prevBetweenRef.current = isBetweenMatches;
+  }, [baseSlide, isBetweenMatches]);
+
   const forceSpotlightBetween = Boolean(
     state.presentation?.spotlightBetweenMatches &&
       isBetweenMatches &&
+      !manualBetweenOverride &&
       !embedded &&
-      baseSlide !== 'title'
+      baseSlide !== 'title' &&
+      baseSlide !== 'bracket'
   );
   const targetSlide = forceSpotlightBetween
     ? 'spotlight'
@@ -236,6 +263,60 @@ export default function PresentationView({
       ? candidateBanner
       : null;
 
+  // Compact Join QR Code in upper-right of Presenter stage
+  const [qrServerInfo, setQrServerInfo] = useState(
+    () => tournamentStore.getSyncMeta()?.remoteSync?.serverInfo || null
+  );
+  useEffect(() => {
+    if (embedded || qrServerInfo?.lanAddresses?.length > 0) return undefined;
+    let active = true;
+    fetch('/__server-info', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (active && data && typeof data === 'object') setQrServerInfo(data);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [embedded, qrServerInfo]);
+
+  const joinQrData = React.useMemo(() => {
+    if (embedded || !state.joinCode) return null;
+    try {
+      const meta = tournamentStore.getSyncMeta()?.remoteSync;
+      const origin = resolveShareOrigin(meta?.serverInfo || qrServerInfo, meta?.customServerUrl);
+      if (!origin) return null;
+      const url = `${origin}/?join=${encodeURIComponent(state.joinCode)}`;
+      const { size, modules } = generateQrMatrix(url);
+      return { size, path: qrMatrixToSvgPath(modules), url };
+    } catch {
+      return null;
+    }
+  }, [embedded, state.joinCode, qrServerInfo]);
+
+  const joinQrNode = joinQrData ? (
+    <div className="pres-join-qr-inline" aria-label="Scan QR code to join tournament">
+      <span className="pres-join-qr-label">JOIN</span>
+      <div className="pres-join-qr-box">
+        <svg
+          viewBox={`-2 -2 ${joinQrData.size + 4} ${joinQrData.size + 4}`}
+          shapeRendering="crispEdges"
+          aria-hidden="true"
+        >
+          <rect
+            x="-2"
+            y="-2"
+            width={joinQrData.size + 4}
+            height={joinQrData.size + 4}
+            fill="#ffffff"
+          />
+          <path d={joinQrData.path} fill="#0f172a" />
+        </svg>
+      </div>
+    </div>
+  ) : null;
+
   const onDeckBannerNode = showOnDeckBanner ? (
     <div
       className={`pres-ondeck-banner ${renderedSlide === 'arena'
@@ -265,12 +346,21 @@ export default function PresentationView({
     </div>
   ) : null;
 
+  const handleStageClick = (e) => {
+    if (embedded) return;
+    if (e.target?.closest?.('button, a, input, select, textarea, [role="button"], dialog')) {
+      return;
+    }
+    toggleFullscreen();
+  };
+
   const stageContent = (
     <div
       ref={viewportHostRef}
       className={`presentation-viewport ${embedded || (showRoleMenu && !isFullscreen) ? 'has-role-topbar' : ''
         }`}
       data-theme={activeTheme}
+      onClick={handleStageClick}
     >
       <div
         className={`presentation-stage-scaler slide-mode-${renderedSlide} ${stageMetrics.isPortrait ? 'is-portrait-stage' : ''
@@ -319,6 +409,7 @@ export default function PresentationView({
                   {tabId}
                 </span>
               )}
+              {joinQrNode}
             </div>
           </header>
         ) : (
@@ -346,6 +437,7 @@ export default function PresentationView({
                   {tabId}
                 </span>
               )}
+              {joinQrNode}
             </div>
           </header>
         )}

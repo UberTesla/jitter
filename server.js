@@ -33,7 +33,7 @@ const MIME_TYPES = {
 };
 
 const syncHandler = createLanSyncHandler({
-  rootDir: __dirname,
+  rootDir: process.env.DATA_DIR || __dirname,
   getPort: () => PORT,
   appMeta: pkg,
 });
@@ -57,6 +57,11 @@ const server = http.createServer((req, res) => {
 
     const ext = path.extname(filePath).toLowerCase();
     res.setHeader('Content-Type', MIME_TYPES[ext] || 'application/octet-stream');
+    if (safePath === '/sw.js' || safePath === '/manifest.json' || ext === '.html') {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (safePath.startsWith('/assets/')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
     fs.createReadStream(filePath).pipe(res);
   }).catch((err) => {
     res.statusCode = 500;

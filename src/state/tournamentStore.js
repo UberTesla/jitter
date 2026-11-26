@@ -1383,6 +1383,16 @@ export class TournamentStore {
       this.eventSource = es;
 
       es.addEventListener('CONNECTED', (ev) => {
+        if (this.keepalivePingTimer) clearInterval(this.keepalivePingTimer);
+        // Periodic lightweight HTTP ping (every 4 min) keeps Render Free awake during active tournaments
+        this.keepalivePingTimer = setInterval(() => {
+          if (typeof fetch === 'function') {
+            fetch(`${baseUrl}/__sync/ping`, { cache: 'no-store' }).catch(() => {});
+          }
+        }, 4 * 60 * 1000);
+        if (typeof this.keepalivePingTimer?.unref === 'function') {
+          this.keepalivePingTimer.unref();
+        }
         try {
           const data = JSON.parse(ev.data || '{}');
           this.updateServerClockOffset(data.serverTime);
@@ -4854,6 +4864,31 @@ export class TournamentStore {
               tableNumber: resolvedTable,
               started: true,
               startedAt: m.startedAt || this.getServerNow(),
+            },
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  cancelMatchStart(matchId = null) {
+    const targetId = matchId || this.state.activeMatchId;
+    return this.commit(
+      (s) => {
+        const m = s.matches?.[targetId];
+        if (!m || m.isBye || m.completed || !m.started) return s;
+        if ((m.score1 || 0) > 0 || (m.score2 || 0) > 0) return s;
+        return {
+          ...s,
+          matches: {
+            ...s.matches,
+            [targetId]: {
+              ...m,
+              started: false,
+              startedAt: null,
+              winnerReachedAt: null,
+              timerOffsetMs: 0,
             },
           },
         };

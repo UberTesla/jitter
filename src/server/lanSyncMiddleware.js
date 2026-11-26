@@ -56,8 +56,21 @@ function cleanHostnameLabel(rawHost) {
   return cleaned;
 }
 
+function getRequestClientIp(req) {
+  const xff = req?.headers?.['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    const first = xff.split(',')[0].trim();
+    if (first) return normalizeRemoteIp(first);
+  }
+  const realIp = req?.headers?.['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return normalizeRemoteIp(realIp.trim());
+  }
+  return normalizeRemoteIp(req?.socket?.remoteAddress);
+}
+
 async function resolveClientDeviceName(req, serverInfo) {
-  const clientIp = normalizeRemoteIp(req?.socket?.remoteAddress);
+  const clientIp = getRequestClientIp(req);
   const localLanIps = new Set((serverInfo?.lanAddresses || []).map((a) => a.address));
   const isLocalClient =
     !clientIp ||
@@ -176,7 +189,7 @@ export function collectLocalServerInfo(port = 5173, appMeta = {}) {
 }
 
 function getDisplayIpForRequest(req, serverInfo) {
-  const ip = normalizeRemoteIp(req?.socket?.remoteAddress);
+  const ip = getRequestClientIp(req);
   const primaryLanIp = serverInfo?.lanAddresses?.[0]?.address || '127.0.0.1';
   if (!ip || ip === '127.0.0.1' || ip === '::1') {
     return primaryLanIp;
@@ -1061,6 +1074,11 @@ export function createLanSyncHandler({
         hosts: getHostsList(),
         hostDevice: store.hostDevice,
       });
+    }
+
+    // 1b. Lightweight healthcheck & Render Free keepalive ping
+    if (pathname === '/__sync/ping' && req.method === 'GET') {
+      return sendJson(res, 200, { ok: true, serverTime: Date.now() });
     }
 
     // 2. Real-Time Server-Sent Events Stream (tracks live connected clients!)
