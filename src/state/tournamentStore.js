@@ -502,6 +502,7 @@ export const TICKER_ITEM_DEFS = [
   { id: 'recent', label: 'Recent Results' },
   { id: 'upnext', label: 'On Deck / Up Next' },
   { id: 'stats', label: 'Tournament Stats' },
+  { id: 'chat', label: 'Live Chat' },
 ];
 
 /** Resolves ticker mode: 'static' | 'rotate' | 'scroll' (falls back to legacy boolean flags). */

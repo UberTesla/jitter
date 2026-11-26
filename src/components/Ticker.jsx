@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import MiniBracket from './MiniBracket.jsx';
 import TournamentStatsPanel from './TournamentStatsPanel.jsx';
 import { computeTournamentStats } from '../engine/bracketGenerator.js';
-import { TICKER_ITEM_DEFS, normalizeTickerItems, resolveTickerMode } from '../state/tournamentStore.js';
+import {
+  TICKER_ITEM_DEFS,
+  normalizeTickerItems,
+  resolveTickerMode,
+  tournamentStore,
+} from '../state/tournamentStore.js';
 
 /**
  * Presentation Ticker (replaces the fixed "live mini bracket").
@@ -19,6 +24,24 @@ export default function Ticker({
   const autoRotate = mode === 'rotate';
   const rotateSec = Math.max(3, Number(state.ui?.tickerRotateSec) || 10);
   const [idx, setIdx] = useState(0);
+  const [chatMessages, setChatMessages] = useState(
+    () => tournamentStore.getSyncMeta()?.remoteSync?.chatLiveMessages || []
+  );
+
+  const includesChat = items.includes('chat');
+  useEffect(() => {
+    if (!includesChat) return undefined;
+    const syncChat = () => {
+      const msgs = tournamentStore.getSyncMeta()?.remoteSync?.chatLiveMessages;
+      setChatMessages(Array.isArray(msgs) ? msgs : []);
+    };
+    syncChat();
+    const unsub = tournamentStore.subscribe(syncChat);
+    if (state?.tournamentId) {
+      tournamentStore.fetchTournamentChat(state.tournamentId);
+    }
+    return () => unsub?.();
+  }, [includesChat, state?.tournamentId]);
 
   useEffect(() => {
     if (!autoRotate || items.length < 2) return undefined;
@@ -92,6 +115,49 @@ export default function Ticker({
           extras={full}
           leaderCount={full ? 5 : 3}
         />
+      );
+    } else if (id === 'chat') {
+      const recentChat = chatMessages.slice(-6);
+      body = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%' }}>
+          {stats.upNext.length > 0 && (
+            <div
+              className="ticker-chip"
+              style={{
+                borderColor: 'rgba(56, 189, 248, 0.45)',
+                background: 'rgba(56, 189, 248, 0.14)',
+              }}
+            >
+              <span className="ticker-code" style={{ color: '#38bdf8' }}>
+                ⏳ ON DECK
+              </span>
+              <span>
+                {stats.upNext
+                  .slice(0, 2)
+                  .map(
+                    (m) =>
+                      `${nameOf(m.player1Id, m.source1Label)} vs ${nameOf(
+                        m.player2Id,
+                        m.source2Label
+                      )}`
+                  )
+                  .join(' · ')}
+              </span>
+            </div>
+          )}
+          {recentChat.length === 0 ? (
+            <span className="ticker-empty">Live chat comments will appear here!</span>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+              {recentChat.map((m) => (
+                <div key={m.id} className="ticker-chip">
+                  <strong className="ticker-winner">{m.fromName}:</strong>
+                  <span>{m.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       );
     }
     return (

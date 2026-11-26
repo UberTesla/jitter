@@ -898,6 +898,100 @@ export default function PresentationView({
                   variant="full"
                   extras={false}
                 />
+
+                {/* Live Chat Feed on Spotlight (with compact On Deck banner at top) */}
+                <div
+                  style={{
+                    marginTop: '0.75rem',
+                    paddingTop: '0.65rem',
+                    borderTop: '1px solid rgba(148, 163, 184, 0.2)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.45rem',
+                    minHeight: 0,
+                    flex: 1,
+                  }}
+                >
+                  <div className="ssp-panel-header" style={{ marginBottom: 0 }}>
+                    <div className="ssp-panel-title-wrap">
+                      <span className="ssp-panel-dot" aria-hidden="true" />
+                      <h3>🗣️ LIVE CHAT</h3>
+                    </div>
+                    <span className="ssp-panel-badge">{liveChatMessages.length} msgs</span>
+                  </div>
+
+                  {stats.upNext.length > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        padding: '0.32rem 0.55rem',
+                        borderRadius: '7px',
+                        background: 'rgba(56, 189, 248, 0.14)',
+                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                        fontSize: '0.84rem',
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
+                        ⏳ ON DECK
+                      </span>
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {stats.upNext
+                          .slice(0, 2)
+                          .map(
+                            (m) =>
+                              `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                m.player2Id,
+                                m.source2Label
+                              )}`
+                          )
+                          .join('  ·  ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {liveChatMessages.length === 0 ? (
+                    <p style={{ margin: '0.2rem 0', opacity: 0.72, fontSize: '0.9rem' }}>
+                      Scan the QR code to join the live chat!
+                    </p>
+                  ) : (
+                    <div
+                      className="scroller"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.35rem',
+                        overflowY: 'auto',
+                        maxHeight: '210px',
+                      }}
+                    >
+                      {liveChatMessages.slice(-8).map((m) => (
+                        <div
+                          key={m.id}
+                          style={{
+                            padding: '0.38rem 0.6rem',
+                            borderRadius: '7px',
+                            background: 'rgba(15, 23, 42, 0.5)',
+                            border: '1px solid rgba(148, 163, 184, 0.18)',
+                            fontSize: '0.9rem',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          <strong style={{ color: '#fbbf24' }}>{m.fromName}:</strong>{' '}
+                          <span>{m.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </aside>
             </div>
           )}
