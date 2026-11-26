@@ -6,6 +6,7 @@ import {
   tournamentStore,
 } from '../state/tournamentStore.js';
 import { computeTournamentStats } from '../engine/bracketGenerator.js';
+import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
 
@@ -577,72 +578,109 @@ export default function PlayerInboxDrawer({
                 💬 {chatHeaderName}
               </h2>
 
-              {/* Compact Live Mini Scoreboard next to user's name */}
+              {/* Compact Live Mini Scoreboard next to user's name (dead-center score + yellow serve dot) */}
               {(() => {
                 const am = state?.activeMatchId ? state.matches?.[state.activeMatchId] : null;
                 if (!am || am.isBye) return null;
                 const p1 = getPlayerLabel(am.player1Id, am.source1Label);
                 const p2 = getPlayerLabel(am.player2Id, am.source2Label);
                 const isLive = Boolean(am.started && !am.completed);
+                const evalM = evaluateMatchState(am, state?.rules);
+                const serverSlot = !am.completed ? evalM.activeServer : null;
+                const serveDot = (
+                  <span
+                    aria-label="Serving"
+                    title="Serving"
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: '#facc15',
+                      boxShadow: '0 0 6px rgba(250, 204, 21, 0.85)',
+                      flexShrink: 0,
+                    }}
+                  />
+                );
                 return (
                   <div
                     aria-label="Live Match Scoreboard"
                     title={`${am.roundLabel} (${am.label}): ${p1} ${am.score1 ?? 0}–${am.score2 ?? 0} ${p2}`}
                     style={{
-                      display: 'flex',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto 1fr',
                       alignItems: 'center',
-                      gap: '0.32rem',
-                      padding: '0.2rem 0.48rem',
+                      gap: '0.35rem',
+                      padding: '0.22rem 0.5rem',
                       borderRadius: '7px',
-                      background: 'rgba(15, 23, 42, 0.72)',
+                      background: 'rgba(15, 23, 42, 0.78)',
                       border: `1px solid ${
                         isLive ? 'rgba(52, 211, 153, 0.45)' : 'rgba(148, 163, 184, 0.28)'
                       }`,
                       fontSize: '0.73rem',
                       minWidth: 0,
                       flex: 1,
-                      justifyContent: 'center',
                     }}
                   >
-                    <span
+                    <div
                       style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        background: isLive ? '#34d399' : '#f59e0b',
-                        flexShrink: 0,
-                      }}
-                      aria-hidden="true"
-                    />
-                    <span
-                      style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        maxWidth: '72px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: '0.28rem',
+                        minWidth: 0,
                       }}
                     >
-                      {p1}
-                    </span>
+                      {serverSlot === 1 && serveDot}
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: serverSlot === 1 ? 700 : 500,
+                        }}
+                      >
+                        {p1}
+                      </span>
+                    </div>
+
                     <strong
                       style={{
                         color: '#fbbf24',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                        fontSize: '0.94rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.03em',
+                        lineHeight: 1,
                         fontVariantNumeric: 'tabular-nums',
+                        textAlign: 'center',
+                        padding: '0 0.15rem',
                         flexShrink: 0,
                       }}
                     >
                       {am.score1 ?? 0}–{am.score2 ?? 0}
                     </strong>
-                    <span
+
+                    <div
                       style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        maxWidth: '72px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-start',
+                        gap: '0.28rem',
+                        minWidth: 0,
                       }}
                     >
-                      {p2}
-                    </span>
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: serverSlot === 2 ? 700 : 500,
+                        }}
+                      >
+                        {p2}
+                      </span>
+                      {serverSlot === 2 && serveDot}
+                    </div>
                   </div>
                 );
               })()}
