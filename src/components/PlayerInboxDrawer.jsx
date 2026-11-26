@@ -87,10 +87,22 @@ export default function PlayerInboxDrawer({
   const canModerateChat = (ROLE_LEVEL[myRole] ?? 0) >= ROLE_LEVEL.moderator;
 
   const [inboxNowMs, setInboxNowMs] = useState(() => tournamentStore.getServerNow());
-  const latestAlert = inbox[0] || null;
+  const stickyBanner = state?.presentation?.activeBanner || null;
+  const activeStickyAnnouncement =
+    stickyBanner &&
+    (!stickyBanner.dismissAt || Number(stickyBanner.dismissAt) > inboxNowMs)
+      ? { ...stickyBanner, kind: 'announcement' }
+      : null;
+  const latestInboxAnnouncement =
+    inbox.find((m) => m.kind === 'announcement') || null;
+  const latestAnnouncement = activeStickyAnnouncement || latestInboxAnnouncement || null;
+  const latestAlert =
+    inbox.find((m) => m.kind !== 'announcement') || null;
+
   const hasLiveInboxCountdown =
     open &&
-    (latestAlert?.liveTemplate?.includes('[[CD:') ||
+    (latestAnnouncement?.liveTemplate?.includes('[[CD:') ||
+      latestAlert?.liveTemplate?.includes('[[CD:') ||
       (activeTab === 'live' && liveMessages.some((m) => m.liveTemplate?.includes('[[CD:'))) ||
       (activeTab === 'alerts' && inbox.some((m) => m.liveTemplate?.includes('[[CD:'))));
 
@@ -149,13 +161,80 @@ export default function PlayerInboxDrawer({
   const chatHeaderName =
     claimedPlayerObj?.name || (hasCustomChatName ? remoteSync.deviceName : 'Tournament Chat');
 
-  const upNextMatches = useMemo(() => {
+  const tourneyStats = useMemo(() => {
     try {
-      return computeTournamentStats(state)?.upNext || [];
+      return computeTournamentStats(state);
     } catch {
-      return [];
+      return { upNext: [], recentCompleted: [], completedCount: 0, totalMatches: 0 };
     }
   }, [state]);
+  const upNextMatches = tourneyStats?.upNext || [];
+
+  const myPlayerStatus = useMemo(() => {
+    if (!claimedPlayerObj || !state?.matches) return null;
+    const pid = claimedPlayerObj.id;
+    const allMatches = Object.values(state.matches || {});
+    if (state.championId && state.championId === pid) {
+      return {
+        tone: 'champion',
+        headline: '🏆 TOURNAMENT CHAMPION!',
+        detail: `Congrats ${claimedPlayerObj.name} — you won the tournament!`,
+      };
+    }
+    const playingNow = allMatches.find(
+      (m) =>
+        m &&
+        !m.isBye &&
+        !m.completed &&
+        m.started &&
+        (m.player1Id === pid || m.player2Id === pid)
+    );
+    if (playingNow) {
+      const oppId = playingNow.player1Id === pid ? playingNow.player2Id : playingNow.player1Id;
+      const oppName = players.find((p) => p.id === oppId)?.name || 'Opponent';
+      return {
+        tone: 'playing',
+        headline: '🏓 YOU ARE UP NOW!',
+        detail: `${playingNow.roundLabel} (${playingNow.label}) vs ${oppName}${
+          playingNow.tableNumber ? ` · Table ${playingNow.tableNumber}` : ''
+        }`,
+      };
+    }
+    const queueIdx = upNextMatches.findIndex(
+      (m) => m && (m.player1Id === pid || m.player2Id === pid)
+    );
+    if (queueIdx !== -1) {
+      const m = upNextMatches[queueIdx];
+      const oppId = m.player1Id === pid ? m.player2Id : m.player1Id;
+      const oppFallback = m.player1Id === pid ? m.source2Label : m.source1Label;
+      const oppName =
+        (oppId ? players.find((p) => p.id === oppId)?.name : null) || oppFallback || 'TBD';
+      return {
+        tone: 'ondeck',
+        headline: queueIdx === 0 ? '⏳ YOU ARE UP NEXT!' : `⏳ YOU ARE #${queueIdx + 1} IN QUEUE`,
+        detail: `${m.roundLabel} (${m.label}) vs ${oppName}`,
+      };
+    }
+    const futureMatch = allMatches.find(
+      (m) =>
+        m &&
+        !m.isBye &&
+        !m.completed &&
+        (m.player1Id === pid || m.player2Id === pid)
+    );
+    if (futureMatch) {
+      return {
+        tone: 'waiting',
+        headline: '🗓️ WAITING FOR NEXT ROUND',
+        detail: `${futureMatch.roundLabel} (${futureMatch.label}) — opponent TBD`,
+      };
+    }
+    return {
+      tone: 'done',
+      headline: '✅ TOURNAMENT RUN COMPLETE',
+      detail: 'Thanks for playing — cheer on the remaining matches in Live Chat!',
+    };
+  }, [claimedPlayerObj, state?.matches, state?.championId, upNextMatches, players]);
 
   const getPlayerLabel = (pid, fallback) => {
     if (!pid) return fallback || 'TBD';
@@ -418,7 +497,7 @@ export default function PlayerInboxDrawer({
               </button>
             </div>
 
-            {/* 3-Tab Switcher: Live Chat | Direct & Groups | Alerts & Player */}
+            {/* 4-Tab Switcher: Live Chat | Direct & Groups | On Deck / Roster | Alerts & Player */}
             <div className="segmented-control compact" style={{ marginBottom: '0.28rem' }}>
               <button
                 type="button"
@@ -428,7 +507,7 @@ export default function PlayerInboxDrawer({
                   setChatError('');
                 }}
               >
-                🗣️ Live Chat{unreadLive > 0 ? ` (${unreadLive})` : ''}
+                🗣️ Chat{unreadLive > 0 ? ` (${unreadLive})` : ''}
               </button>
               <button
                 type="button"
@@ -438,7 +517,18 @@ export default function PlayerInboxDrawer({
                   setChatError('');
                 }}
               >
-                💬 Direct/Group{unreadThreadsTotal > 0 ? ` (${unreadThreadsTotal})` : ''}
+                💬 Direct{unreadThreadsTotal > 0 ? ` (${unreadThreadsTotal})` : ''}
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'ondeck' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('ondeck');
+                  setChatError('');
+                  trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
+                }}
+              >
+                ⏳ On Deck
               </button>
               <button
                 type="button"
@@ -452,12 +542,12 @@ export default function PlayerInboxDrawer({
               </button>
             </div>
 
-            {/* Mini Last-Alert Banner directly under chat type selection */}
-            {latestAlert && (
+            {/* Mini Announcement Banner (includes active sticky announcements for newly joined users) */}
+            {latestAnnouncement && (
               <button
                 type="button"
                 onClick={() => setActiveTab('alerts')}
-                title="Click to view all alerts"
+                title="Click to view announcements & alerts"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -466,10 +556,10 @@ export default function PlayerInboxDrawer({
                   width: '100%',
                   textAlign: 'left',
                   padding: '0.26rem 0.52rem',
-                  marginBottom: '0.28rem',
+                  marginBottom: '0.26rem',
                   borderRadius: '7px',
-                  border: '1px solid rgba(245, 158, 11, 0.45)',
-                  background: 'rgba(245, 158, 11, 0.14)',
+                  border: '1px solid rgba(245, 158, 11, 0.48)',
+                  background: 'rgba(245, 158, 11, 0.15)',
                   color: 'inherit',
                   fontSize: '0.75rem',
                   cursor: 'pointer',
@@ -483,7 +573,48 @@ export default function PlayerInboxDrawer({
                     flex: 1,
                   }}
                 >
-                  <strong>{latestAlert.title || '📢 Alert from Host'}:</strong>{' '}
+                  <strong>{latestAnnouncement.title || '📢 Announcement from Host'}:</strong>{' '}
+                  {renderLiveMessageText(latestAnnouncement, inboxNowMs)}
+                </span>
+                <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
+                  {latestAnnouncement.sticky ? '📌 ' : ''}
+                  {formatMsgTime(latestAnnouncement.sentAt)}
+                </span>
+              </button>
+            )}
+
+            {/* Mini Alert Banner directly under the Announcement Banner (personal/system alerts) */}
+            {latestAlert && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('alerts')}
+                title="Click to view your alerts"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.45rem',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '0.26rem 0.52rem',
+                  marginBottom: '0.26rem',
+                  borderRadius: '7px',
+                  border: '1px solid rgba(244, 63, 94, 0.45)',
+                  background: 'rgba(244, 63, 94, 0.14)',
+                  color: 'inherit',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                  }}
+                >
+                  <strong>{latestAlert.title || '🔔 Alert'}:</strong>{' '}
                   {renderLiveMessageText(latestAlert, inboxNowMs)}
                 </span>
                 <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
@@ -902,7 +1033,199 @@ export default function PlayerInboxDrawer({
               </div>
             )}
 
-            {/* TAB 3: ALERTS INBOX & PLAYER CLAIM */}
+            {/* TAB 3: FULL ON DECK QUEUE & PLAYER ROSTER */}
+            {activeTab === 'ondeck' && (
+              <div
+                className="scroller"
+                style={{
+                  overflowY: 'auto',
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                  paddingRight: '0.1rem',
+                }}
+              >
+                {/* Personalized "When You Are Up" Status Card */}
+                {myPlayerStatus ? (
+                  <div
+                    style={{
+                      padding: '0.6rem 0.75rem',
+                      borderRadius: '9px',
+                      border: `1px solid ${
+                        myPlayerStatus.tone === 'playing' || myPlayerStatus.tone === 'champion'
+                          ? 'rgba(16, 185, 129, 0.55)'
+                          : myPlayerStatus.tone === 'ondeck'
+                          ? 'rgba(56, 189, 248, 0.55)'
+                          : 'rgba(148, 163, 184, 0.3)'
+                      }`,
+                      background:
+                        myPlayerStatus.tone === 'playing' || myPlayerStatus.tone === 'champion'
+                          ? 'rgba(16, 185, 129, 0.16)'
+                          : myPlayerStatus.tone === 'ondeck'
+                          ? 'rgba(56, 189, 248, 0.15)'
+                          : 'rgba(15, 23, 42, 0.55)',
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.84rem' }}>
+                      {myPlayerStatus.headline}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.9, marginTop: '0.18rem' }}>
+                      {myPlayerStatus.detail}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.5rem',
+                      padding: '0.5rem 0.65rem',
+                      borderRadius: '8px',
+                      background: 'rgba(15, 23, 42, 0.5)',
+                      border: '1px solid rgba(148, 163, 184, 0.25)',
+                      fontSize: '0.78rem',
+                    }}
+                  >
+                    <span>Claim your player to see when you&apos;re up next!</span>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      onClick={() => setActiveTab('alerts')}
+                    >
+                      🏓 Claim
+                    </button>
+                  </div>
+                )}
+
+                {/* Full On Deck Queue */}
+                <section className="inbox-section" style={{ margin: 0 }} aria-label="Full On Deck Queue">
+                  <div className="inbox-section-head">
+                    <strong>⏳ Full On Deck Queue ({upNextMatches.length})</strong>
+                  </div>
+                  {upNextMatches.length === 0 ? (
+                    <p className="inbox-empty">No upcoming matches queued right now.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      {upNextMatches.map((m, idx) => {
+                        const isMine = Boolean(
+                          claimedPlayerObj &&
+                            (m.player1Id === claimedPlayerObj.id ||
+                              m.player2Id === claimedPlayerObj.id)
+                        );
+                        return (
+                          <div
+                            key={m.id}
+                            className="inbox-msg-card"
+                            style={{
+                              padding: '0.42rem 0.6rem',
+                              borderColor: isMine
+                                ? 'rgba(56, 189, 248, 0.65)'
+                                : idx === 0
+                                ? 'rgba(245, 158, 11, 0.45)'
+                                : undefined,
+                              background: isMine ? 'rgba(56, 189, 248, 0.14)' : undefined,
+                            }}
+                          >
+                            <div className="inbox-msg-top">
+                              <strong style={{ fontSize: '0.74rem' }}>
+                                {idx === 0 ? 'NEXT UP' : `#${idx + 1}`} · {m.roundLabel} ({m.label})
+                              </strong>
+                              {isMine && (
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#38bdf8' }}>
+                                  ★ YOU
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: '0.15rem' }}>
+                              {getPlayerLabel(m.player1Id, m.source1Label)}{' '}
+                              <span style={{ opacity: 0.6 }}>vs</span>{' '}
+                              {getPlayerLabel(m.player2Id, m.source2Label)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                {/* Full Player Roster */}
+                <section className="inbox-section" style={{ margin: 0 }} aria-label="Full Player Roster">
+                  <div className="inbox-section-head">
+                    <strong>🏓 Roster ({players.length})</strong>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.28rem' }}>
+                    {players.map((p) => {
+                      const isChamp = state?.championId === p.id;
+                      const allMs = Object.values(state?.matches || {});
+                      const isPlaying = allMs.some(
+                        (m) =>
+                          m &&
+                          !m.isBye &&
+                          !m.completed &&
+                          m.started &&
+                          (m.player1Id === p.id || m.player2Id === p.id)
+                      );
+                      const isQueued = upNextMatches.some(
+                        (m) => m.player1Id === p.id || m.player2Id === p.id
+                      );
+                      const isAlive = allMs.some(
+                        (m) =>
+                          m &&
+                          !m.isBye &&
+                          !m.completed &&
+                          (m.player1Id === p.id || m.player2Id === p.id)
+                      );
+                      const statusLabel = isChamp
+                        ? '🏆 Champ'
+                        : isPlaying
+                        ? '🏓 Playing'
+                        : isQueued
+                        ? '⏳ On Deck'
+                        : isAlive
+                        ? 'Active'
+                        : 'Done';
+                      const isMe = claimedPlayerObj?.id === p.id;
+                      return (
+                        <div
+                          key={p.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.32rem 0.55rem',
+                            borderRadius: '6px',
+                            background: isMe
+                              ? 'rgba(56, 189, 248, 0.14)'
+                              : 'rgba(15, 23, 42, 0.42)',
+                            border: `1px solid ${
+                              isMe ? 'rgba(56, 189, 248, 0.45)' : 'rgba(148, 163, 184, 0.14)'
+                            }`,
+                            fontSize: '0.8rem',
+                          }}
+                        >
+                          <span>
+                            <strong style={{ opacity: 0.65, marginRight: '0.35rem' }}>
+                              #{p.seed}
+                            </strong>
+                            <strong>{p.name}</strong>
+                            {isMe && (
+                              <span style={{ marginLeft: '0.35rem', fontSize: '0.7rem', color: '#38bdf8' }}>
+                                (You)
+                              </span>
+                            )}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{statusLabel}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* TAB 4: ALERTS INBOX & PLAYER CLAIM */}
             {activeTab === 'alerts' && (
               <div className="scroller" style={{ overflowY: 'auto', flex: 1 }}>
                 {/* Player Claim Section */}

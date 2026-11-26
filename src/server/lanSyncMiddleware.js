@@ -1814,7 +1814,7 @@ export function createLanSyncHandler({
           return sendJson(res, 200, { ok: true, cleared: true });
         }
 
-        const requestedKind = body?.kind === 'announcement' || isBroadcast ? 'announcement' : 'message';
+        const requestedKind = body?.kind === 'announcement' || isBroadcast ? 'announcement' : 'alert';
         const rawMessage = String(body?.message || '').trim().slice(0, 300);
         if (!isBroadcast && !targetTabId && !targetDeviceId) {
           return sendJson(res, 400, { error: 'targetTabId, targetDeviceId, or broadcast is required' });
@@ -1852,7 +1852,7 @@ export function createLanSyncHandler({
             body?.title ||
               (requestedKind === 'announcement'
                 ? '📢 Announcement from Host'
-                : '💬 Alert from Host')
+                : '🔔 Alert from Host')
           )
             .trim()
             .slice(0, 80),
@@ -2224,7 +2224,7 @@ export function createLanSyncHandler({
               if (uniqueDevs.length === 0) return;
               const payload = {
                 id: `${tag}-${Date.now()}`,
-                kind: 'announcement',
+                kind: 'alert',
                 autoDismissMs: 10000,
                 title,
                 message,
