@@ -4,6 +4,7 @@ import {
   generateAutoTeamName,
   generateRandomTeamName,
   generateDemoPlayerName,
+  generateRandomDemoPlayerName,
   isNeutralPlayerName,
   isNeutralTeamName,
   MIN_PLAYERS,
@@ -261,6 +262,9 @@ export default function PlayerSetupModal({
   const [draftApplyMode, setDraftApplyMode] = useState('preserve'); // 'preserve' | 'rebuild'
   const [rosterSearch, setRosterSearch] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [suggestedDemoName, setSuggestedDemoName] = useState(() =>
+    state.demoMode ? generateRandomDemoPlayerName(initData.roster.map((p) => p.name)) : ''
+  );
   const newPlayerInputRef = useRef(null);
 
   // Snapshot live state only on closed -> open transition
@@ -291,6 +295,9 @@ export default function PlayerSetupModal({
       setDraftApplyMode('preserve');
       setRosterSearch('');
       setNewPlayerName('');
+      setSuggestedDemoName(
+        state.demoMode ? generateRandomDemoPlayerName(roster.map((p) => p.name)) : ''
+      );
     }
     wasOpenRef.current = open;
   }, [open, state]);
@@ -448,19 +455,24 @@ export default function PlayerSetupModal({
     });
   };
 
+  const nextDefaultPlayerName = state.demoMode
+    ? suggestedDemoName || generateRandomDemoPlayerName(draftRoster.map((p) => p.name))
+    : `Player ${draftRoster.length + 1}`;
+
   const handleAddPlayer = () => {
     if (draftRoster.length >= MAX_PLAYERS) return;
     const typed = newPlayerName.trim();
-    const fallbackName = state.demoMode
-      ? generateDemoPlayerName(draftRoster.length)
-      : `Player ${draftRoster.length + 1}`;
+    const addedName = typed || nextDefaultPlayerName;
     const nextRoster = [
       ...draftRoster,
-      { id: makeRosterPlayerId(), name: typed || fallbackName },
+      { id: makeRosterPlayerId(), name: addedName },
     ];
     setRosterSearch('');
     setNewPlayerName('');
     setDraftRoster(nextRoster);
+    if (state.demoMode) {
+      setSuggestedDemoName(generateRandomDemoPlayerName(nextRoster.map((p) => p.name)));
+    }
     if (isTeams) {
       setDraftTeams((prev) =>
         reconcileTeamsWithRoster(nextRoster, prev, {
@@ -990,7 +1002,7 @@ export default function PlayerSetupModal({
                     handleAddPlayer();
                   }
                 }}
-                placeholder="Type a player name and press Enter to add..."
+                placeholder={nextDefaultPlayerName}
                 aria-label="Add player name"
                 disabled={draftHumanCount >= MAX_PLAYERS}
                 style={{ flex: 1 }}

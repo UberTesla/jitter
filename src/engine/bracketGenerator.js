@@ -51,6 +51,19 @@ export function generateDemoPlayerName(index) {
   return `${first} ${last}`;
 }
 
+export function generateRandomDemoPlayerName(excludeNames = []) {
+  const excluded = new Set(
+    excludeNames.map((n) => String(n || '').trim().toLowerCase()).filter(Boolean)
+  );
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const first = DEMO_FIRST_NAMES[Math.floor(Math.random() * DEMO_FIRST_NAMES.length)];
+    const last = DEMO_LAST_NAMES[Math.floor(Math.random() * DEMO_LAST_NAMES.length)];
+    const candidate = `${first} ${last}`;
+    if (!excluded.has(candidate.toLowerCase())) return candidate;
+  }
+  return generateDemoPlayerName(excluded.size);
+}
+
 export function generateAutoTeamName(index) {
   if (index < 16) {
     return `${TEAM_ADJECTIVES[index]} ${TEAM_NOUNS[index]}`;

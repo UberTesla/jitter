@@ -1327,7 +1327,7 @@ export default function HubView({
                     handleAddCreatePlayer();
                   }
                 }}
-                placeholder="Type player name and press Enter..."
+                placeholder={`Player ${newRoster.length + 1}`}
                 disabled={newRoster.length >= MAX_PLAYERS}
                 style={{ flex: 1 }}
               />
