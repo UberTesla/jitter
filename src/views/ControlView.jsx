@@ -275,31 +275,10 @@ export default function ControlView({
           }
           onNavigateMode={onNavigateMode}
           onOpenTournamentChooser={onOpenTournamentChooser}
-        >
-          <button type="button" className="btn-primary btn-sm" onClick={() => setSetupOpen(true)}>
-            ⚙ Setup &amp; Rules
-          </button>
+        />
 
-          <button
-            type="button"
-            className={`btn-secondary btn-sm ${state.ui.showCornerScene ? 'is-toggled-on' : ''}`}
-            onClick={() => tournamentStore.toggleCornerScene()}
-            aria-pressed={state.ui.showCornerScene}
-          >
-            👵 {state.ui.showCornerScene ? 'Hide Grandma' : 'Show Grandma'}
-          </button>
-
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => tournamentStore.setAllPanelsCollapsed(!allPanelsCollapsed)}
-            title="Collapse or expand all control panels"
-          >
-            {allPanelsCollapsed ? '⊞ Expand' : '⊟ Collapse'}
-          </button>
-        </ViewNavBar>
-
-        <div className="brand-block is-header-right">
+        <div className="topbar-subrow">
+          <div className="brand-block is-header-right">
           <div className="brand-emblem" aria-hidden="true">
             🏓
           </div>
@@ -379,6 +358,31 @@ export default function ControlView({
                 </button>
               </div>
             </div>
+          </div>
+          </div>
+
+          <div className="topbar-submenu-actions" role="toolbar" aria-label="Control Actions">
+            <button type="button" className="btn-primary btn-sm" onClick={() => setSetupOpen(true)}>
+              ⚙ Setup &amp; Rules
+            </button>
+
+            <button
+              type="button"
+              className={`btn-secondary btn-sm ${state.ui.showCornerScene ? 'is-toggled-on' : ''}`}
+              onClick={() => tournamentStore.toggleCornerScene()}
+              aria-pressed={state.ui.showCornerScene}
+            >
+              👵 {state.ui.showCornerScene ? 'Hide Grandma' : 'Show Grandma'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => tournamentStore.setAllPanelsCollapsed(!allPanelsCollapsed)}
+              title="Collapse or expand all control panels"
+            >
+              {allPanelsCollapsed ? '⊞ Expand' : '⊟ Collapse'}
+            </button>
           </div>
         </div>
       </header>

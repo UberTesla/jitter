@@ -18,10 +18,9 @@
   flex: 0 0 auto;
   z-index: 30;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem 0.85rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
   min-height: 58px;
   max-width: 100%;
   padding: 0.6rem 1.1rem;
@@ -44,6 +43,14 @@
     padding: 0.42rem 0.65rem;
     gap: 0.4rem;
   }
+}
+
+.presentation-submenu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
 }
 
 /* Protect scaled Presentation stage scoreboards from control.css mobile media queries */

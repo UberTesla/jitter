@@ -1052,7 +1052,9 @@ export default function PresentationView({
           onNavigateMode={onNavigateMode}
           onOpenTournamentChooser={onOpenTournamentChooser}
           isFullscreen={isFullscreen}
-        >
+        />
+
+        <div className="presentation-submenu" role="toolbar" aria-label="Presentation Controls">
           <button
             type="button"
             className="btn-secondary btn-sm"
@@ -1061,7 +1063,7 @@ export default function PresentationView({
           >
             {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
           </button>
-        </ViewNavBar>
+        </div>
       </header>
       {stageContent}
     </div>

@@ -306,46 +306,50 @@ export default function SystemView({
           pendingRequestsCount={pendingRequestsCount}
           onNavigateMode={onNavigateMode}
           onOpenTournamentChooser={onOpenTournamentChooser}
-        >
-          <input
-            ref={importFileInputRef}
-            type="file"
-            accept=".json,application/json"
-            style={{ display: 'none' }}
-            onChange={handleImportJSON}
-          />
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => importFileInputRef.current?.click()}
-            title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
-          >
-            ⬆ Import JSON
-          </button>
-          <button type="button" className="btn-secondary btn-sm" onClick={handleExportJSON}>
-            ⬇ Export JSON
-          </button>
-        </ViewNavBar>
+        />
 
-        <div className="brand-block is-header-right">
-          <div className="brand-emblem" aria-hidden="true">
-            👑
-          </div>
-          <div>
-            <h1 className="brand-title">HOST CONTROL</h1>
-            <div className="brand-meta">
-              <span className="meta-chip">{state.tournamentName}</span>
-              <span className="meta-chip">
-                {myRoleMeta.icon} {myRoleMeta.label}
-              </span>
-              <span className="meta-chip">
-                Storage: {(storageBytes / 1024).toFixed(1)} KB
-              </span>
-              <span className="meta-chip" title={formatBuildTooltip()}>
-                {formatVersionBadge()}
-              </span>
-              <span className="meta-chip chip-sync">● Real-Time Sync</span>
+        <div className="topbar-subrow">
+          <div className="brand-block is-header-right">
+            <div className="brand-emblem" aria-hidden="true">
+              👑
             </div>
+            <div>
+              <h1 className="brand-title">HOST CONTROL</h1>
+              <div className="brand-meta">
+                <span className="meta-chip">{state.tournamentName}</span>
+                <span className="meta-chip">
+                  {myRoleMeta.icon} {myRoleMeta.label}
+                </span>
+                <span className="meta-chip">
+                  Storage: {(storageBytes / 1024).toFixed(1)} KB
+                </span>
+                <span className="meta-chip" title={formatBuildTooltip()}>
+                  {formatVersionBadge()}
+                </span>
+                <span className="meta-chip chip-sync">● Real-Time Sync</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="topbar-submenu-actions" role="toolbar" aria-label="Host Actions">
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={handleImportJSON}
+            />
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => importFileInputRef.current?.click()}
+              title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
+            >
+              ⬆ Import JSON
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={handleExportJSON}>
+              ⬇ Export JSON
+            </button>
           </div>
         </div>
       </header>

@@ -536,45 +536,61 @@ export default function ScorekeeperView({
         }`}
         {...barHoverHandlers}
       >
-        <div className="sk-top-left">
-          {!isPopout ? (
-            <ViewNavBar
-              activeMode="scorekeeper"
-              rolePerms={rolePerms}
-              pendingRequestsCount={pendingRequestsCount}
-              onNavigateMode={onNavigateMode}
-              onOpenTournamentChooser={onOpenTournamentChooser}
-              isFullscreen={isFullscreen}
+        {!isPopout && (
+          <ViewNavBar
+            activeMode="scorekeeper"
+            rolePerms={rolePerms}
+            pendingRequestsCount={pendingRequestsCount}
+            onNavigateMode={onNavigateMode}
+            onOpenTournamentChooser={onOpenTournamentChooser}
+            isFullscreen={isFullscreen}
+          />
+        )}
+
+        <div
+          className="sk-submenu"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem 0.85rem',
+            width: '100%',
+            minWidth: 0,
+          }}
+        >
+          <div className="sk-top-left">
+            {isPopout && <span className="sk-badge-title">🎯 SCOREKEEPER</span>}
+            <button
+              type="button"
+              className={`sk-match-trigger ${isMatchInProgress || !canScoreRole ? 'is-locked' : ''}`}
+              disabled={isMatchInProgress || !canScoreRole}
+              title={
+                !canScoreRole
+                  ? 'Spectator view is read-only — become a Scorekeeper to switch matches'
+                  : isMatchInProgress
+                  ? 'Match in progress — complete the match, return score to 0–0, or change matches from Control View'
+                  : 'Open game selection menu'
+              }
+              onClick={() => {
+                if (!isMatchInProgress && canScoreRole) setMatchMenuOpen(true);
+              }}
+              aria-label="Open game selection menu"
             >
-              <button
-                type="button"
-                className={`sk-match-trigger ${isMatchInProgress || !canScoreRole ? 'is-locked' : ''}`}
-                disabled={isMatchInProgress || !canScoreRole}
-                title={
-                  !canScoreRole
-                    ? 'Spectator view is read-only — become a Scorekeeper to switch matches'
-                    : isMatchInProgress
-                    ? 'Match in progress — complete the match, return score to 0–0, or change matches from Control View'
-                    : 'Open game selection menu'
-                }
-                onClick={() => {
-                  if (!isMatchInProgress && canScoreRole) setMatchMenuOpen(true);
-                }}
-                aria-label="Open game selection menu"
+              <span className="sk-match-trigger-text">{activeTriggerLabel}</span>
+              <span className="sk-match-trigger-caret" aria-hidden="true">
+                {isMatchInProgress ? '🔒' : '▾'}
+              </span>
+            </button>
+            {!isPopout && isMatchInProgress && (
+              <span
+                className="sk-lock-chip"
+                title="Return score to 0–0, complete the match, or switch from Control View"
               >
-                <span className="sk-match-trigger-text">{activeTriggerLabel}</span>
-                <span className="sk-match-trigger-caret" aria-hidden="true">
-                  {isMatchInProgress ? '🔒' : '▾'}
-                </span>
-              </button>
-              {isMatchInProgress && (
-                <span
-                  className="sk-lock-chip"
-                  title="Return score to 0–0, complete the match, or switch from Control View"
-                >
-                  Locked (0–0 to switch)
-                </span>
-              )}
+                Locked (0–0 to switch)
+              </span>
+            )}
+            {!isPopout && (
               <button
                 type="button"
                 className="btn-secondary btn-sm"
@@ -583,29 +599,10 @@ export default function ScorekeeperView({
               >
                 {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
               </button>
-            </ViewNavBar>
-          ) : (
-            <>
-              <span className="sk-badge-title">🎯 SCOREKEEPER</span>
-              <button
-                type="button"
-                className={`sk-match-trigger ${isMatchInProgress || !canScoreRole ? 'is-locked' : ''}`}
-                disabled={isMatchInProgress || !canScoreRole}
-                onClick={() => {
-                  if (!isMatchInProgress && canScoreRole) setMatchMenuOpen(true);
-                }}
-                aria-label="Open game selection menu"
-              >
-                <span className="sk-match-trigger-text">{activeTriggerLabel}</span>
-                <span className="sk-match-trigger-caret" aria-hidden="true">
-                  {isMatchInProgress ? '🔒' : '▾'}
-                </span>
-              </button>
-            </>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div className="sk-top-right">
+          <div className="sk-top-right">
           <div
             className={`match-status-banner ${canStartMatch ? 'status-waiting' : statusTone}`}
             role="status"
@@ -630,6 +627,7 @@ export default function ScorekeeperView({
             {state.rules?.deadMansServe ? " · Dead Man's Serve" : ''}
             {tableCount > 1 ? ` · Table ${activeTableNum}/${tableCount}` : ''}
           </span>
+          </div>
         </div>
       </header>
 
