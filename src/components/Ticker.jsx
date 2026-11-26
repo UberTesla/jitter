@@ -150,7 +150,18 @@ export default function Ticker({
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
               {recentChat.map((m) => (
-                <div key={m.id} className="ticker-chip">
+                <div
+                  key={m.id}
+                  className="ticker-chip"
+                  style={{
+                    borderColor:
+                      m.kind === 'win' || m.kind === 'champion'
+                        ? 'rgba(16, 185, 129, 0.5)'
+                        : m.kind === 'announcement'
+                        ? 'rgba(245, 158, 11, 0.55)'
+                        : undefined,
+                  }}
+                >
                   <strong className="ticker-winner">{m.fromName}:</strong>
                   <span>{m.text}</span>
                 </div>

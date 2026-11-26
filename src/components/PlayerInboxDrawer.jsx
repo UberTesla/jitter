@@ -90,6 +90,7 @@ export default function PlayerInboxDrawer({
   const hasLiveInboxCountdown =
     open &&
     (latestAlert?.liveTemplate?.includes('[[CD:') ||
+      (activeTab === 'live' && liveMessages.some((m) => m.liveTemplate?.includes('[[CD:'))) ||
       (activeTab === 'alerts' && inbox.some((m) => m.liveTemplate?.includes('[[CD:'))));
 
   useEffect(() => {
@@ -493,32 +494,52 @@ export default function PlayerInboxDrawer({
                   ) : (
                     liveMessages.map((m) => {
                       const isMine = m.fromDeviceId === myDeviceId;
+                      const isSystemEvent = m.fromDeviceId === 'system' || Boolean(m.kind);
                       const roleMeta = ROLE_META[m.fromRole];
+                      const renderedText = m.liveTemplate
+                        ? renderLiveMessageText({ ...m, message: m.text }, inboxNowMs)
+                        : m.text;
+                      const eventBg =
+                        m.kind === 'champion' || m.kind === 'win'
+                          ? 'rgba(16, 185, 129, 0.16)'
+                          : m.kind === 'announcement'
+                          ? 'rgba(245, 158, 11, 0.18)'
+                          : m.kind === 'event'
+                          ? 'rgba(56, 189, 248, 0.14)'
+                          : isMine
+                          ? 'rgba(245, 158, 11, 0.16)'
+                          : 'rgba(15, 23, 42, 0.55)';
+                      const eventBorder =
+                        m.kind === 'champion' || m.kind === 'win'
+                          ? 'rgba(16, 185, 129, 0.45)'
+                          : m.kind === 'announcement'
+                          ? 'rgba(245, 158, 11, 0.5)'
+                          : m.kind === 'event'
+                          ? 'rgba(56, 189, 248, 0.4)'
+                          : isMine
+                          ? 'rgba(245, 158, 11, 0.45)'
+                          : 'rgba(148, 163, 184, 0.2)';
                       return (
                         <div
                           key={m.id}
                           className="inbox-msg-card"
                           style={{
-                            alignSelf: isMine ? 'flex-end' : 'flex-start',
-                            maxWidth: '90%',
-                            width: 'fit-content',
-                            background: isMine
-                              ? 'rgba(245, 158, 11, 0.16)'
-                              : 'rgba(15, 23, 42, 0.55)',
-                            borderColor: isMine
-                              ? 'rgba(245, 158, 11, 0.45)'
-                              : 'rgba(148, 163, 184, 0.2)',
+                            alignSelf: isSystemEvent ? 'stretch' : isMine ? 'flex-end' : 'flex-start',
+                            maxWidth: isSystemEvent ? '100%' : '90%',
+                            width: isSystemEvent ? '100%' : 'fit-content',
+                            background: eventBg,
+                            borderColor: eventBorder,
                           }}
                         >
                           <div className="inbox-msg-top" style={{ gap: '0.5rem' }}>
                             <strong style={{ fontSize: '0.78rem' }}>
-                              {roleMeta?.icon ? `${roleMeta.icon} ` : ''}
+                              {!isSystemEvent && roleMeta?.icon ? `${roleMeta.icon} ` : ''}
                               {m.fromName}
                             </strong>
                             <span className="inbox-msg-time">{formatMsgTime(m.sentAt)}</span>
                           </div>
                           <p className="inbox-msg-text" style={{ margin: '0.2rem 0 0', whiteSpace: 'pre-wrap' }}>
-                            {m.text}
+                            {renderedText}
                           </p>
                           {(isMine || canModerateChat) && (
                             <button

@@ -1224,6 +1224,41 @@ export function createLanSyncHandler({
         .filter((th) => th && Array.isArray(th.memberDeviceIds) && th.memberDeviceIds.includes(devId))
         .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
+    const postSystemLiveChat = (
+      tid,
+      { kind = 'event', fromName = 'Tournament', text = '', liveTemplate = null, countdownTargetAt = null }
+    ) => {
+      const cleanText = String(text || '').trim().slice(0, 500);
+      if (!tid || !cleanText) return null;
+      const bucket = getOrCreateTournamentChat(tid);
+      const msg = {
+        id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        tournamentId: tid,
+        kind,
+        fromDeviceId: 'system',
+        fromName: String(fromName || 'Tournament').slice(0, 60),
+        fromRole: 'system',
+        text: cleanText,
+        ...(liveTemplate ? { liveTemplate } : {}),
+        ...(countdownTargetAt ? { countdownTargetAt } : {}),
+        sentAt: Date.now(),
+      };
+      bucket.liveMessages.push(msg);
+      if (bucket.liveMessages.length > 250) {
+        bucket.liveMessages = bucket.liveMessages.slice(-250);
+      }
+      scheduleDiskSave();
+      for (const [clientRes, meta] of sseClients.entries()) {
+        if (meta.tournamentId && meta.tournamentId !== tid) continue;
+        try {
+          clientRes.write(`event: CHAT_LIVE\ndata: ${JSON.stringify({ tournamentId: tid, message: msg })}\n\n`);
+        } catch {
+          sseClients.delete(clientRes);
+        }
+      }
+      return msg;
+    };
+
     if (pathname === '/__sync/chat' && req.method === 'GET') {
       const tid = String(urlObj.searchParams.get('tournamentId') || store.activeTournamentId || '').trim();
       const devId = String(urlObj.searchParams.get('deviceId') || '').trim();
@@ -1885,6 +1920,17 @@ export function createLanSyncHandler({
           });
         }
 
+        // Mirror public announcements/broadcasts into the tournament Live Chat stream
+        if (tournamentId && (isBroadcast || requestedKind === 'announcement')) {
+          postSystemLiveChat(tournamentId, {
+            kind: 'announcement',
+            fromName: '📢 Announcement from Host',
+            text: message,
+            liveTemplate,
+            countdownTargetAt,
+          });
+        }
+
         // Also deliver via Web Push (wakes locked/screen-off mobile devices & closed tabs)
         if (isBroadcast && store.pushSubscriptions) {
           for (const devId of Object.keys(store.pushSubscriptions)) {
@@ -2262,6 +2308,11 @@ export function createLanSyncHandler({
                 `${nextM.label}: ${matchup}${tableStr}`,
                 `pp-start-${mid}`
               );
+              postSystemLiveChat(id, {
+                kind: 'event',
+                fromName: '🏓 Match Started',
+                text: `${nextM.roundLabel} (${nextM.label}): ${matchup}${tableStr}`,
+              });
             }
 
             // 3. Active Match Nearing End (in-progress score > 0) -> re-notify up-next players AND presenters
@@ -2314,6 +2365,28 @@ export function createLanSyncHandler({
               const scoreline = `${nextM.score1}–${nextM.score2}`;
               const winnerName = nameOf(winnerId, 'Winner');
               const loserName = nameOf(loserId, 'Opponent');
+              const isChampMatch = Boolean(winnerId && stamped.championId === winnerId);
+              const isSkunkWin = Boolean(
+                stamped.rules?.skunkEnabled &&
+                  (Number(nextM.score1) === 0 || Number(nextM.score2) === 0) &&
+                  Math.max(Number(nextM.score1) || 0, Number(nextM.score2) || 0) >=
+                    (Number(stamped.rules?.skunkScore) || 7)
+              );
+              if (winnerId) {
+                postSystemLiveChat(id, {
+                  kind: isChampMatch ? 'champion' : 'win',
+                  fromName: isChampMatch
+                    ? '👑 Champion Crowned!'
+                    : isSkunkWin
+                      ? '🦨 SKUNK WIN!'
+                      : '🏆 Match Result',
+                  text: isChampMatch
+                    ? `${winnerName} defeated ${loserName} (${scoreline}) to win ${
+                        stamped.tournamentName || 'the tournament'
+                      }!`
+                    : `${winnerName} defeated ${loserName} (${scoreline}) in ${nextM.roundLabel}`,
+                });
+              }
 
               if (winnerId) {
                 const winDevs = Object.entries(claims)

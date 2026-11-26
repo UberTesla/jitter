@@ -718,36 +718,59 @@ export default function PresentationView({
                       className="queue-list scroller"
                       style={{ overflowY: 'auto', flex: 1, minHeight: 0, gap: '0.55rem' }}
                     >
-                      {liveChatMessages.slice(-40).map((m) => (
-                        <div
-                          key={m.id}
-                          className="queue-card"
-                          style={{ padding: '0.6rem 0.8rem' }}
-                        >
-                          <div className="queue-card-top" style={{ marginBottom: '0.25rem' }}>
-                            <span className="queue-round" style={{ fontWeight: 800 }}>
-                              {m.fromName}
-                            </span>
-                            <span className="queue-tag">
-                              {m.sentAt
-                                ? new Date(m.sentAt).toLocaleTimeString([], {
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                  })
-                                : ''}
-                            </span>
-                          </div>
+                      {liveChatMessages.slice(-40).map((m) => {
+                        const isWin = m.kind === 'win' || m.kind === 'champion';
+                        const isAnn = m.kind === 'announcement';
+                        const isEvt = m.kind === 'event';
+                        return (
                           <div
+                            key={m.id}
+                            className="queue-card"
                             style={{
-                              fontSize: '1.05rem',
-                              lineHeight: 1.35,
-                              wordBreak: 'break-word',
+                              padding: '0.6rem 0.8rem',
+                              background: isWin
+                                ? 'rgba(16, 185, 129, 0.16)'
+                                : isAnn
+                                ? 'rgba(245, 158, 11, 0.18)'
+                                : isEvt
+                                ? 'rgba(56, 189, 248, 0.14)'
+                                : undefined,
+                              borderColor: isWin
+                                ? 'rgba(16, 185, 129, 0.45)'
+                                : isAnn
+                                ? 'rgba(245, 158, 11, 0.5)'
+                                : isEvt
+                                ? 'rgba(56, 189, 248, 0.4)'
+                                : undefined,
                             }}
                           >
-                            {m.text}
+                            <div className="queue-card-top" style={{ marginBottom: '0.25rem' }}>
+                              <span className="queue-round" style={{ fontWeight: 800 }}>
+                                {m.fromName}
+                              </span>
+                              <span className="queue-tag">
+                                {m.sentAt
+                                  ? new Date(m.sentAt).toLocaleTimeString([], {
+                                      hour: 'numeric',
+                                      minute: '2-digit',
+                                    })
+                                  : ''}
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '1.05rem',
+                                lineHeight: 1.35,
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {m.liveTemplate
+                                ? renderLiveMessageText({ ...m, message: m.text }, tournamentStore.getServerNow())
+                                : m.text}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       <div ref={splitChatEndRef} />
                     </div>
                   )}
@@ -973,22 +996,47 @@ export default function PresentationView({
                         maxHeight: '210px',
                       }}
                     >
-                      {liveChatMessages.slice(-8).map((m) => (
-                        <div
-                          key={m.id}
-                          style={{
-                            padding: '0.38rem 0.6rem',
-                            borderRadius: '7px',
-                            background: 'rgba(15, 23, 42, 0.5)',
-                            border: '1px solid rgba(148, 163, 184, 0.18)',
-                            fontSize: '0.9rem',
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          <strong style={{ color: '#fbbf24' }}>{m.fromName}:</strong>{' '}
-                          <span>{m.text}</span>
-                        </div>
-                      ))}
+                      {liveChatMessages.slice(-8).map((m) => {
+                        const isWin = m.kind === 'win' || m.kind === 'champion';
+                        const isAnn = m.kind === 'announcement';
+                        const isEvt = m.kind === 'event';
+                        return (
+                          <div
+                            key={m.id}
+                            style={{
+                              padding: '0.38rem 0.6rem',
+                              borderRadius: '7px',
+                              background: isWin
+                                ? 'rgba(16, 185, 129, 0.16)'
+                                : isAnn
+                                ? 'rgba(245, 158, 11, 0.18)'
+                                : isEvt
+                                ? 'rgba(56, 189, 248, 0.14)'
+                                : 'rgba(15, 23, 42, 0.5)',
+                              border: `1px solid ${
+                                isWin
+                                  ? 'rgba(16, 185, 129, 0.45)'
+                                  : isAnn
+                                  ? 'rgba(245, 158, 11, 0.5)'
+                                  : isEvt
+                                  ? 'rgba(56, 189, 248, 0.4)'
+                                  : 'rgba(148, 163, 184, 0.18)'
+                              }`,
+                              fontSize: '0.9rem',
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            <strong style={{ color: isWin ? '#34d399' : isEvt ? '#38bdf8' : '#fbbf24' }}>
+                              {m.fromName}:
+                            </strong>{' '}
+                            <span>
+                              {m.liveTemplate
+                                ? renderLiveMessageText({ ...m, message: m.text }, tournamentStore.getServerNow())
+                                : m.text}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
