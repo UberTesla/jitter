@@ -52,6 +52,7 @@ export default function PlayerInboxDrawer({
   const [liveDraft, setLiveDraft] = useState('');
   const [sendingLive, setSendingLive] = useState(false);
   const [chatNameDraft, setChatNameDraft] = useState('');
+  const [showSetNameForm, setShowSetNameForm] = useState(false);
   const liveEndRef = useRef(null);
 
   // 2-Way DMs & Group Chats state
@@ -167,8 +168,72 @@ export default function PlayerInboxDrawer({
     if (!cleaned) return;
     tournamentStore.setDeviceName(cleaned);
     setChatNameDraft('');
+    setShowSetNameForm(false);
     trackUsageEvent('chat:set_name', { category: 'chat' });
   };
+
+  const renderIdentityGate = () => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.4rem',
+        padding: '0.5rem 0.6rem',
+        borderRadius: '8px',
+        background: 'rgba(15, 23, 42, 0.55)',
+        border: '1px solid rgba(148, 163, 184, 0.25)',
+      }}
+    >
+      {!showSetNameForm ? (
+        <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            style={{ flex: 1 }}
+            onClick={() => setActiveTab('alerts')}
+          >
+            🏓 Claim Player
+          </button>
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => setShowSetNameForm(true)}
+          >
+            ✏️ Set Name
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleSaveChatName} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={chatNameDraft}
+            onChange={(e) => setChatNameDraft(e.target.value)}
+            placeholder="Your name (e.g. Uncle Dave)"
+            maxLength={40}
+            autoFocus
+            style={{ flex: 1 }}
+          />
+          <button
+            type="submit"
+            className="btn-amber btn-sm"
+            disabled={!chatNameDraft.trim()}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => {
+              setShowSetNameForm(false);
+              setChatNameDraft('');
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      )}
+    </div>
+  );
 
   const claimedByOthers = useMemo(() => {
     const set = new Set();
@@ -354,7 +419,7 @@ export default function PlayerInboxDrawer({
             </div>
 
             {/* 3-Tab Switcher: Live Chat | Direct & Groups | Alerts & Player */}
-            <div className="segmented-control compact" style={{ marginBottom: '0.55rem' }}>
+            <div className="segmented-control compact" style={{ marginBottom: '0.28rem' }}>
               <button
                 type="button"
                 className={activeTab === 'live' ? 'is-selected' : ''}
@@ -397,16 +462,16 @@ export default function PlayerInboxDrawer({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '0.5rem',
+                  gap: '0.45rem',
                   width: '100%',
                   textAlign: 'left',
-                  padding: '0.38rem 0.6rem',
-                  marginBottom: '0.6rem',
-                  borderRadius: '8px',
+                  padding: '0.26rem 0.52rem',
+                  marginBottom: '0.28rem',
+                  borderRadius: '7px',
                   border: '1px solid rgba(245, 158, 11, 0.45)',
                   background: 'rgba(245, 158, 11, 0.14)',
                   color: 'inherit',
-                  fontSize: '0.76rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                 }}
               >
@@ -421,33 +486,33 @@ export default function PlayerInboxDrawer({
                   <strong>{latestAlert.title || '📢 Alert from Host'}:</strong>{' '}
                   {renderLiveMessageText(latestAlert, inboxNowMs)}
                 </span>
-                <span style={{ opacity: 0.72, fontSize: '0.7rem', flexShrink: 0 }}>
+                <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
                   {formatMsgTime(latestAlert.sentAt)}
                 </span>
               </button>
             )}
 
             {chatError && (
-              <p className="inbox-feedback" style={{ margin: '0 0 0.5rem', color: '#f87171' }}>
+              <p className="inbox-feedback" style={{ margin: '0 0 0.35rem', color: '#f87171' }}>
                 {chatError}
               </p>
             )}
 
             {/* TAB 1: PUBLIC LIVE GAME CHAT */}
             {activeTab === 'live' && (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.28rem' }}>
                 {/* Small On Deck Banner at the top of Live Chat */}
                 {upNextMatches.length > 0 && (
                   <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.45rem',
-                      padding: '0.32rem 0.55rem',
+                      gap: '0.4rem',
+                      padding: '0.24rem 0.5rem',
                       borderRadius: '7px',
                       background: 'rgba(56, 189, 248, 0.12)',
                       border: '1px solid rgba(56, 189, 248, 0.3)',
-                      fontSize: '0.75rem',
+                      fontSize: '0.74rem',
                     }}
                   >
                     <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
@@ -559,47 +624,7 @@ export default function PlayerInboxDrawer({
                 </div>
 
                 {!hasChatIdentity ? (
-                  <form
-                    onSubmit={handleSaveChatName}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.4rem',
-                      padding: '0.55rem',
-                      borderRadius: '8px',
-                      background: 'rgba(15, 23, 42, 0.55)',
-                      border: '1px solid rgba(148, 163, 184, 0.25)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.76rem' }}>
-                      <strong>Set a display name to chat</strong>
-                      <button
-                        type="button"
-                        className="btn-secondary btn-sm"
-                        style={{ padding: '0.15rem 0.45rem', fontSize: '0.7rem' }}
-                        onClick={() => setActiveTab('alerts')}
-                      >
-                        Or Claim Player →
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.45rem' }}>
-                      <input
-                        type="text"
-                        value={chatNameDraft}
-                        onChange={(e) => setChatNameDraft(e.target.value)}
-                        placeholder="Your name (e.g. Uncle Dave)"
-                        maxLength={40}
-                        style={{ flex: 1 }}
-                      />
-                      <button
-                        type="submit"
-                        className="btn-amber btn-sm"
-                        disabled={!chatNameDraft.trim()}
-                      >
-                        Save Name
-                      </button>
-                    </div>
-                  </form>
+                  renderIdentityGate()
                 ) : (
                   <form onSubmit={handleSendLive} style={{ display: 'flex', gap: '0.45rem' }}>
                     <input
@@ -624,51 +649,9 @@ export default function PlayerInboxDrawer({
 
             {/* TAB 2: 2-WAY DIRECT & GROUP CHATS */}
             {activeTab === 'messages' && (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.55rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.45rem' }}>
                 {!hasChatIdentity ? (
-                  <form
-                    onSubmit={handleSaveChatName}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.5rem',
-                      padding: '0.75rem',
-                      borderRadius: '8px',
-                      background: 'rgba(15, 23, 42, 0.55)',
-                      border: '1px solid rgba(148, 163, 184, 0.25)',
-                    }}
-                  >
-                    <strong>Set a display name before messaging</strong>
-                    <p style={{ margin: 0, fontSize: '0.78rem', opacity: 0.8 }}>
-                      Enter your name so people know who is messaging them — or claim your player in
-                      the Alerts tab.
-                    </p>
-                    <div style={{ display: 'flex', gap: '0.45rem' }}>
-                      <input
-                        type="text"
-                        value={chatNameDraft}
-                        onChange={(e) => setChatNameDraft(e.target.value)}
-                        placeholder="Your name (e.g. Uncle Dave)"
-                        maxLength={40}
-                        style={{ flex: 1 }}
-                      />
-                      <button
-                        type="submit"
-                        className="btn-primary btn-sm"
-                        disabled={!chatNameDraft.trim()}
-                      >
-                        Save Name
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm"
-                      style={{ alignSelf: 'flex-start' }}
-                      onClick={() => setActiveTab('alerts')}
-                    >
-                      🏓 Claim My Player Instead →
-                    </button>
-                  </form>
+                  renderIdentityGate()
                 ) : showNewChatComposer ? (
                   <form
                     onSubmit={handleCreateThread}
