@@ -563,17 +563,179 @@ export default function PlayerInboxDrawer({
           }}
         >
           <div className="inbox-drawer-card">
-            <div className="inbox-drawer-header">
-              <h2>💬 {chatHeaderName}</h2>
+            <div className="inbox-drawer-header" style={{ gap: '0.5rem', alignItems: 'center' }}>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: '0.96rem',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '38%',
+                }}
+              >
+                💬 {chatHeaderName}
+              </h2>
+
+              {/* Compact Live Mini Scoreboard next to user's name */}
+              {(() => {
+                const am = state?.activeMatchId ? state.matches?.[state.activeMatchId] : null;
+                if (!am || am.isBye) return null;
+                const p1 = getPlayerLabel(am.player1Id, am.source1Label);
+                const p2 = getPlayerLabel(am.player2Id, am.source2Label);
+                const isLive = Boolean(am.started && !am.completed);
+                return (
+                  <div
+                    aria-label="Live Match Scoreboard"
+                    title={`${am.roundLabel} (${am.label}): ${p1} ${am.score1 ?? 0}–${am.score2 ?? 0} ${p2}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.32rem',
+                      padding: '0.2rem 0.48rem',
+                      borderRadius: '7px',
+                      background: 'rgba(15, 23, 42, 0.72)',
+                      border: `1px solid ${
+                        isLive ? 'rgba(52, 211, 153, 0.45)' : 'rgba(148, 163, 184, 0.28)'
+                      }`,
+                      fontSize: '0.73rem',
+                      minWidth: 0,
+                      flex: 1,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: isLive ? '#34d399' : '#f59e0b',
+                        flexShrink: 0,
+                      }}
+                      aria-hidden="true"
+                    />
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '72px',
+                      }}
+                    >
+                      {p1}
+                    </span>
+                    <strong
+                      style={{
+                        color: '#fbbf24',
+                        fontVariantNumeric: 'tabular-nums',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {am.score1 ?? 0}–{am.score2 ?? 0}
+                    </strong>
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '72px',
+                      }}
+                    >
+                      {p2}
+                    </span>
+                  </div>
+                );
+              })()}
+
               <button
                 type="button"
                 className="btn-secondary btn-sm"
                 onClick={() => setOpen(false)}
                 aria-label="Close Chat Drawer"
+                style={{ flexShrink: 0 }}
               >
                 ✕
               </button>
             </div>
+
+            {/* Banner 1 (All Categories): Smart On Deck Banner directly under header/mini scoreboard */}
+            {(upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('ondeck')}
+                title="Click to view full On Deck queue & roster"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '0.24rem 0.5rem',
+                  borderRadius: '7px',
+                  background:
+                    myPlayerStatus?.tone === 'playing'
+                      ? 'rgba(16, 185, 129, 0.16)'
+                      : 'rgba(56, 189, 248, 0.12)',
+                  border: `1px solid ${
+                    myPlayerStatus?.tone === 'playing'
+                      ? 'rgba(16, 185, 129, 0.45)'
+                      : 'rgba(56, 189, 248, 0.3)'
+                  }`,
+                  color: 'inherit',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  style={{
+                    fontWeight: 800,
+                    color: myPlayerStatus?.tone === 'playing' ? '#34d399' : '#38bdf8',
+                    flexShrink: 0,
+                  }}
+                >
+                  {myPlayerStatus?.tone === 'playing' ? '🏓 YOU ARE UP' : '⏳ ON DECK'}
+                </span>
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {myPlayerStatus?.tone === 'playing'
+                    ? myPlayerStatus.detail
+                    : (() => {
+                        const nextM = upNextMatches[0];
+                        const nextText = nextM
+                          ? `${getPlayerLabel(nextM.player1Id, nextM.source1Label)} vs ${getPlayerLabel(
+                              nextM.player2Id,
+                              nextM.source2Label
+                            )}`
+                          : '';
+                        if (myPlayerStatus?.tone === 'ondeck') {
+                          const isNextMe =
+                            nextM &&
+                            claimedPlayerObj &&
+                            (nextM.player1Id === claimedPlayerObj.id ||
+                              nextM.player2Id === claimedPlayerObj.id);
+                          return isNextMe
+                            ? `★ YOU'RE NEXT: ${nextText}`
+                            : `${nextText}  ·  ★ ${myPlayerStatus.headline.replace(/^⏳\s*/, '')}`;
+                        }
+                        return upNextMatches
+                          .slice(0, 2)
+                          .map(
+                            (m) =>
+                              `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                m.player2Id,
+                                m.source2Label
+                              )}`
+                          )
+                          .join('  ·  ');
+                      })()}
+                </span>
+              </button>
+            )}
 
             {/* 4-Tab Switcher: Live Chat | Direct & Groups | On Deck / Roster | Alerts & Player */}
             <div className="segmented-control compact" style={{ marginBottom: 0 }}>
@@ -778,85 +940,6 @@ export default function PlayerInboxDrawer({
             {/* TAB 1: PUBLIC LIVE GAME CHAT */}
             {activeTab === 'live' && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.28rem' }}>
-                {/* Small Smart On Deck Banner at the top of Live Chat (shows next match + when you're up) */}
-                {(upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ondeck')}
-                    title="Click to view full On Deck queue & roster"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '0.24rem 0.5rem',
-                      borderRadius: '7px',
-                      background:
-                        myPlayerStatus?.tone === 'playing'
-                          ? 'rgba(16, 185, 129, 0.16)'
-                          : 'rgba(56, 189, 248, 0.12)',
-                      border: `1px solid ${
-                        myPlayerStatus?.tone === 'playing'
-                          ? 'rgba(16, 185, 129, 0.45)'
-                          : 'rgba(56, 189, 248, 0.3)'
-                      }`,
-                      color: 'inherit',
-                      fontSize: '0.74rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontWeight: 800,
-                        color: myPlayerStatus?.tone === 'playing' ? '#34d399' : '#38bdf8',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {myPlayerStatus?.tone === 'playing' ? '🏓 YOU ARE UP' : '⏳ ON DECK'}
-                    </span>
-                    <span
-                      style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {myPlayerStatus?.tone === 'playing'
-                        ? myPlayerStatus.detail
-                        : (() => {
-                            const nextM = upNextMatches[0];
-                            const nextText = nextM
-                              ? `${getPlayerLabel(nextM.player1Id, nextM.source1Label)} vs ${getPlayerLabel(
-                                  nextM.player2Id,
-                                  nextM.source2Label
-                                )}`
-                              : '';
-                            if (myPlayerStatus?.tone === 'ondeck') {
-                              const isNextMe =
-                                nextM &&
-                                claimedPlayerObj &&
-                                (nextM.player1Id === claimedPlayerObj.id ||
-                                  nextM.player2Id === claimedPlayerObj.id);
-                              return isNextMe
-                                ? `★ YOU'RE NEXT: ${nextText}`
-                                : `${nextText}  ·  ★ ${myPlayerStatus.headline.replace(/^⏳\s*/, '')}`;
-                            }
-                            return upNextMatches
-                              .slice(0, 2)
-                              .map(
-                                (m) =>
-                                  `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
-                                    m.player2Id,
-                                    m.source2Label
-                                  )}`
-                              )
-                              .join('  ·  ');
-                          })()}
-                    </span>
-                  </button>
-                )}
-
                 <div
                   className="scroller"
                   style={{
