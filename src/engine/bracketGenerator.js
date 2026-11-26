@@ -229,6 +229,32 @@ export function formatTeamMembers(entrant, separator = ' & ') {
   return entrant.members.map((m) => String(m || '').trim()).filter(Boolean).join(separator);
 }
 
+/**
+ * Formats a single player's name compactly as "First" or "First L." (preserving numeric suffixes like "Player 1").
+ */
+export function formatShortPlayerName(name) {
+  const cleaned = String(name || '').trim();
+  if (!cleaned) return '';
+  const parts = cleaned.split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (/^\d+$/.test(last)) return `${first} ${last}`;
+  const lastInitial = last[0];
+  return lastInitial ? `${first} ${lastInitial.toUpperCase()}.` : first;
+}
+
+/**
+ * Formats a team's members compactly as "First L. & First L." for space-constrained On Deck banners.
+ */
+export function formatTeamMembersShort(entrant, separator = ' & ') {
+  if (!entrant || !Array.isArray(entrant.members)) return '';
+  return entrant.members
+    .map((m) => formatShortPlayerName(m))
+    .filter(Boolean)
+    .join(separator);
+}
+
 function getWinnersRoundLabel(round, totalWinnersRounds, format, effectiveDouble) {
   const remaining = totalWinnersRounds - round;
   if (remaining === 0) {

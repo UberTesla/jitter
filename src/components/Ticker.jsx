@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import MiniBracket from './MiniBracket.jsx';
 import TournamentStatsPanel from './TournamentStatsPanel.jsx';
-import { computeTournamentStats } from '../engine/bracketGenerator.js';
+import { computeTournamentStats, formatTeamMembersShort } from '../engine/bracketGenerator.js';
 import {
   TICKER_ITEM_DEFS,
   normalizeTickerItems,
@@ -57,7 +57,14 @@ export default function Ticker({
   }, [autoRotate, items.length, rotateSec]);
 
   const stats = useMemo(() => computeTournamentStats(state), [state]);
+  const isTeams = state.entryMode === 'teams';
   const nameOf = (id, fallback) => state.players?.find((p) => p.id === id)?.name || fallback || 'TBD';
+  const onDeckNameOf = (id, fallback) => {
+    const p = state.players?.find((pl) => pl.id === id);
+    if (!p) return fallback || 'TBD';
+    const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
+    return members ? `${p.name} (${members})` : p.name;
+  };
 
   if (items.length === 0) return null;
   const scroll = mode === 'scroll';
@@ -69,7 +76,6 @@ export default function Ticker({
   );
   const visible = autoRotate && !scroll ? [items[idx % items.length]] : items;
   const playerMap = new Map((state.players || []).map((p) => [p.id, p]));
-  const isTeams = state.entryMode === 'teams';
   const renderItem = (id) => {
     if (id === 'bracket') {
       return (
@@ -110,9 +116,9 @@ export default function Ticker({
         stats.upNext.slice(0, 4).map((m) => (
           <div key={m.id} className="ticker-chip">
             <span className="ticker-code">{m.label}</span>
-            <span>{nameOf(m.player1Id, m.source1Label)}</span>
+            <span>{onDeckNameOf(m.player1Id, m.source1Label)}</span>
             <em>vs</em>
-            <span>{nameOf(m.player2Id, m.source2Label)}</span>
+            <span>{onDeckNameOf(m.player2Id, m.source2Label)}</span>
           </div>
         ))
       );
@@ -149,7 +155,7 @@ export default function Ticker({
                   .slice(0, 2)
                   .map(
                     (m) =>
-                      `${nameOf(m.player1Id, m.source1Label)} vs ${nameOf(
+                      `${onDeckNameOf(m.player1Id, m.source1Label)} vs ${onDeckNameOf(
                         m.player2Id,
                         m.source2Label
                       )}`

@@ -7,7 +7,11 @@ import {
   normalizeAutoRotateSlides,
   tournamentStore,
 } from '../state/tournamentStore.js';
-import { computeTournamentStats, formatTeamMembers } from '../engine/bracketGenerator.js';
+import {
+  computeTournamentStats,
+  formatTeamMembers,
+  formatTeamMembersShort,
+} from '../engine/bracketGenerator.js';
 import { formatMatchTimer, isMatchNearingEnd } from '../engine/scoringEngine.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
 import { generateQrMatrix, qrMatrixToSvgPath } from '../engine/qrCode.js';
@@ -236,6 +240,32 @@ export default function PresentationView({
     return p ? `#${p.seed} ${p.name}` : fallback || 'TBD';
   };
 
+  const getOnDeckLabel = (id, fallback) => {
+    if (!id) return fallback || 'TBD';
+    const p = playerMap.get(id);
+    if (!p) return fallback || 'TBD';
+    const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
+    return members ? `#${p.seed} ${p.name} (${members})` : `#${p.seed} ${p.name}`;
+  };
+
+  const renderOnDeckEntrant = (id, fallback) => {
+    if (!id) return fallback || 'TBD';
+    const p = playerMap.get(id);
+    if (!p) return fallback || 'TBD';
+    const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
+    return (
+      <>
+        #{p.seed} {p.name}
+        {members && (
+          <span style={{ opacity: 0.78, fontWeight: 500, fontSize: '0.86em' }}>
+            {' '}
+            ({members})
+          </span>
+        )}
+      </>
+    );
+  };
+
   // Reserve bottom-right width/height for CRT corner when visible (scaled down on portrait so content stays huge)
   const effectiveCornerScale = stageMetrics.isPortrait
     ? Math.min(cornerScale, 0.72)
@@ -359,8 +389,8 @@ export default function PresentationView({
           <div key={m.id} className={`pres-ondeck-item ${idx === 0 ? 'is-next' : ''}`}>
             <span className="pod-label">{idx === 0 ? 'NEXT UP' : m.label}</span>
             <strong className="pod-matchup">
-              {getPlayerLabel(m.player1Id, m.source1Label)} <em>vs</em>{' '}
-              {getPlayerLabel(m.player2Id, m.source2Label)}
+              {renderOnDeckEntrant(m.player1Id, m.source1Label)} <em>vs</em>{' '}
+              {renderOnDeckEntrant(m.player2Id, m.source2Label)}
             </strong>
           </div>
         ))}
@@ -699,7 +729,7 @@ export default function PresentationView({
                           .slice(0, 2)
                           .map(
                             (m) =>
-                              `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                              `${getOnDeckLabel(m.player1Id, m.source1Label)} vs ${getOnDeckLabel(
                                 m.player2Id,
                                 m.source2Label
                               )}`
@@ -921,125 +951,6 @@ export default function PresentationView({
                   variant="full"
                   extras={false}
                 />
-
-                {/* Live Chat Feed on Spotlight (with compact On Deck banner at top) */}
-                <div
-                  style={{
-                    marginTop: '0.75rem',
-                    paddingTop: '0.65rem',
-                    borderTop: '1px solid rgba(148, 163, 184, 0.2)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.45rem',
-                    minHeight: 0,
-                    flex: 1,
-                  }}
-                >
-                  <div className="ssp-panel-header" style={{ marginBottom: 0 }}>
-                    <div className="ssp-panel-title-wrap">
-                      <span className="ssp-panel-dot" aria-hidden="true" />
-                      <h3>🗣️ LIVE CHAT</h3>
-                    </div>
-                    <span className="ssp-panel-badge">{liveChatMessages.length} msgs</span>
-                  </div>
-
-                  {stats.upNext.length > 0 && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.45rem',
-                        padding: '0.32rem 0.55rem',
-                        borderRadius: '7px',
-                        background: 'rgba(56, 189, 248, 0.14)',
-                        border: '1px solid rgba(56, 189, 248, 0.35)',
-                        fontSize: '0.84rem',
-                      }}
-                    >
-                      <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
-                        ⏳ ON DECK
-                      </span>
-                      <span
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {stats.upNext
-                          .slice(0, 2)
-                          .map(
-                            (m) =>
-                              `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
-                                m.player2Id,
-                                m.source2Label
-                              )}`
-                          )
-                          .join('  ·  ')}
-                      </span>
-                    </div>
-                  )}
-
-                  {liveChatMessages.length === 0 ? (
-                    <p style={{ margin: '0.2rem 0', opacity: 0.72, fontSize: '0.9rem' }}>
-                      Scan the QR code to join the live chat!
-                    </p>
-                  ) : (
-                    <div
-                      className="scroller"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.35rem',
-                        overflowY: 'auto',
-                        maxHeight: '210px',
-                      }}
-                    >
-                      {liveChatMessages.slice(-8).map((m) => {
-                        const isWin = m.kind === 'win' || m.kind === 'champion';
-                        const isAnn = m.kind === 'announcement';
-                        const isEvt = m.kind === 'event';
-                        return (
-                          <div
-                            key={m.id}
-                            style={{
-                              padding: '0.38rem 0.6rem',
-                              borderRadius: '7px',
-                              background: isWin
-                                ? 'rgba(16, 185, 129, 0.16)'
-                                : isAnn
-                                ? 'rgba(245, 158, 11, 0.18)'
-                                : isEvt
-                                ? 'rgba(56, 189, 248, 0.14)'
-                                : 'rgba(15, 23, 42, 0.5)',
-                              border: `1px solid ${
-                                isWin
-                                  ? 'rgba(16, 185, 129, 0.45)'
-                                  : isAnn
-                                  ? 'rgba(245, 158, 11, 0.5)'
-                                  : isEvt
-                                  ? 'rgba(56, 189, 248, 0.4)'
-                                  : 'rgba(148, 163, 184, 0.18)'
-                              }`,
-                              fontSize: '0.9rem',
-                              lineHeight: 1.3,
-                            }}
-                          >
-                            <strong style={{ color: isWin ? '#34d399' : isEvt ? '#38bdf8' : '#fbbf24' }}>
-                              {m.fromName}:
-                            </strong>{' '}
-                            <span>
-                              {m.liveTemplate
-                                ? renderLiveMessageText({ ...m, message: m.text }, tournamentStore.getServerNow())
-                                : m.text}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </aside>
             </div>
           )}

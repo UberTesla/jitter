@@ -5,7 +5,7 @@ import {
   resolveEffectiveRole,
   tournamentStore,
 } from '../state/tournamentStore.js';
-import { computeTournamentStats } from '../engine/bracketGenerator.js';
+import { computeTournamentStats, formatTeamMembersShort } from '../engine/bracketGenerator.js';
 import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { renderLiveMessageText } from '../engine/grandmaVariables.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
@@ -322,9 +322,17 @@ export default function PlayerInboxDrawer({
     };
   }, [claimedPlayerObj, state?.matches, state?.activeMatchId, state?.championId, upNextMatches, players]);
 
+  const isTeams = state?.entryMode === 'teams';
   const getPlayerLabel = (pid, fallback) => {
     if (!pid) return fallback || 'TBD';
     return players.find((p) => p.id === pid)?.name || fallback || 'TBD';
+  };
+  const getOnDeckLabel = (pid, fallback) => {
+    if (!pid) return fallback || 'TBD';
+    const p = players.find((pl) => pl.id === pid);
+    if (!p) return fallback || 'TBD';
+    const members = isTeams ? formatTeamMembersShort(p, ' & ') : '';
+    return members ? `${p.name} (${members})` : p.name;
   };
 
   const handleSaveChatName = (e) => {
@@ -753,7 +761,7 @@ export default function PlayerInboxDrawer({
                     : (() => {
                         const nextM = upNextMatches[0];
                         const nextText = nextM
-                          ? `${getPlayerLabel(nextM.player1Id, nextM.source1Label)} vs ${getPlayerLabel(
+                          ? `${getOnDeckLabel(nextM.player1Id, nextM.source1Label)} vs ${getOnDeckLabel(
                               nextM.player2Id,
                               nextM.source2Label
                             )}`
@@ -772,7 +780,7 @@ export default function PlayerInboxDrawer({
                           .slice(0, 2)
                           .map(
                             (m) =>
-                              `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                              `${getOnDeckLabel(m.player1Id, m.source1Label)} vs ${getOnDeckLabel(
                                 m.player2Id,
                                 m.source2Label
                               )}`
@@ -1456,9 +1464,9 @@ export default function PlayerInboxDrawer({
                               )}
                             </div>
                             <div style={{ fontSize: '0.84rem', fontWeight: 600, marginTop: '0.15rem' }}>
-                              {getPlayerLabel(m.player1Id, m.source1Label)}{' '}
+                              {getOnDeckLabel(m.player1Id, m.source1Label)}{' '}
                               <span style={{ opacity: 0.6 }}>vs</span>{' '}
-                              {getPlayerLabel(m.player2Id, m.source2Label)}
+                              {getOnDeckLabel(m.player2Id, m.source2Label)}
                             </div>
                           </div>
                         );
@@ -1527,6 +1535,11 @@ export default function PlayerInboxDrawer({
                               #{p.seed}
                             </strong>
                             <strong>{p.name}</strong>
+                            {isTeams && formatTeamMembersShort(p, ' & ') && (
+                              <span style={{ marginLeft: '0.35rem', fontSize: '0.73rem', opacity: 0.72 }}>
+                                ({formatTeamMembersShort(p, ' & ')})
+                              </span>
+                            )}
                             {isMe && (
                               <span style={{ marginLeft: '0.35rem', fontSize: '0.7rem', color: '#38bdf8' }}>
                                 (You)
