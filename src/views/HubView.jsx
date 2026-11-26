@@ -350,7 +350,7 @@ export default function HubView({
 
   const handleUnlockAdmin = async (e) => {
     e.preventDefault();
-    const cleaned = normalizeFourWordId(adminKeyInput);
+    const cleaned = adminKeyInput.trim();
     if (!cleaned) return;
     const res = await tournamentStore.unlockHubAdminWithKey(cleaned);
     if (res.ok) {
@@ -358,7 +358,35 @@ export default function HubView({
       setShowSettingsDrawer(false);
       flashStatus('🛡️ Hub Admin unlocked on this device!');
     } else {
-      flashStatus(res.error || 'Invalid 4-word Hub Admin Key');
+      flashStatus(res.error || 'Invalid Hub Admin Key');
+    }
+  };
+
+  const importFileInputRef = useRef(null);
+
+  const handleImportJsonFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const res = await tournamentStore.importBackupJSON(text, {
+        hostOnCloud: isConnected,
+        assignAsHost: true,
+      });
+      if (!res.ok) {
+        flashStatus(res.error || 'Failed to import tournament JSON');
+        return;
+      }
+      setLocalTournaments(tournamentStore.listTournaments());
+      const label =
+        res.count > 1
+          ? `Imported ${res.count} tournaments (opened "${res.tournament.tournamentName}")`
+          : `Imported "${res.tournament.tournamentName}"`;
+      flashStatus(`✅ ${label}`);
+      onEnterTournament?.(res.tournament.tournamentId);
+    } catch {
+      flashStatus('Could not read the selected JSON file.');
     }
   };
 
@@ -419,6 +447,21 @@ export default function HubView({
               title="Device name, LAN share URL, sync server & Hub Admin access"
             >
               ⚙ Settings
+            </button>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={handleImportJsonFile}
+            />
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => importFileInputRef.current?.click()}
+              title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
+            >
+              ⬆ Import JSON
             </button>
             <button
               type="button"
@@ -515,15 +558,15 @@ export default function HubView({
                         type="text"
                         value={adminKeyInput}
                         onChange={(e) => setAdminKeyInput(e.target.value)}
-                        placeholder="Enter 4-word Hub Admin Key..."
-                        aria-label="4-word Hub Admin Key"
+                        placeholder="Enter Hub Admin Key or passphrase..."
+                        aria-label="Hub Admin Key or passphrase"
                         autoComplete="off"
                         spellCheck="false"
                       />
                       <button
                         type="submit"
                         className="btn-secondary btn-sm"
-                        disabled={!normalizeFourWordId(adminKeyInput)}
+                        disabled={!adminKeyInput.trim()}
                       >
                         Unlock Admin
                       </button>

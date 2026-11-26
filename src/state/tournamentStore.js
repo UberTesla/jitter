@@ -3624,7 +3624,7 @@ export class TournamentStore {
           sender: this.tabId,
           deviceId: this.remoteSync.deviceId,
           deviceName: this.remoteSync.deviceName,
-          key: normalizeFourWordId(key),
+          key: String(key || '').trim(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -5932,6 +5932,161 @@ export class TournamentStore {
       state: this.state,
     };
     return JSON.stringify(payload, null, 2);
+  }
+
+  /**
+   * Import one or more tournaments from JSON:
+   *  - Exported backup JSON ({ state: { ... } })
+   *  - Raw tournament state JSON ({ tournamentId, matches, players, ... })
+   *  - Server sync file (.pingpong-sync-data.json: { activeTournamentId, tournaments: { ... } })
+   */
+  async importBackupJSON(rawInput, { hostOnCloud = true, assignAsHost = true } = {}) {
+    let parsed;
+    try {
+      parsed = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
+    } catch {
+      return { ok: false, error: 'Invalid JSON file — could not parse.' };
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      return { ok: false, error: 'JSON file does not contain a valid tournament object.' };
+    }
+
+    const isTournamentLike = (obj) =>
+      Boolean(obj && typeof obj === 'object' && (obj.matches || obj.players || obj.roster));
+
+    let rawList = [];
+    let preferredActiveId = null;
+
+    if (isTournamentLike(parsed.state)) {
+      rawList = [parsed.state];
+    } else if (
+      parsed.tournaments &&
+      typeof parsed.tournaments === 'object' &&
+      !Array.isArray(parsed.tournaments)
+    ) {
+      rawList = Object.values(parsed.tournaments).filter(isTournamentLike);
+      preferredActiveId = parsed.activeTournamentId || null;
+    } else if (isTournamentLike(parsed)) {
+      rawList = [parsed];
+    }
+
+    if (rawList.length === 0) {
+      return {
+        ok: false,
+        error: 'Unrecognized JSON format — expected an exported tournament backup or sync data file.',
+      };
+    }
+
+    const pushCloud = Boolean(hostOnCloud && this.remoteSync.connected);
+    const cloudById = new Map((this.remoteSync.cloudTournaments || []).map((t) => [t.id, t]));
+    const existingIds = new Set([
+      ...Object.keys(readTournamentLibraryMap()),
+      ...(this.remoteSync.cloudTournaments || []).map((t) => t.id),
+      ...(this.remoteSync.cloudTournaments || []).map((t) => t.joinCode).filter(Boolean),
+    ]);
+
+    const importedStates = [];
+    let primaryState = null;
+
+    for (const rawItem of rawList) {
+      const normalized = normalizePersistedState(rawItem);
+      const originalId = normalized.tournamentId;
+      let targetId = normalized.tournamentId;
+      let targetJoinCode = normalized.joinCode;
+
+      // Avoid overwriting a cloud tournament owned by another device if we aren't host/admin
+      const existingCloud = cloudById.get(targetId);
+      const canOverwriteCloud =
+        !existingCloud ||
+        !existingCloud.hostDeviceId ||
+        existingCloud.hostDeviceId === this.remoteSync.deviceId ||
+        Boolean(this.remoteSync.isThisDeviceAdmin);
+
+      if (!targetId || (pushCloud && !canOverwriteCloud)) {
+        const freshCode = generateTournamentId(existingIds);
+        existingIds.add(freshCode);
+        targetId = freshCode;
+        targetJoinCode = freshCode;
+      } else if (!targetJoinCode) {
+        const freshCode = generateTournamentId(existingIds);
+        existingIds.add(freshCode);
+        targetJoinCode = freshCode;
+      }
+
+      const prevHistory = Array.isArray(normalized.hostHistory) ? normalized.hostHistory : [];
+      const nextHistory =
+        pushCloud && assignAsHost && this.remoteSync.deviceId
+          ? Array.from(new Set([...prevHistory, this.remoteSync.deviceId]))
+          : prevHistory;
+
+      const prepared = {
+        ...normalized,
+        tournamentId: targetId,
+        joinCode: targetJoinCode,
+        destruction: null,
+        ...(pushCloud && assignAsHost && this.remoteSync.deviceId
+          ? {
+            hostDeviceId: this.remoteSync.deviceId,
+            hostDeviceName: this.remoteSync.deviceName || normalized.hostDeviceName || 'Host',
+            hostHistory: nextHistory,
+          }
+          : {}),
+        updatedAt: Date.now(),
+      };
+
+      importedStates.push(prepared);
+      if (!primaryState || (preferredActiveId && originalId === preferredActiveId)) {
+        primaryState = prepared;
+      }
+    }
+
+    if (!primaryState) {
+      return { ok: false, error: 'No valid tournaments found in JSON file.' };
+    }
+
+    // Push to cloud server if connected, otherwise save to local library
+    if (pushCloud) {
+      for (const item of importedStates) {
+        const isPrimary = item.tournamentId === primaryState.tournamentId;
+        const res = await this.pushStateToRemote(item, { activate: isPrimary });
+        if (!res && isPrimary) {
+          return {
+            ok: false,
+            error: 'Server rejected the import (check Admin / creation permissions).',
+          };
+        }
+      }
+    } else if (this.persistEnabled) {
+      for (const item of importedStates) {
+        this.saveToLibrary(item);
+      }
+    }
+
+    this.clearPendingScoreTimer();
+    this.pendingScorePush = null;
+    this.localPreviewMatchId = null;
+    this.syncMode = 'live';
+    this.hasUnpublishedChanges = false;
+    this.hasActiveTournament = true;
+    this.programState = primaryState;
+    this.state = primaryState;
+    this.remoteSync = {
+      ...this.remoteSync,
+      activeSource: pushCloud ? 'cloud' : 'local',
+      currentRole: pushCloud ? 'host' : 'local',
+    };
+    this.broadcastState(primaryState, { skipRemote: true });
+    this.persistStudioDraft();
+    this.resumeAfterDisconnect();
+    this.emit();
+
+    return {
+      ok: true,
+      count: importedStates.length,
+      tournament: primaryState,
+      tournaments: importedStates,
+      pushedToCloud: pushCloud,
+    };
   }
 }
 

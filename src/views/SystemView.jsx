@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ROLE_META,
   SLIDE_DEFINITIONS,
@@ -255,6 +255,8 @@ export default function SystemView({
     }
   };
 
+  const importFileInputRef = useRef(null);
+
   const handleExportJSON = () => {
     const json = tournamentStore.exportBackupJSON();
     const blob = new Blob([json], { type: 'application/json' });
@@ -269,6 +271,30 @@ export default function SystemView({
     notify('Tournament JSON backup exported');
   };
 
+  const handleImportJSON = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const res = await tournamentStore.importBackupJSON(text, {
+        hostOnCloud: Boolean(remoteSync.connected),
+        assignAsHost: true,
+      });
+      if (!res.ok) {
+        notify(`Import failed: ${res.error || 'Invalid JSON'}`);
+        return;
+      }
+      notify(
+        res.count > 1
+          ? `Imported ${res.count} tournaments — loaded "${res.tournament.tournamentName}"`
+          : `Imported "${res.tournament.tournamentName}"`
+      );
+    } catch {
+      notify('Could not read the selected JSON file');
+    }
+  };
+
   return (
     <div className="debug-shell">
       <header className="control-topbar">
@@ -279,6 +305,21 @@ export default function SystemView({
           onNavigateMode={onNavigateMode}
           onOpenTournamentChooser={onOpenTournamentChooser}
         >
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={handleImportJSON}
+          />
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => importFileInputRef.current?.click()}
+            title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
+          >
+            ⬆ Import JSON
+          </button>
           <button type="button" className="btn-secondary btn-sm" onClick={handleExportJSON}>
             ⬇ Export JSON
           </button>

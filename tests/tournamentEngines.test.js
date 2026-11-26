@@ -3401,3 +3401,56 @@ test('$countdown variable resolves durations and clock times to remaining time o
   const clk2 = resolveMessageTemplate('Begins in $countdown 12:15 pm', {}, { now: baseNow });
   assert.equal(clk2.text, 'Begins in 15:00');
 });
+
+test('importBackupJSON imports exported backup, raw tournament state, and multi-tournament sync files', async () => {
+  const sourceStore = new TournamentStore(
+    createInitialState({
+      tournamentId: 't-export-test',
+      joinCode: 'alpha-bravo-charlie-delta',
+      tournamentName: 'Thanksgiving Classic',
+      playerCount: 4,
+    }),
+    { persist: false }
+  );
+  const exportedJson = sourceStore.exportBackupJSON();
+
+  // 1. Exported backup wrapper ({ exportedAt, state })
+  const target1 = new TournamentStore(createInitialState({ playerCount: 4 }), { persist: false });
+  const r1 = await target1.importBackupJSON(exportedJson, { hostOnCloud: false });
+  assert.equal(r1.ok, true);
+  assert.equal(r1.count, 1);
+  assert.equal(target1.getState().tournamentName, 'Thanksgiving Classic');
+  assert.equal(target1.getState().joinCode, 'alpha-bravo-charlie-delta');
+
+  // 2. Raw tournament state JSON
+  const target2 = new TournamentStore(createInitialState({ playerCount: 4 }), { persist: false });
+  const r2 = await target2.importBackupJSON(JSON.stringify(sourceStore.getState()), {
+    hostOnCloud: false,
+  });
+  assert.equal(r2.ok, true);
+  assert.equal(target2.getState().tournamentName, 'Thanksgiving Classic');
+
+  // 3. Server sync data bundle (.pingpong-sync-data.json)
+  const secondState = createInitialState({
+    tournamentId: 't-second',
+    joinCode: 'echo-foxtrot-golf-hotel',
+    tournamentName: 'Doubles Side Bracket',
+    playerCount: 4,
+  });
+  const syncBundle = JSON.stringify({
+    activeTournamentId: 't-second',
+    tournaments: {
+      't-export-test': sourceStore.getState(),
+      't-second': secondState,
+    },
+  });
+  const target3 = new TournamentStore(createInitialState({ playerCount: 4 }), { persist: false });
+  const r3 = await target3.importBackupJSON(syncBundle, { hostOnCloud: false });
+  assert.equal(r3.ok, true);
+  assert.equal(r3.count, 2);
+  assert.equal(target3.getState().tournamentName, 'Doubles Side Bracket');
+
+  // 4. Invalid JSON fails cleanly
+  const bad = await target3.importBackupJSON('{not valid json', { hostOnCloud: false });
+  assert.equal(bad.ok, false);
+});
