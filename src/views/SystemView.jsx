@@ -199,7 +199,7 @@ export default function SystemView({
     { label: 'Presentation (TV/Projector)', url: `${shareBaseOrigin}/present` },
     { label: 'Spectator View', url: `${shareBaseOrigin}/spectator` },
     { label: 'Users & Roles', url: `${shareBaseOrigin}/users` },
-    { label: 'System View', url: `${shareBaseOrigin}/system` },
+    { label: 'Host View', url: `${shareBaseOrigin}/host` },
   ];
 
   const notify = (msg) => {
@@ -327,10 +327,10 @@ export default function SystemView({
 
         <div className="brand-block is-header-right">
           <div className="brand-emblem" aria-hidden="true">
-            ⚙️
+            👑
           </div>
           <div>
-            <h1 className="brand-title">SYSTEM &amp; HOST CONTROL</h1>
+            <h1 className="brand-title">HOST CONTROL</h1>
             <div className="brand-meta">
               <span className="meta-chip">{state.tournamentName}</span>
               <span className="meta-chip">

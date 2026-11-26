@@ -105,7 +105,7 @@ export default function ViewNavBar({
 
   const navItems = [
     { id: 'admin', label: 'Admin', allowed: Boolean(perms.canAccessAdmin) },
-    { id: 'system', label: 'System', allowed: Boolean(perms.canAccessSystem) },
+    { id: 'system', label: 'Host', allowed: Boolean(perms.canAccessSystem) },
     {
       id: 'users',
       label: 'Users',

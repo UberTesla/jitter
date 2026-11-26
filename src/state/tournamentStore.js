@@ -302,8 +302,10 @@ function detectInitialViewMode() {
   }
   if (path.startsWith('/users') || viewParam === 'users') return 'users';
   if (
+    path.startsWith('/host') ||
     path.startsWith('/system') ||
     path.startsWith('/debug') ||
+    viewParam === 'host' ||
     viewParam === 'system' ||
     viewParam === 'debug'
   ) {
@@ -3903,6 +3905,7 @@ export class TournamentStore {
       path.startsWith('/spectator') ||
       path.startsWith('/score') ||
       path.startsWith('/debug') ||
+      path.startsWith('/host') ||
       path.startsWith('/system') ||
       Boolean(window.opener);
     let hash = 0;

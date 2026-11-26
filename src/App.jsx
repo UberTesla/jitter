@@ -89,8 +89,10 @@ function resolveInitialMode() {
     return 'users';
   }
   if (
+    path.startsWith('/host') ||
     path.startsWith('/system') ||
     path.startsWith('/debug') ||
+    viewParam === 'host' ||
     viewParam === 'system' ||
     viewParam === 'debug'
   ) {
@@ -391,7 +393,7 @@ export default function App() {
       : mode === 'users'
       ? '/users'
       : mode === 'system'
-      ? '/system'
+      ? '/host'
       : '/control';
 
   const navigateMode = (nextMode) => {
