@@ -729,6 +729,7 @@ export function createInitialState(overrides = {}) {
       scoreFont: overrides.ui?.scoreFont || 'barlow',
       showMiniBracket: overrides.ui?.showMiniBracket ?? true,
       tickerItems: normalizeTickerItems(overrides.ui?.tickerItems),
+      tickerMode: resolveTickerMode(overrides.ui),
       tickerAutoRotate: Boolean(overrides.ui?.tickerAutoRotate ?? false),
       tickerScroll: Boolean(overrides.ui?.tickerScroll ?? false),
       tickerRotateSec: Math.max(3, Number(overrides.ui?.tickerRotateSec) || 10),

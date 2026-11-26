@@ -23,7 +23,9 @@ export default function Ticker({
   const mode = resolveTickerMode(state.ui);
   const autoRotate = mode === 'rotate';
   const rotateSec = Math.max(3, Number(state.ui?.tickerRotateSec) || 10);
-  const [idx, setIdx] = useState(0);
+  const computeSyncedSlot = () =>
+    Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
+  const [idx, setIdx] = useState(computeSyncedSlot);
   const [chatMessages, setChatMessages] = useState(
     () => tournamentStore.getSyncMeta()?.remoteSync?.chatLiveMessages || []
   );
@@ -45,15 +47,26 @@ export default function Ticker({
 
   useEffect(() => {
     if (!autoRotate || items.length < 2) return undefined;
-    const id = setInterval(() => setIdx((n) => n + 1), rotateSec * 1000);
+    const updateSlot = () => {
+      const next = Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
+      setIdx((prev) => (prev === next ? prev : next));
+    };
+    updateSlot();
+    const id = setInterval(updateSlot, 250);
     return () => clearInterval(id);
-  }, [autoRotate, items, rotateSec]);
+  }, [autoRotate, items.length, rotateSec]);
 
   const stats = useMemo(() => computeTournamentStats(state), [state]);
   const nameOf = (id, fallback) => state.players?.find((p) => p.id === id)?.name || fallback || 'TBD';
 
   if (items.length === 0) return null;
   const scroll = mode === 'scroll';
+  const durationSec = Math.max(60, rotateSec * 12);
+  const itemsKey = items.join(',');
+  const phaseOffsetSec = useMemo(
+    () => ((tournamentStore.getServerNow() / 1000) % durationSec).toFixed(2),
+    [scroll, durationSec, itemsKey]
+  );
   const visible = autoRotate && !scroll ? [items[idx % items.length]] : items;
   const playerMap = new Map((state.players || []).map((p) => [p.id, p]));
   const isTeams = state.entryMode === 'teams';
@@ -186,7 +199,14 @@ export default function Ticker({
     return (
       <div className="ticker-region is-scroll">
         <section className="broadcast-ticker-card ticker-marquee" aria-label="Ticker">
-          <div className="ticker-marquee-track" style={{ animationDuration: `${Math.max(60, rotateSec * 12)}s` }}>
+          <div
+            key={`marquee-${durationSec}-${itemsKey}`}
+            className="ticker-marquee-track"
+            style={{
+              animationDuration: `${durationSec}s`,
+              animationDelay: `-${phaseOffsetSec}s`,
+            }}
+          >
             <div className="ticker-marquee-group">{track}</div>
             <div className="ticker-marquee-group" aria-hidden="true">{track}</div>
           </div>
