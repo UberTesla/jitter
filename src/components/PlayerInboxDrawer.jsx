@@ -87,6 +87,16 @@ export default function PlayerInboxDrawer({
   const canModerateChat = (ROLE_LEVEL[myRole] ?? 0) >= ROLE_LEVEL.moderator;
 
   const [inboxNowMs, setInboxNowMs] = useState(() => tournamentStore.getServerNow());
+  const [dismissedBannerIds, setDismissedBannerIds] = useState(() => new Set());
+  const dismissBanner = (id) => {
+    if (!id) return;
+    setDismissedBannerIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    trackUsageEvent('chat:dismiss_banner', { category: 'chat' });
+  };
   const stickyBanner = state?.presentation?.activeBanner || null;
   const activeStickyAnnouncement =
     stickyBanner &&
@@ -95,9 +105,20 @@ export default function PlayerInboxDrawer({
       : null;
   const latestInboxAnnouncement =
     inbox.find((m) => m.kind === 'announcement') || null;
-  const latestAnnouncement = activeStickyAnnouncement || latestInboxAnnouncement || null;
+  const rawLatestAnnouncement = activeStickyAnnouncement || latestInboxAnnouncement || null;
+  const latestAnnouncementId = rawLatestAnnouncement
+    ? rawLatestAnnouncement.id || `ann-${rawLatestAnnouncement.sentAt || rawLatestAnnouncement.message}`
+    : null;
+  const latestAnnouncement =
+    rawLatestAnnouncement && !dismissedBannerIds.has(latestAnnouncementId)
+      ? rawLatestAnnouncement
+      : null;
+  const rawLatestAlert = inbox.find((m) => m.kind !== 'announcement') || null;
+  const latestAlertId = rawLatestAlert
+    ? rawLatestAlert.id || `alt-${rawLatestAlert.sentAt || rawLatestAlert.message}`
+    : null;
   const latestAlert =
-    inbox.find((m) => m.kind !== 'announcement') || null;
+    rawLatestAlert && !dismissedBannerIds.has(latestAlertId) ? rawLatestAlert : null;
 
   const hasLiveInboxCountdown =
     open &&
@@ -542,85 +563,153 @@ export default function PlayerInboxDrawer({
               </button>
             </div>
 
-            {/* Mini Announcement Banner (includes active sticky announcements for newly joined users) */}
+            {/* Mini Announcement Banner (dismissible; includes active sticky announcements for newly joined users) */}
             {latestAnnouncement && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('alerts')}
-                title="Click to view announcements & alerts"
+              <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.45rem',
+                  gap: '0.35rem',
                   width: '100%',
-                  textAlign: 'left',
-                  padding: '0.24rem 0.5rem',
+                  padding: '0.24rem 0.4rem 0.24rem 0.5rem',
                   marginBottom: 0,
                   borderRadius: '7px',
                   border: '1px solid rgba(245, 158, 11, 0.48)',
                   background: 'rgba(245, 158, 11, 0.15)',
                   color: 'inherit',
                   fontSize: '0.75rem',
-                  cursor: 'pointer',
                 }}
               >
-                <span
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('alerts')}
+                  title="Click to view announcements & alerts"
                   style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.4rem',
                     flex: 1,
+                    minWidth: 0,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: 'inherit',
+                    font: 'inherit',
+                    textAlign: 'left',
+                    cursor: 'pointer',
                   }}
                 >
-                  <strong>{latestAnnouncement.title || '📢 Announcement from Host'}:</strong>{' '}
-                  {renderLiveMessageText(latestAnnouncement, inboxNowMs)}
-                </span>
-                <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
-                  {latestAnnouncement.sticky ? '📌 ' : ''}
-                  {formatMsgTime(latestAnnouncement.sentAt)}
-                </span>
-              </button>
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flex: 1,
+                    }}
+                  >
+                    <strong>{latestAnnouncement.title || '📢 Announcement from Host'}:</strong>{' '}
+                    {renderLiveMessageText(latestAnnouncement, inboxNowMs)}
+                  </span>
+                  <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
+                    {latestAnnouncement.sticky ? '📌 ' : ''}
+                    {formatMsgTime(latestAnnouncement.sentAt)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dismissBanner(latestAnnouncementId)}
+                  aria-label="Dismiss announcement banner"
+                  title="Dismiss"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'inherit',
+                    opacity: 0.7,
+                    cursor: 'pointer',
+                    padding: '0 0.2rem',
+                    fontSize: '0.75rem',
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             )}
 
-            {/* Mini Alert Banner directly under the Announcement Banner (personal/system alerts) */}
+            {/* Mini Alert Banner directly under the Announcement Banner (dismissible; personal/system alerts) */}
             {latestAlert && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('alerts')}
-                title="Click to view your alerts"
+              <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.45rem',
+                  gap: '0.35rem',
                   width: '100%',
-                  textAlign: 'left',
-                  padding: '0.24rem 0.5rem',
+                  padding: '0.24rem 0.4rem 0.24rem 0.5rem',
                   marginBottom: 0,
                   borderRadius: '7px',
                   border: '1px solid rgba(244, 63, 94, 0.45)',
                   background: 'rgba(244, 63, 94, 0.14)',
                   color: 'inherit',
                   fontSize: '0.75rem',
-                  cursor: 'pointer',
                 }}
               >
-                <span
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('alerts')}
+                  title="Click to view your alerts"
                   style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.4rem',
                     flex: 1,
+                    minWidth: 0,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: 'inherit',
+                    font: 'inherit',
+                    textAlign: 'left',
+                    cursor: 'pointer',
                   }}
                 >
-                  <strong>{latestAlert.title || '🔔 Alert'}:</strong>{' '}
-                  {renderLiveMessageText(latestAlert, inboxNowMs)}
-                </span>
-                <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
-                  {formatMsgTime(latestAlert.sentAt)}
-                </span>
-              </button>
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flex: 1,
+                    }}
+                  >
+                    <strong>{latestAlert.title || '🔔 Alert'}:</strong>{' '}
+                    {renderLiveMessageText(latestAlert, inboxNowMs)}
+                  </span>
+                  <span style={{ opacity: 0.72, fontSize: '0.68rem', flexShrink: 0 }}>
+                    {formatMsgTime(latestAlert.sentAt)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dismissBanner(latestAlertId)}
+                  aria-label="Dismiss alert banner"
+                  title="Dismiss"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'inherit',
+                    opacity: 0.7,
+                    cursor: 'pointer',
+                    padding: '0 0.2rem',
+                    fontSize: '0.75rem',
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             )}
 
             {chatError && (
