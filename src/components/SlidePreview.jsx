@@ -516,7 +516,9 @@ export default function SlidePreview({
                   {Boolean(state.presentation?.titleSubtitle?.trim()) && (
                     <div className="mini-stat-line">{state.presentation.titleSubtitle}</div>
                   )}
-                  <div className="mini-corner-chip">Grandma Corner Live</div>
+                  {state.rules?.grandmaEnabled !== false && (
+                    <div className="mini-corner-chip">Grandma Corner Live</div>
+                  )}
                 </div>
               )}
 
@@ -537,7 +539,9 @@ export default function SlidePreview({
                   {state.ui?.showMiniBracket !== false && (
                     <div className="mini-subline">+ Live Mini Bracket visible below scoreboard</div>
                   )}
-                  <div className="mini-corner-chip">CRT + Grandma Live</div>
+                  {state.rules?.grandmaEnabled !== false && (
+                    <div className="mini-corner-chip">CRT + Grandma Live</div>
+                  )}
                 </div>
               )}
 
@@ -600,7 +604,9 @@ export default function SlidePreview({
                   {(champion || Boolean(state.presentation?.intermissionMessage?.trim())) && (
                     <div className="mini-stat-line">
                       {champion
-                        ? `${stats.totalPointsPlayed} Total Points · Full-Size Grandma CRT`
+                        ? `${stats.totalPointsPlayed} Total Points${
+                            state.rules?.grandmaEnabled !== false ? ' · Full-Size Grandma CRT' : ''
+                          }`
                         : state.presentation.intermissionMessage}
                     </div>
                   )}

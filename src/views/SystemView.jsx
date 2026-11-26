@@ -17,6 +17,7 @@ import { computeTournamentStats } from '../engine/bracketGenerator.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import UsageStatsPanel from '../components/UsageStatsPanel.jsx';
 import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
+import { trackUsageEvent } from '../engine/usageAnalytics.js';
 import { rankLanAddresses, resolveShareOrigin } from '../components/ShareTournamentModal.jsx';
 
 const STRESS_TEST_PRESETS = [
@@ -526,6 +527,36 @@ export default function SystemView({
                     }}
                   >
                     🎯 Open (Anyone Can Score)
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-field" style={{ marginTop: '0.65rem' }}>
+                <span className="field-label">Grandma &amp; CRT Corner</span>
+                <div className="segmented-control">
+                  <button
+                    type="button"
+                    disabled={!perms.canManageAccessSettings}
+                    className={state.rules?.grandmaEnabled !== false ? 'is-selected' : ''}
+                    onClick={() => {
+                      tournamentStore.setGrandmaEnabled(true);
+                      trackUsageEvent('host:grandma_enabled', { category: 'host' });
+                      notify('Grandma & CRT Corner ENABLED for this tournament');
+                    }}
+                  >
+                    👵 Enabled
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!perms.canManageAccessSettings}
+                    className={state.rules?.grandmaEnabled === false ? 'is-selected' : ''}
+                    onClick={() => {
+                      tournamentStore.setGrandmaEnabled(false);
+                      trackUsageEvent('host:grandma_disabled', { category: 'host' });
+                      notify('Grandma & CRT Corner DISABLED — all Grandma controls & visuals hidden');
+                    }}
+                  >
+                    🚫 Disabled
                   </button>
                 </div>
               </div>

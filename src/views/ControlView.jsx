@@ -44,6 +44,7 @@ export default function ControlView({
   const toastTimerRef = useRef(null);
 
   const activeMatch = state.matches?.[state.activeMatchId] || null;
+  const grandmaEnabled = state.rules?.grandmaEnabled !== false;
   const cornerScale = state.ui?.cornerScale ?? 1.0;
   const cornerOpacity = state.ui?.cornerOpacity ?? 1.0;
   const bubbleScale = state.ui?.bubbleScale ?? 1.0;
@@ -55,7 +56,7 @@ export default function ControlView({
 
   const allPanelsCollapsed =
     Boolean(collapsed.presentation) &&
-    Boolean(collapsed.grandma) &&
+    (!grandmaEnabled || Boolean(collapsed.grandma)) &&
     Boolean(collapsed.bracket);
 
   const showToast = (msg) => {
@@ -130,8 +131,8 @@ export default function ControlView({
 
     const currentInSession = Boolean(
       activeMatch &&
-        !activeMatch.completed &&
-        ((activeMatch.score1 || 0) > 0 || (activeMatch.score2 || 0) > 0)
+      !activeMatch.completed &&
+      ((activeMatch.score1 || 0) > 0 || (activeMatch.score2 || 0) > 0)
     );
 
     if (currentInSession) {
@@ -279,86 +280,86 @@ export default function ControlView({
 
         <div className="topbar-subrow">
           <div className="brand-block is-header-right">
-          <div className="brand-emblem" aria-hidden="true">
-            🏓
-          </div>
-          <div>
-            <h1 className="brand-title">
-              {state.tournamentName}
-              {Boolean(state.tournamentSubtitle?.trim()) && (
-                <>
-                  <span style={{ opacity: 0.55, margin: '0 0.45rem' }} aria-hidden="true">
-                    ·
-                  </span>
-                  <span style={{ color: '#a7f3d0', fontWeight: 700, fontSize: '0.86em' }}>
-                    {state.tournamentSubtitle}
-                  </span>
-                </>
-              )}
-            </h1>
-            <div className="brand-meta">
-              <span className="meta-chip">
-                {isTeams ? 'Teams · Doubles' : 'Singles · 1v1'}
-              </span>
-              <span className="meta-chip">
-                {state.format === 'double' ? 'Double Elim' : 'Single Elim'} · {state.playerCount}{' '}
-                {entityNoun}
-              </span>
-              <span className="meta-chip">
-                To {state.rules.targetPoints} · Win by {state.rules.winBy ?? 2} · Serve{' '}
-                {state.rules.serveRotation} · {state.rules.tableCount ?? 1}{' '}
-                {(state.rules.tableCount ?? 1) === 1 ? 'Table' : 'Tables'}
-              </span>
-              {state.joinCode && (
-                <button
-                  type="button"
-                  className="meta-chip meta-chip-key"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(state.joinCode);
-                      showToast(`Copied 4-word join key: ${state.joinCode}`);
-                    } catch {
-                      showToast(`4-word join key: ${state.joinCode}`);
+            <div className="brand-emblem" aria-hidden="true">
+              🏓
+            </div>
+            <div>
+              <h1 className="brand-title">
+                {state.tournamentName}
+                {Boolean(state.tournamentSubtitle?.trim()) && (
+                  <>
+                    <span style={{ opacity: 0.55, margin: '0 0.45rem' }} aria-hidden="true">
+                      ·
+                    </span>
+                    <span style={{ color: '#a7f3d0', fontWeight: 700, fontSize: '0.86em' }}>
+                      {state.tournamentSubtitle}
+                    </span>
+                  </>
+                )}
+              </h1>
+              <div className="brand-meta">
+                <span className="meta-chip">
+                  {isTeams ? 'Teams · Doubles' : 'Singles · 1v1'}
+                </span>
+                <span className="meta-chip">
+                  {state.format === 'double' ? 'Double Elim' : 'Single Elim'} · {state.playerCount}{' '}
+                  {entityNoun}
+                </span>
+                <span className="meta-chip">
+                  To {state.rules.targetPoints} · Win by {state.rules.winBy ?? 2} · Serve{' '}
+                  {state.rules.serveRotation} · {state.rules.tableCount ?? 1}{' '}
+                  {(state.rules.tableCount ?? 1) === 1 ? 'Table' : 'Tables'}
+                </span>
+                {state.joinCode && (
+                  <button
+                    type="button"
+                    className="meta-chip meta-chip-key"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(state.joinCode);
+                        showToast(`Copied 4-word join key: ${state.joinCode}`);
+                      } catch {
+                        showToast(`4-word join key: ${state.joinCode}`);
+                      }
+                    }}
+                    title="Click to copy this tournament's 4-word join key"
+                    aria-label={`Copy 4-word join key ${state.joinCode}`}
+                  >
+                    🔑 {state.joinCode}
+                  </button>
+                )}
+                {state.demoMode && <span className="meta-chip chip-demo">DEMO MODE</span>}
+
+                {/* Fixed-width OBS Sync Cluster so toggling Live <-> Studio never shifts or wraps UI */}
+                <div className="sync-control-cluster">
+                  <button
+                    type="button"
+                    className={`sync-mode-btn ${isStudio ? 'is-studio' : 'is-live'}`}
+                    onClick={handleToggleSyncMode}
+                    title={
+                      isStudio
+                        ? 'Studio Mode: edits stay in preview until pushed live. Click to return to Live Mode.'
+                        : 'Live Mode: edits sync immediately to Presentation View. Click to switch to OBS Studio Mode.'
                     }
-                  }}
-                  title="Click to copy this tournament's 4-word join key"
-                  aria-label={`Copy 4-word join key ${state.joinCode}`}
-                >
-                  🔑 {state.joinCode}
-                </button>
-              )}
-              {state.demoMode && <span className="meta-chip chip-demo">DEMO MODE</span>}
+                  >
+                    <span className="sync-mode-dot" aria-hidden="true" />
+                    {isStudio ? 'STUDIO MODE' : 'LIVE SYNC'}
+                  </button>
 
-              {/* Fixed-width OBS Sync Cluster so toggling Live <-> Studio never shifts or wraps UI */}
-              <div className="sync-control-cluster">
-                <button
-                  type="button"
-                  className={`sync-mode-btn ${isStudio ? 'is-studio' : 'is-live'}`}
-                  onClick={handleToggleSyncMode}
-                  title={
-                    isStudio
-                      ? 'Studio Mode: edits stay in preview until pushed live. Click to return to Live Mode.'
-                      : 'Live Mode: edits sync immediately to Presentation View. Click to switch to OBS Studio Mode.'
-                  }
-                >
-                  <span className="sync-mode-dot" aria-hidden="true" />
-                  {isStudio ? 'STUDIO MODE' : 'LIVE SYNC'}
-                </button>
-
-                <button
-                  type="button"
-                  className={`btn-push-live-chip ${hasUnpublished ? 'has-changes' : ''} ${isStudio ? '' : 'is-slot-hidden'
-                    }`}
-                  onClick={handlePushLive}
-                  disabled={!isStudio}
-                  tabIndex={isStudio ? 0 : -1}
-                  aria-hidden={!isStudio}
-                >
-                  ▶ Push Live{hasUnpublished ? ' ●' : ''}
-                </button>
+                  <button
+                    type="button"
+                    className={`btn-push-live-chip ${hasUnpublished ? 'has-changes' : ''} ${isStudio ? '' : 'is-slot-hidden'
+                      }`}
+                    onClick={handlePushLive}
+                    disabled={!isStudio}
+                    tabIndex={isStudio ? 0 : -1}
+                    aria-hidden={!isStudio}
+                  >
+                    ▶ Push Live{hasUnpublished ? ' ●' : ''}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           </div>
 
           <div className="topbar-submenu-actions" role="toolbar" aria-label="Control Actions">
@@ -366,14 +367,16 @@ export default function ControlView({
               ⚙ Setup &amp; Rules
             </button>
 
-            <button
-              type="button"
-              className={`btn-secondary btn-sm ${state.ui.showCornerScene ? 'is-toggled-on' : ''}`}
-              onClick={() => tournamentStore.toggleCornerScene()}
-              aria-pressed={state.ui.showCornerScene}
-            >
-              👵 {state.ui.showCornerScene ? 'Hide Grandma' : 'Show Grandma'}
-            </button>
+            {grandmaEnabled && (
+              <button
+                type="button"
+                className={`btn-secondary btn-sm ${state.ui.showCornerScene ? 'is-toggled-on' : ''}`}
+                onClick={() => tournamentStore.toggleCornerScene()}
+                aria-pressed={state.ui.showCornerScene}
+              >
+                👵 {state.ui.showCornerScene ? 'Hide Grandma' : 'Show Grandma'}
+              </button>
+            )}
 
             <button
               type="button"
@@ -441,7 +444,10 @@ export default function ControlView({
         />
 
         {/* Middle Row: Collapsible Broadcast Deck (with contextual slide banner) + Grandma & CRT Panels */}
-        <div className="operator-deck-grid">
+        <div
+          className="operator-deck-grid"
+          style={!grandmaEnabled ? { gridTemplateColumns: '1fr' } : undefined}
+        >
           <SlidePreview
             state={state}
             syncMeta={syncMeta}
@@ -452,16 +458,16 @@ export default function ControlView({
               tournamentStore.setPresentationConfig({ autoRotate: enabled })
             }
             onChangeAutoRotateSlides={(slides) =>
-          tournamentStore.setPresentationConfig({ autoRotateSlides: slides })
-        }
-        onChangeAutoRotateSec={(sec) =>
+              tournamentStore.setPresentationConfig({ autoRotateSlides: slides })
+            }
+            onChangeAutoRotateSec={(sec) =>
               tournamentStore.setPresentationConfig({ autoRotateSec: sec })
             }
             onUpdatePresentationConfig={(partial) =>
               tournamentStore.setPresentationConfig(partial)
             }
             onToggleMiniBracket={(show) => tournamentStore.setShowMiniBracket(show)}
-        onChangeTicker={(partial) => tournamentStore.setTickerConfig(partial)}
+            onChangeTicker={(partial) => tournamentStore.setTickerConfig(partial)}
             onPublishLive={handlePushLive}
             onDiscardStaged={() => {
               tournamentStore.discardStudioChanges();
@@ -472,12 +478,13 @@ export default function ControlView({
             }
           />
 
-          <div className="operator-side-stack">
-            {/* Unified Collapsible Grandma Corner Panel with Subsections */}
-            <section
-              className={`panel-card grandma-corner-panel ${collapsed.grandma ? 'is-collapsed' : ''}`}
-              aria-label="Grandma Corner"
-            >
+          {grandmaEnabled && (
+            <div className="operator-side-stack">
+              {/* Unified Collapsible Grandma Corner Panel with Subsections */}
+              <section
+                className={`panel-card grandma-corner-panel ${collapsed.grandma ? 'is-collapsed' : ''}`}
+                aria-label="Grandma Corner"
+              >
               <div className="panel-header-row">
                 <button
                   type="button"
@@ -557,9 +564,8 @@ export default function ControlView({
                       <div className="inline-actions">
                         <button
                           type="button"
-                          className={`btn-secondary btn-sm ${
-                            state.ui.showCornerScene ? 'is-toggled-on' : ''
-                          }`}
+                          className={`btn-secondary btn-sm ${state.ui.showCornerScene ? 'is-toggled-on' : ''
+                            }`}
                           onClick={() => tournamentStore.toggleCornerScene()}
                           aria-pressed={state.ui.showCornerScene}
                           title="Toggle full Grandma scene vs steaming coffee cup globally"
@@ -687,6 +693,7 @@ export default function ControlView({
               )}
             </section>
           </div>
+          )}
         </div>
 
         {/* Collapsible Interactive Tournament Bracket */}
@@ -752,8 +759,8 @@ export default function ControlView({
               ? `Rebuilt ${setupPayload.playerCount}-${setupPayload.entryMode === 'teams' ? 'team' : 'player'
               } ${setupPayload.format} elimination bracket`
               : setupPayload.playerCount > prevCount
-              ? `Added new ${setupPayload.entryMode === 'teams' ? 'team(s)' : 'player(s)'} mid-tournament — existing scores preserved!`
-              : 'Tournament setup & rules saved'
+                ? `Added new ${setupPayload.entryMode === 'teams' ? 'team(s)' : 'player(s)'} mid-tournament — existing scores preserved!`
+                : 'Tournament setup & rules saved'
           );
         }}
         onShufflePartners={() => {
@@ -770,21 +777,23 @@ export default function ControlView({
         }}
       />
 
-      <PhraseManagerModal
-        open={phrasesOpen}
-        onClose={() => setPhrasesOpen(false)}
-        grandma={state.grandma}
-        state={state}
-        onSaveSettings={(settings) => {
-          tournamentStore.updateGrandmaSettings(settings);
-          showToast('Grandma phrase categories & timings saved');
-        }}
-        onPlayQuoteNow={(phrase) => {
-          const resolved = resolveGrandmaPhrase(phrase, state);
-          tournamentStore.triggerLiveQuote(phrase);
-          showToast(`Playing quote: "${resolved}"`);
-        }}
-      />
+      {grandmaEnabled && (
+        <PhraseManagerModal
+          open={phrasesOpen}
+          onClose={() => setPhrasesOpen(false)}
+          grandma={state.grandma}
+          state={state}
+          onSaveSettings={(settings) => {
+            tournamentStore.updateGrandmaSettings(settings);
+            showToast('Grandma phrase categories & timings saved');
+          }}
+          onPlayQuoteNow={(phrase) => {
+            const resolved = resolveGrandmaPhrase(phrase, state);
+            tournamentStore.triggerLiveQuote(phrase);
+            showToast(`Playing quote: "${resolved}"`);
+          }}
+        />
+      )}
 
       <EditCompletedMatchDialog
         open={editCompletedOpen && Boolean(activeMatch?.completed)}
@@ -827,18 +836,20 @@ export default function ControlView({
       />
 
       {/* Signature Bottom-Right Animated 4:3 CRT TV & Grandma Corner Scene */}
-      <RetroTVCorner
-        grandmaConfig={state.grandma}
-        tvMuted={state.ui.tvMuted}
-        hasCustomTvMedia={state.ui.hasCustomTvMedia}
-        tvMediaSyncKey={`${state.ui.hasCustomTvMedia ? '1' : '0'}:${state.ui.tvMediaLabel || ''}:${state.ui.tvMediaUpdatedAt || 0}`}
-        visible={state.ui.showCornerScene}
-        scale={cornerScale}
-        opacity={cornerOpacity}
-        bubbleScale={bubbleScale}
-        variant="corner"
-        mediaRefreshToken={mediaRefreshToken}
-      />
+      {grandmaEnabled && (
+        <RetroTVCorner
+          grandmaConfig={state.grandma}
+          tvMuted={state.ui.tvMuted}
+          hasCustomTvMedia={state.ui.hasCustomTvMedia}
+          tvMediaSyncKey={`${state.ui.hasCustomTvMedia ? '1' : '0'}:${state.ui.tvMediaLabel || ''}:${state.ui.tvMediaUpdatedAt || 0}`}
+          visible={state.ui.showCornerScene}
+          scale={cornerScale}
+          opacity={cornerOpacity}
+          bubbleScale={bubbleScale}
+          variant="corner"
+          mediaRefreshToken={mediaRefreshToken}
+        />
+      )}
     </div>
   );
 }

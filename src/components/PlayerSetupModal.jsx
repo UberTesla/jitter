@@ -1147,16 +1147,18 @@ export default function PlayerSetupModal({
                 </span>
               </label>
 
-              <label className="toggle-label">
-                <input
-                  type="checkbox"
-                  checked={draftAllowScorekeeperGrandma}
-                  onChange={(e) => setDraftAllowScorekeeperGrandma(e.target.checked)}
-                />
-                <span>
-                  Allow Scorekeepers to trigger Grandma phrases (Moderators &amp; up always keep access)
-                </span>
-              </label>
+              {state.rules?.grandmaEnabled !== false && (
+                <label className="toggle-label">
+                  <input
+                    type="checkbox"
+                    checked={draftAllowScorekeeperGrandma}
+                    onChange={(e) => setDraftAllowScorekeeperGrandma(e.target.checked)}
+                  />
+                  <span>
+                    Allow Scorekeepers to trigger Grandma phrases (Moderators &amp; up always keep access)
+                  </span>
+                </label>
+              )}
 
               <label className="toggle-label">
                 <input

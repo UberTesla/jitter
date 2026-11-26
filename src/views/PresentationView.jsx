@@ -222,7 +222,8 @@ export default function PresentationView({
     renderedSlide !== 'split' &&
     (onDeckMode === 'show' ||
       (onDeckMode === 'nearing_end' && isMatchNearingEnd(activeMatch, state.rules)));
-  const showCorner = Boolean(state.ui?.showCornerScene);
+  const grandmaEnabled = state.rules?.grandmaEnabled !== false;
+  const showCorner = grandmaEnabled && Boolean(state.ui?.showCornerScene);
   const cornerScale = state.ui?.cornerScale ?? 1.0;
   const isTeams = state.entryMode === 'teams';
   const entityLabelUpper = isTeams ? 'TEAMS' : 'PLAYERS';
@@ -1014,19 +1015,21 @@ export default function PresentationView({
         </main>
 
         {/* Bottom-Right Animated 4:3 CRT TV & Grandma Scene (normal corner on ALL slides, including Intermission) */}
-        <RetroTVCorner
-          grandmaConfig={state.grandma}
-          tvMuted={state.ui.tvMuted}
-          hasCustomTvMedia={state.ui.hasCustomTvMedia}
-          tvMediaSyncKey={`${state.ui.hasCustomTvMedia ? '1' : '0'}:${state.ui.tvMediaLabel || ''}:${state.ui.tvMediaUpdatedAt || 0}`}
-          visible={showCorner}
-          scale={effectiveCornerScale}
-          opacity={state.ui?.cornerOpacity ?? 1.0}
-          bubbleScale={state.ui?.bubbleScale ?? 1.0}
-          variant="corner"
-          inStage={true}
-          allowLocalToggle={rolePerms?.role !== 'presenter'}
-        />
+        {grandmaEnabled && (
+          <RetroTVCorner
+            grandmaConfig={state.grandma}
+            tvMuted={state.ui.tvMuted}
+            hasCustomTvMedia={state.ui.hasCustomTvMedia}
+            tvMediaSyncKey={`${state.ui.hasCustomTvMedia ? '1' : '0'}:${state.ui.tvMediaLabel || ''}:${state.ui.tvMediaUpdatedAt || 0}`}
+            visible={showCorner}
+            scale={effectiveCornerScale}
+            opacity={state.ui?.cornerOpacity ?? 1.0}
+            bubbleScale={state.ui?.bubbleScale ?? 1.0}
+            variant="corner"
+            inStage={true}
+            allowLocalToggle={rolePerms?.role !== 'presenter'}
+          />
+        )}
       </div>
     </div>
   );

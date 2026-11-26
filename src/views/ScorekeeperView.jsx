@@ -31,8 +31,9 @@ export default function ScorekeeperView({
   const canScoreRole = rolePerms ? Boolean(rolePerms.canScore) : effectiveRole !== 'spectator' && effectiveRole !== 'presenter';
   const requireScorekeeperApproval = state.rules?.requireScorekeeperApproval !== false;
   const isModeratorOrAbove = (ROLE_LEVEL[effectiveRole] ?? 0) >= ROLE_LEVEL.moderator;
+  const grandmaEnabled = state.rules?.grandmaEnabled !== false;
   const allowScorekeeperGrandma =
-    isModeratorOrAbove || state.rules?.allowScorekeeperGrandma !== false;
+    grandmaEnabled && (isModeratorOrAbove || state.rules?.allowScorekeeperGrandma !== false);
   const tabId = tournamentStore.getTabId();
   const pendingRequestsCount =
     (state.scorekeeperRequests?.length || 0) + (state.joinRequests?.length || 0);

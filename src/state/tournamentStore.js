@@ -709,6 +709,10 @@ export function createInitialState(overrides = {}) {
         overrides.rules?.allowScorekeeperGrandma !== undefined
           ? Boolean(overrides.rules.allowScorekeeperGrandma)
           : true,
+      grandmaEnabled:
+        overrides.rules?.grandmaEnabled !== undefined
+          ? Boolean(overrides.rules.grandmaEnabled)
+          : true,
       scoreDebounceSec:
         overrides.rules?.scoreDebounceSec !== undefined
           ? Math.max(0, Number(overrides.rules.scoreDebounceSec) || 0)
@@ -968,6 +972,10 @@ function normalizePersistedState(parsed) {
       allowScorekeeperGrandma:
         parsed.rules?.allowScorekeeperGrandma !== undefined
           ? Boolean(parsed.rules.allowScorekeeperGrandma)
+          : true,
+      grandmaEnabled:
+        parsed.rules?.grandmaEnabled !== undefined
+          ? Boolean(parsed.rules.grandmaEnabled)
           : true,
       scoreDebounceSec:
         parsed.rules?.scoreDebounceSec !== undefined
@@ -4544,6 +4552,7 @@ export class TournamentStore {
 
   broadcastGrandmaSpeech(speech) {
     if (!speech) return null;
+    if (this.state?.rules?.grandmaEnabled === false) return null;
     const applySpeech = (target) => ({
       ...target,
       grandma: {
@@ -6294,6 +6303,27 @@ export class TournamentStore {
     }));
   }
 
+  setGrandmaEnabled(enabled) {
+    const nextEnabled = Boolean(enabled);
+    return this.commit(
+      (s) => ({
+        ...s,
+        rules: {
+          ...s.rules,
+          grandmaEnabled: nextEnabled,
+        },
+        grandma: nextEnabled
+          ? s.grandma
+          : {
+              ...s.grandma,
+              activeSpeech: null,
+              liveQuote: null,
+            },
+      }),
+      { forcePublish: true }
+    );
+  }
+
   toggleCornerScene() {
     return this.commit((s) => ({
       ...s,
@@ -6372,6 +6402,7 @@ export class TournamentStore {
   // ---- Grandma Speech & Categorized Phrase Manager ----
 
   triggerLiveQuote(text, category = 'manual') {
+    if (this.state?.rules?.grandmaEnabled === false) return this.state;
     const cleaned = String(text || '').trim();
     if (!cleaned) return this.state;
     const resolved = resolveGrandmaPhrase(cleaned, this.state);
