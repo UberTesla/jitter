@@ -4063,7 +4063,16 @@ export function createLanSyncHandler({
     if (pathname === '/__sync/media/sign' && req.method === 'POST') {
       const gcs = getGcsConfig();
       if (!gcs) {
-        return sendJson(res, 200, { gcsEnabled: false });
+        const hasBucketEnv = Boolean(String(process.env.GCS_BUCKET || '').trim());
+        return sendJson(res, 200, {
+          gcsEnabled: false,
+          ...(hasBucketEnv
+            ? {
+                gcsConfigError:
+                  'GCS_BUCKET is set, but GCS_SERVICE_ACCOUNT_JSON (or GCS_CLIENT_EMAIL + GCS_PRIVATE_KEY) is missing or invalid.',
+              }
+            : {}),
+        });
       }
       try {
         const body = await readJsonBody(req);

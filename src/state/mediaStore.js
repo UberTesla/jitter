@@ -322,6 +322,9 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
         });
         if (signRes.ok) {
           const signData = await signRes.json().catch(() => null);
+          if (signData?.gcsConfigError) {
+            remoteError = signData.gcsConfigError;
+          }
           if (signData?.gcsEnabled && signData?.uploadUrl && signData?.objectName) {
             usedGcs = true;
             const putRes = await fetch(signData.uploadUrl, {

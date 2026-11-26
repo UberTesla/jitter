@@ -236,6 +236,7 @@ export default function ControlView({
 
     showToast(`Adding ${files.length} file${files.length === 1 ? '' : 's'} to TV playlist...`);
     let failedCount = 0;
+    let firstError = '';
     let gcsCount = 0;
     for (const file of files) {
       const saved = await saveTvPlaylistItemBlob(file, { senderId: tournamentStore.getTabId() });
@@ -249,7 +250,10 @@ export default function ControlView({
         updatedAt: saved.updatedAt,
       });
       if (saved.storageBackend === 'gcs') gcsCount += 1;
-      if (saved.remoteError) failedCount += 1;
+      if (saved.remoteError) {
+        failedCount += 1;
+        if (!firstError) firstError = saved.remoteError;
+      }
     }
     trackUsageEvent('tv:playlist_add_files', {
       category: 'control',
@@ -258,7 +262,7 @@ export default function ControlView({
     });
     setMediaRefreshToken((n) => n + 1);
     if (failedCount > 0) {
-      showToast(`Added to TV playlist locally (${failedCount} failed to sync)`);
+      showToast(`Saved locally only — ${firstError || `${failedCount} failed to sync`}`);
     } else if (gcsCount > 0) {
       showToast(`Uploaded ${gcsCount} item${gcsCount === 1 ? '' : 's'} to Google Cloud Storage`);
     } else {
@@ -957,6 +961,19 @@ export default function ControlView({
                               >
                                 {item.name}
                               </span>
+                              {item.gcsObject && (
+                                <span
+                                  style={{
+                                    fontSize: '0.64rem',
+                                    color: '#7dd3fc',
+                                    opacity: 0.9,
+                                    flexShrink: 0,
+                                  }}
+                                  title={`Stored in Google Cloud Storage: ${item.gcsObject}`}
+                                >
+                                  ☁ GCS
+                                </span>
+                              )}
                             </button>
 
                             {isVideo ? (

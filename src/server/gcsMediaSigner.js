@@ -46,7 +46,10 @@ function formatGcsTimestamps(date = new Date()) {
 }
 
 export function getGcsConfig(env = process.env) {
-  const bucket = String(env?.GCS_BUCKET || '').trim();
+  const bucket = String(env?.GCS_BUCKET || '')
+    .trim()
+    .replace(/^gs:\/\//i, '')
+    .replace(/\/+$/, '');
   if (!bucket) return null;
 
   let clientEmail = String(env?.GCS_CLIENT_EMAIL || '').trim();
@@ -54,12 +57,31 @@ export function getGcsConfig(env = process.env) {
 
   const rawJson = String(env?.GCS_SERVICE_ACCOUNT_JSON || '').trim();
   if (rawJson && (!clientEmail || !privateKey)) {
+    let parsed = null;
     try {
-      const parsed = JSON.parse(rawJson);
-      if (!clientEmail && parsed?.client_email) clientEmail = String(parsed.client_email).trim();
-      if (!privateKey && parsed?.private_key) privateKey = String(parsed.private_key).trim();
+      parsed = JSON.parse(rawJson);
     } catch {
-      return null;
+      // Fallback: if an env var UI turned escaped \n inside private_key into literal newlines,
+      // or if the user provided base64-encoded JSON, try recovering cleanly.
+      try {
+        const decoded = Buffer.from(rawJson, 'base64').toString('utf8');
+        if (decoded.trim().startsWith('{')) {
+          parsed = JSON.parse(decoded);
+        }
+      } catch {
+        // Ignore
+      }
+      if (!parsed) {
+        const emailMatch = rawJson.match(/"client_email"\s*:\s*"([^"]+)"/);
+        const keyMatch = rawJson.match(/"private_key"\s*:\s*"([\s\S]*?-----END PRIVATE KEY-----(?:\\n|\r?\n)?)"/);
+        if (emailMatch && keyMatch) {
+          parsed = { client_email: emailMatch[1], private_key: keyMatch[1] };
+        }
+      }
+    }
+    if (parsed) {
+      if (!clientEmail && parsed.client_email) clientEmail = String(parsed.client_email).trim();
+      if (!privateKey && parsed.private_key) privateKey = String(parsed.private_key).trim();
     }
   }
 
