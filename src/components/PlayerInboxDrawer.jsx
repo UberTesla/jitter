@@ -221,6 +221,29 @@ export default function PlayerInboxDrawer({
         }`,
       };
     }
+    const activeReady =
+      state?.activeMatchId && state.matches?.[state.activeMatchId]
+        ? state.matches[state.activeMatchId]
+        : null;
+    if (
+      activeReady &&
+      !activeReady.isBye &&
+      !activeReady.completed &&
+      (activeReady.player1Id === pid || activeReady.player2Id === pid)
+    ) {
+      const oppId = activeReady.player1Id === pid ? activeReady.player2Id : activeReady.player1Id;
+      const oppFallback =
+        activeReady.player1Id === pid ? activeReady.source2Label : activeReady.source1Label;
+      const oppName =
+        (oppId ? players.find((p) => p.id === oppId)?.name : null) || oppFallback || 'TBD';
+      return {
+        tone: 'playing',
+        headline: '🏓 YOU ARE UP NOW! (READY)',
+        detail: `Head to the table — ${activeReady.roundLabel} (${activeReady.label}) vs ${oppName}${
+          activeReady.tableNumber ? ` · Table ${activeReady.tableNumber}` : ''
+        }`,
+      };
+    }
     const queueIdx = upNextMatches.findIndex(
       (m) => m && (m.player1Id === pid || m.player2Id === pid)
     );
@@ -255,7 +278,7 @@ export default function PlayerInboxDrawer({
       headline: '✅ TOURNAMENT RUN COMPLETE',
       detail: 'Thanks for playing — cheer on the remaining matches in Live Chat!',
     };
-  }, [claimedPlayerObj, state?.matches, state?.championId, upNextMatches, players]);
+  }, [claimedPlayerObj, state?.matches, state?.activeMatchId, state?.championId, upNextMatches, players]);
 
   const getPlayerLabel = (pid, fallback) => {
     if (!pid) return fallback || 'TBD';
@@ -721,22 +744,42 @@ export default function PlayerInboxDrawer({
             {/* TAB 1: PUBLIC LIVE GAME CHAT */}
             {activeTab === 'live' && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '0.28rem' }}>
-                {/* Small On Deck Banner at the top of Live Chat */}
-                {upNextMatches.length > 0 && (
-                  <div
+                {/* Small Smart On Deck Banner at the top of Live Chat (shows next match + when you're up) */}
+                {(upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ondeck')}
+                    title="Click to view full On Deck queue & roster"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.4rem',
+                      width: '100%',
+                      textAlign: 'left',
                       padding: '0.24rem 0.5rem',
                       borderRadius: '7px',
-                      background: 'rgba(56, 189, 248, 0.12)',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      background:
+                        myPlayerStatus?.tone === 'playing'
+                          ? 'rgba(16, 185, 129, 0.16)'
+                          : 'rgba(56, 189, 248, 0.12)',
+                      border: `1px solid ${
+                        myPlayerStatus?.tone === 'playing'
+                          ? 'rgba(16, 185, 129, 0.45)'
+                          : 'rgba(56, 189, 248, 0.3)'
+                      }`,
+                      color: 'inherit',
                       fontSize: '0.74rem',
+                      cursor: 'pointer',
                     }}
                   >
-                    <span style={{ fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
-                      ⏳ ON DECK
+                    <span
+                      style={{
+                        fontWeight: 800,
+                        color: myPlayerStatus?.tone === 'playing' ? '#34d399' : '#38bdf8',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {myPlayerStatus?.tone === 'playing' ? '🏓 YOU ARE UP' : '⏳ ON DECK'}
                     </span>
                     <span
                       style={{
@@ -745,18 +788,39 @@ export default function PlayerInboxDrawer({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {upNextMatches
-                        .slice(0, 2)
-                        .map(
-                          (m) =>
-                            `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
-                              m.player2Id,
-                              m.source2Label
-                            )}`
-                        )
-                        .join('  ·  ')}
+                      {myPlayerStatus?.tone === 'playing'
+                        ? myPlayerStatus.detail
+                        : (() => {
+                            const nextM = upNextMatches[0];
+                            const nextText = nextM
+                              ? `${getPlayerLabel(nextM.player1Id, nextM.source1Label)} vs ${getPlayerLabel(
+                                  nextM.player2Id,
+                                  nextM.source2Label
+                                )}`
+                              : '';
+                            if (myPlayerStatus?.tone === 'ondeck') {
+                              const isNextMe =
+                                nextM &&
+                                claimedPlayerObj &&
+                                (nextM.player1Id === claimedPlayerObj.id ||
+                                  nextM.player2Id === claimedPlayerObj.id);
+                              return isNextMe
+                                ? `★ YOU'RE NEXT: ${nextText}`
+                                : `${nextText}  ·  ★ ${myPlayerStatus.headline.replace(/^⏳\s*/, '')}`;
+                            }
+                            return upNextMatches
+                              .slice(0, 2)
+                              .map(
+                                (m) =>
+                                  `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                    m.player2Id,
+                                    m.source2Label
+                                  )}`
+                              )
+                              .join('  ·  ');
+                          })()}
                     </span>
-                  </div>
+                  </button>
                 )}
 
                 <div

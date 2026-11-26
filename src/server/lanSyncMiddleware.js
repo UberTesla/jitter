@@ -2292,11 +2292,13 @@ export function createLanSyncHandler({
             }
 
             // 2. Match Just Started -> notify claimed players
+            const justStartedIds = new Set();
             for (const [mid, nextM] of Object.entries(stamped.matches || {})) {
               const prevM = existingEntry.matches?.[mid];
               if (!nextM || nextM.isBye || nextM.completed || !nextM.started || prevM?.started) {
                 continue;
               }
+              justStartedIds.add(mid);
               const matchup = `${nameOf(nextM.player1Id)} vs ${nameOf(nextM.player2Id)}`;
               const tableStr = nextM.tableNumber ? ` on Table ${nextM.tableNumber}` : '';
               const devs = Object.entries(claims)
@@ -2313,6 +2315,57 @@ export function createLanSyncHandler({
                 fromName: '🏓 Match Started',
                 text: `${nextM.roundLabel} (${nextM.label}): ${matchup}${tableStr}`,
               });
+            }
+
+            // 2b. Active Match Switched Before Completion (match order changed!) -> notify both bumped & newly-up players
+            const prevActiveForSwitch = existingEntry.matches?.[existingEntry.activeMatchId];
+            const nextActiveForSwitch = stamped.matches?.[stamped.activeMatchId];
+            if (
+              prevActiveForSwitch &&
+              nextActiveForSwitch &&
+              prevActiveForSwitch.id !== nextActiveForSwitch.id &&
+              !prevActiveForSwitch.isBye &&
+              !prevActiveForSwitch.completed &&
+              !nextActiveForSwitch.isBye &&
+              !nextActiveForSwitch.completed
+            ) {
+              const prevMatchup = `${nameOf(prevActiveForSwitch.player1Id, prevActiveForSwitch.source1Label)} vs ${nameOf(prevActiveForSwitch.player2Id, prevActiveForSwitch.source2Label)}`;
+              const nextMatchup = `${nameOf(nextActiveForSwitch.player1Id, nextActiveForSwitch.source1Label)} vs ${nameOf(nextActiveForSwitch.player2Id, nextActiveForSwitch.source2Label)}`;
+              const nextTableStr = nextActiveForSwitch.tableNumber
+                ? ` on Table ${nextActiveForSwitch.tableNumber}`
+                : '';
+
+              // Notify players who were up on the previous uncompleted match
+              const bumpedDevs = Object.entries(claims)
+                .filter(
+                  ([, pid]) =>
+                    (pid === prevActiveForSwitch.player1Id || pid === prevActiveForSwitch.player2Id) &&
+                    pid !== nextActiveForSwitch.player1Id &&
+                    pid !== nextActiveForSwitch.player2Id
+                )
+                .map(([devId]) => devId);
+              sendSystemAnnouncementToDevices(
+                bumpedDevs,
+                '🔔 Match Order Changed — Hold On',
+                `${nextActiveForSwitch.label} (${nextMatchup}) is playing before your match (${prevActiveForSwitch.label}: ${prevMatchup}).`,
+                `pp-bumped-${prevActiveForSwitch.id}-${nextActiveForSwitch.id}`
+              );
+
+              // Notify players who are now up instead (skip if Match Started already alerted them this tick)
+              if (!justStartedIds.has(nextActiveForSwitch.id)) {
+                const nowUpDevs = Object.entries(claims)
+                  .filter(
+                    ([, pid]) =>
+                      pid === nextActiveForSwitch.player1Id || pid === nextActiveForSwitch.player2Id
+                  )
+                  .map(([devId]) => devId);
+                sendSystemAnnouncementToDevices(
+                  nowUpDevs,
+                  '🏓 You Are Up Now!',
+                  `${nextActiveForSwitch.label}: ${nextMatchup}${nextTableStr} is now up on the table!`,
+                  `pp-nowup-${nextActiveForSwitch.id}`
+                );
+              }
             }
 
             // 3. Active Match Nearing End (in-progress score > 0) -> re-notify up-next players AND presenters
