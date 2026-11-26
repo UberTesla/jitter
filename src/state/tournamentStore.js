@@ -1336,6 +1336,10 @@ export class TournamentStore {
       clients: [],
       kickedNotice: initialKicked,
       inboxMessages: this.persistEnabled ? loadInboxMessages() : [],
+      chatLiveMessages: [],
+      chatThreads: [],
+      unreadLiveChat: 0,
+      unreadThreadCounts: {},
       joinResolutionNotice: null,
       scorekeeperResolutionNotice: null,
       serverInfo: null,
@@ -1555,6 +1559,90 @@ export class TournamentStore {
           const data = JSON.parse(ev.data || '{}');
           const kickedId = data.tournamentId || this.programState?.tournamentId || null;
           this.handleAccessRevoked(kickedId, data.reason || 'Kicked by host');
+        } catch {
+          // Ignore
+        }
+      });
+
+      es.addEventListener('CHAT_LIVE', (ev) => {
+        try {
+          const data = JSON.parse(ev.data || '{}');
+          const msg = data?.message;
+          if (!msg || !msg.id) return;
+          if (data.tournamentId && this.programState?.tournamentId && data.tournamentId !== this.programState.tournamentId) {
+            return;
+          }
+          const prev = Array.isArray(this.remoteSync.chatLiveMessages)
+            ? this.remoteSync.chatLiveMessages
+            : [];
+          if (prev.some((m) => m.id === msg.id)) return;
+          const isFromMe = msg.fromDeviceId === this.remoteSync.deviceId;
+          this.remoteSync = {
+            ...this.remoteSync,
+            chatLiveMessages: [...prev, msg].slice(-250),
+            unreadLiveChat: isFromMe
+              ? this.remoteSync.unreadLiveChat || 0
+              : (this.remoteSync.unreadLiveChat || 0) + 1,
+          };
+          this.emit();
+        } catch {
+          // Ignore
+        }
+      });
+
+      es.addEventListener('CHAT_LIVE_DELETE', (ev) => {
+        try {
+          const data = JSON.parse(ev.data || '{}');
+          if (!data?.messageId) return;
+          const prev = Array.isArray(this.remoteSync.chatLiveMessages)
+            ? this.remoteSync.chatLiveMessages
+            : [];
+          this.remoteSync = {
+            ...this.remoteSync,
+            chatLiveMessages: prev.filter((m) => m.id !== data.messageId),
+          };
+          this.emit();
+        } catch {
+          // Ignore
+        }
+      });
+
+      const handleIncomingThreadEvent = (data) => {
+        const thread = data?.thread;
+        if (!thread || !thread.id) return;
+        if (data.tournamentId && this.programState?.tournamentId && data.tournamentId !== this.programState.tournamentId) {
+          return;
+        }
+        const prev = Array.isArray(this.remoteSync.chatThreads) ? this.remoteSync.chatThreads : [];
+        const without = prev.filter((t) => t.id !== thread.id);
+        const nextThreads = [thread, ...without].sort(
+          (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+        );
+        const msg = data?.message || data?.newMessage || null;
+        const isFromOther = Boolean(msg && msg.fromDeviceId !== this.remoteSync.deviceId);
+        const nextUnread = { ...(this.remoteSync.unreadThreadCounts || {}) };
+        if (isFromOther) {
+          nextUnread[thread.id] = (nextUnread[thread.id] || 0) + 1;
+        }
+        this.remoteSync = {
+          ...this.remoteSync,
+          chatThreads: nextThreads,
+          unreadThreadCounts: nextUnread,
+        };
+        this.emit();
+      };
+
+      es.addEventListener('CHAT_THREAD_UPDATE', (ev) => {
+        try {
+          handleIncomingThreadEvent(JSON.parse(ev.data || '{}'));
+        } catch {
+          // Ignore
+        }
+      });
+
+      es.addEventListener('CHAT_MESSAGE', (ev) => {
+        try {
+          handleIncomingThreadEvent(JSON.parse(ev.data || '{}'));
         } catch {
           // Ignore
         }
@@ -3956,6 +4044,188 @@ export class TournamentStore {
   clearInbox() {
     if (this.persistEnabled) saveInboxMessages([]);
     this.remoteSync = { ...this.remoteSync, inboxMessages: [] };
+    this.emit();
+  }
+
+  async fetchTournamentChat(tournamentId = null) {
+    const baseUrl = this.getSyncBaseUrl();
+    const tid = tournamentId || this.programState?.tournamentId;
+    if (!baseUrl || !tid || typeof fetch === 'undefined') return null;
+    try {
+      const qs = new URLSearchParams({
+        tournamentId: tid,
+        deviceId: this.remoteSync.deviceId || '',
+      });
+      const res = await fetch(`${baseUrl}/__sync/chat?${qs.toString()}`, { cache: 'no-store' });
+      if (!res.ok) return null;
+      const data = await res.json();
+      this.remoteSync = {
+        ...this.remoteSync,
+        chatLiveMessages: Array.isArray(data.liveMessages) ? data.liveMessages : [],
+        chatThreads: Array.isArray(data.threads) ? data.threads : [],
+      };
+      this.emit();
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async sendLiveChatMessage(text) {
+    const baseUrl = this.getSyncBaseUrl();
+    const tid = this.programState?.tournamentId;
+    const cleaned = String(text || '').trim();
+    if (!baseUrl || !tid || !cleaned || typeof fetch === 'undefined') {
+      return { ok: false, error: 'Cannot send live chat message right now' };
+    }
+    try {
+      const res = await fetch(`${baseUrl}/__sync/chat/live`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tournamentId: tid,
+          deviceId: this.remoteSync.deviceId,
+          deviceName: this.remoteSync.deviceName,
+          tabId: this.tabId,
+          text: cleaned,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data.error || 'Failed to send message' };
+      if (data.message) {
+        const prev = Array.isArray(this.remoteSync.chatLiveMessages)
+          ? this.remoteSync.chatLiveMessages
+          : [];
+        if (!prev.some((m) => m.id === data.message.id)) {
+          this.remoteSync = {
+            ...this.remoteSync,
+            chatLiveMessages: [...prev, data.message].slice(-250),
+          };
+          this.emit();
+        }
+      }
+      return { ok: true, message: data.message };
+    } catch {
+      return { ok: false, error: 'Unable to reach sync server' };
+    }
+  }
+
+  async deleteLiveChatMessage(messageId) {
+    const baseUrl = this.getSyncBaseUrl();
+    const tid = this.programState?.tournamentId;
+    if (!baseUrl || !tid || !messageId || typeof fetch === 'undefined') {
+      return { ok: false, error: 'Unable to delete message' };
+    }
+    try {
+      const res = await fetch(`${baseUrl}/__sync/chat/live/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tournamentId: tid,
+          deviceId: this.remoteSync.deviceId,
+          tabId: this.tabId,
+          messageId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data.error || 'Could not delete message' };
+      const prev = Array.isArray(this.remoteSync.chatLiveMessages)
+        ? this.remoteSync.chatLiveMessages
+        : [];
+      this.remoteSync = {
+        ...this.remoteSync,
+        chatLiveMessages: prev.filter((m) => m.id !== messageId),
+      };
+      this.emit();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Unable to reach sync server' };
+    }
+  }
+
+  async createOrOpenChatThread({ targetDeviceIds = [], groupName = '', initialMessage = '' } = {}) {
+    const baseUrl = this.getSyncBaseUrl();
+    const tid = this.programState?.tournamentId;
+    if (!baseUrl || !tid || typeof fetch === 'undefined') {
+      return { ok: false, error: 'Sync server unreachable' };
+    }
+    try {
+      const res = await fetch(`${baseUrl}/__sync/chat/thread`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tournamentId: tid,
+          deviceId: this.remoteSync.deviceId,
+          deviceName: this.remoteSync.deviceName,
+          tabId: this.tabId,
+          targetDeviceIds,
+          groupName,
+          initialMessage,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data.error || 'Could not start chat' };
+      if (data.thread) {
+        const prev = Array.isArray(this.remoteSync.chatThreads) ? this.remoteSync.chatThreads : [];
+        const nextThreads = [data.thread, ...prev.filter((t) => t.id !== data.thread.id)].sort(
+          (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+        );
+        this.remoteSync = { ...this.remoteSync, chatThreads: nextThreads };
+        this.emit();
+      }
+      return { ok: true, thread: data.thread, message: data.message };
+    } catch {
+      return { ok: false, error: 'Unable to reach sync server' };
+    }
+  }
+
+  async sendThreadMessage(threadId, text) {
+    const baseUrl = this.getSyncBaseUrl();
+    const tid = this.programState?.tournamentId;
+    const cleaned = String(text || '').trim();
+    if (!baseUrl || !tid || !threadId || !cleaned || typeof fetch === 'undefined') {
+      return { ok: false, error: 'Cannot send message right now' };
+    }
+    try {
+      const res = await fetch(`${baseUrl}/__sync/chat/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tournamentId: tid,
+          threadId,
+          deviceId: this.remoteSync.deviceId,
+          deviceName: this.remoteSync.deviceName,
+          tabId: this.tabId,
+          text: cleaned,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data.error || 'Failed to send message' };
+      if (data.thread) {
+        const prev = Array.isArray(this.remoteSync.chatThreads) ? this.remoteSync.chatThreads : [];
+        const nextThreads = [data.thread, ...prev.filter((t) => t.id !== data.thread.id)].sort(
+          (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+        );
+        this.remoteSync = { ...this.remoteSync, chatThreads: nextThreads };
+        this.emit();
+      }
+      return { ok: true, thread: data.thread, message: data.message };
+    } catch {
+      return { ok: false, error: 'Unable to reach sync server' };
+    }
+  }
+
+  markLiveChatRead() {
+    if (!this.remoteSync.unreadLiveChat) return;
+    this.remoteSync = { ...this.remoteSync, unreadLiveChat: 0 };
+    this.emit();
+  }
+
+  markThreadRead(threadId) {
+    if (!threadId || !this.remoteSync.unreadThreadCounts?.[threadId]) return;
+    const next = { ...(this.remoteSync.unreadThreadCounts || {}) };
+    delete next[threadId];
+    this.remoteSync = { ...this.remoteSync, unreadThreadCounts: next };
     this.emit();
   }
 

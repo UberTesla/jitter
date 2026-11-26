@@ -3481,3 +3481,85 @@ test('summarizeUsageEvents filters by Demo Mode, role, tournament type, and rank
   assert.equal(mobileOnly.totalEvents, 2);
   assert.equal(mobileOnly.byRole[0].role, 'scorekeeper');
 });
+
+test('2-way messaging supports public Live Chat, 1-to-1 DMs (deduped), and 1-to-many Group Chats', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-chat-test-'));
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => 0 });
+  const server = http.createServer((req, res) => handler(req, res, () => { res.statusCode = 404; res.end(); }));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    // Seed a tournament
+    const initial = createInitialState({ tournamentId: 't-chat', tournamentName: 'Chat Open', playerCount: 4 });
+    await fetch(`${base}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-a', deviceName: 'Alice', state: initial, activate: true }),
+    });
+
+    // 1. Public live game chat
+    const liveRes = await fetch(`${base}/__sync/chat/live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tournamentId: 't-chat', deviceId: 'dev-b', deviceName: 'Bob', text: 'What a rally!' }),
+    }).then((r) => r.json());
+    assert.equal(liveRes.ok, true);
+    assert.equal(liveRes.message.text, 'What a rally!');
+
+    // 2. 1-to-1 DM (reuses same thread ID both ways)
+    const dm1 = await fetch(`${base}/__sync/chat/thread`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tournamentId: 't-chat',
+        deviceId: 'dev-a',
+        deviceName: 'Alice',
+        targetDeviceIds: ['dev-b'],
+        initialMessage: 'Ready for table 1?',
+      }),
+    }).then((r) => r.json());
+    assert.equal(dm1.ok, true);
+    assert.equal(dm1.thread.kind, 'dm');
+
+    const dm2 = await fetch(`${base}/__sync/chat/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tournamentId: 't-chat',
+        threadId: dm1.thread.id,
+        deviceId: 'dev-b',
+        deviceName: 'Bob',
+        text: 'On my way!',
+      }),
+    }).then((r) => r.json());
+    assert.equal(dm2.ok, true);
+    assert.equal(dm2.thread.messages.length, 2);
+
+    // 3. 1-to-many Group Chat
+    const grp = await fetch(`${base}/__sync/chat/thread`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tournamentId: 't-chat',
+        deviceId: 'dev-a',
+        deviceName: 'Alice',
+        targetDeviceIds: ['dev-b', 'dev-c'],
+        groupName: 'Table 1 Crew',
+        initialMessage: 'Warming up now!',
+      }),
+    }).then((r) => r.json());
+    assert.equal(grp.ok, true);
+    assert.equal(grp.thread.kind, 'group');
+    assert.equal(grp.thread.name, 'Table 1 Crew');
+
+    // Privacy check: dev-c sees Live Chat + Group Chat, NOT Alice<->Bob DM
+    const cChat = await fetch(`${base}/__sync/chat?tournamentId=t-chat&deviceId=dev-c`).then((r) => r.json());
+    assert.equal(cChat.liveMessages.length, 1);
+    assert.equal(cChat.threads.length, 1);
+    assert.equal(cChat.threads[0].id, grp.thread.id);
+  } finally {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

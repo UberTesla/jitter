@@ -776,6 +776,10 @@ export function createLanSyncHandler({
             parsed.pushSubscriptions && typeof parsed.pushSubscriptions === 'object'
               ? parsed.pushSubscriptions
               : {},
+          chatByTournament:
+            parsed.chatByTournament && typeof parsed.chatByTournament === 'object'
+              ? parsed.chatByTournament
+              : {},
         };
         syncPrimaryHostAlias();
         if (parsed.tournaments && typeof parsed.tournaments === 'object') {
@@ -1172,6 +1176,314 @@ export function createLanSyncHandler({
         analyticsEvents = [];
         scheduleAnalyticsSave();
         return sendJson(res, 200, { ok: true, count: 0 });
+      }
+    }
+
+    // 1d. 2-Way Messaging (1-to-1 DM, 1-to-Many / Group Chats, & Public Live Game Chat)
+    const getOrCreateTournamentChat = (tid) => {
+      if (!store.chatByTournament || typeof store.chatByTournament !== 'object') {
+        store.chatByTournament = {};
+      }
+      if (!store.chatByTournament[tid] || typeof store.chatByTournament[tid] !== 'object') {
+        store.chatByTournament[tid] = { liveMessages: [], threads: {} };
+      }
+      const bucket = store.chatByTournament[tid];
+      if (!Array.isArray(bucket.liveMessages)) bucket.liveMessages = [];
+      if (!bucket.threads || typeof bucket.threads !== 'object') bucket.threads = {};
+      return bucket;
+    };
+
+    const resolveChatDisplayName = (entry, devId, fallbackName = '') => {
+      if (entry && devId && entry.playerClaims?.[devId]) {
+        const pid = entry.playerClaims[devId];
+        const player = Array.isArray(entry.players) ? entry.players.find((p) => p.id === pid) : null;
+        if (player?.name) return player.name;
+      }
+      for (const meta of sseClients.values()) {
+        if (meta.deviceId === devId) {
+          if (meta.clientInfo?.deviceBrowser) return meta.clientInfo.deviceBrowser;
+          if (meta.deviceName) return meta.deviceName;
+        }
+      }
+      return String(fallbackName || '').trim() || 'Player';
+    };
+
+    const getVisibleThreadsForDevice = (bucket, devId) =>
+      Object.values(bucket.threads || {})
+        .filter((th) => th && Array.isArray(th.memberDeviceIds) && th.memberDeviceIds.includes(devId))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    if (pathname === '/__sync/chat' && req.method === 'GET') {
+      const tid = String(urlObj.searchParams.get('tournamentId') || store.activeTournamentId || '').trim();
+      const devId = String(urlObj.searchParams.get('deviceId') || '').trim();
+      if (!tid) return sendJson(res, 200, { ok: true, liveMessages: [], threads: [] });
+      const bucket = getOrCreateTournamentChat(tid);
+      return sendJson(res, 200, {
+        ok: true,
+        tournamentId: tid,
+        liveMessages: bucket.liveMessages.slice(-200),
+        threads: devId ? getVisibleThreadsForDevice(bucket, devId) : [],
+      });
+    }
+
+    if (pathname === '/__sync/chat/live' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req);
+        const tid = String(body?.tournamentId || store.activeTournamentId || '').trim();
+        const devId = String(body?.deviceId || '').trim();
+        const text = String(body?.text || '').trim().slice(0, 500);
+        if (!tid || !devId || !text) {
+          return sendJson(res, 400, { error: 'tournamentId, deviceId, and message text are required' });
+        }
+        const entry = store.tournaments[tid] || null;
+        const adminIds = getAdminDeviceIds();
+        const senderRole = entry
+          ? resolveEffectiveRole(entry, devId, body?.tabId || '', { adminDeviceIds: adminIds })
+          : isDeviceAdmin(devId)
+            ? 'admin'
+            : 'spectator';
+        const fromName = resolveChatDisplayName(entry, devId, body?.deviceName);
+        const bucket = getOrCreateTournamentChat(tid);
+        const msg = {
+          id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          tournamentId: tid,
+          fromDeviceId: devId,
+          fromName,
+          fromRole: senderRole,
+          text,
+          sentAt: Date.now(),
+        };
+        bucket.liveMessages.push(msg);
+        if (bucket.liveMessages.length > 250) {
+          bucket.liveMessages = bucket.liveMessages.slice(-250);
+        }
+        scheduleDiskSave();
+        for (const [clientRes, meta] of sseClients.entries()) {
+          if (meta.tournamentId && meta.tournamentId !== tid) continue;
+          try {
+            clientRes.write(`event: CHAT_LIVE\ndata: ${JSON.stringify({ tournamentId: tid, message: msg })}\n\n`);
+          } catch {
+            sseClients.delete(clientRes);
+          }
+        }
+        return sendJson(res, 200, { ok: true, message: msg });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message || 'Bad request' });
+      }
+    }
+
+    if (pathname === '/__sync/chat/live/delete' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req);
+        const tid = String(body?.tournamentId || store.activeTournamentId || '').trim();
+        const actorDeviceId = String(body?.deviceId || '').trim();
+        const messageId = String(body?.messageId || '').trim();
+        if (!tid || !messageId) return sendJson(res, 400, { error: 'tournamentId and messageId required' });
+        const entry = store.tournaments[tid] || null;
+        const adminIds = getAdminDeviceIds();
+        const actorRole = entry
+          ? resolveEffectiveRole(entry, actorDeviceId, body?.tabId || '', { adminDeviceIds: adminIds })
+          : isDeviceAdmin(actorDeviceId)
+            ? 'admin'
+            : 'spectator';
+        const bucket = getOrCreateTournamentChat(tid);
+        const existing = bucket.liveMessages.find((m) => m.id === messageId);
+        const isOwn = Boolean(existing && existing.fromDeviceId === actorDeviceId);
+        if (!isOwn && (ROLE_LEVEL[actorRole] ?? 0) < ROLE_LEVEL.moderator) {
+          return sendJson(res, 403, { error: 'Only Moderators, Hosts, Admins, or the author can delete messages' });
+        }
+        bucket.liveMessages = bucket.liveMessages.filter((m) => m.id !== messageId);
+        scheduleDiskSave();
+        for (const [clientRes, meta] of sseClients.entries()) {
+          if (meta.tournamentId && meta.tournamentId !== tid) continue;
+          try {
+            clientRes.write(
+              `event: CHAT_LIVE_DELETE\ndata: ${JSON.stringify({ tournamentId: tid, messageId })}\n\n`
+            );
+          } catch {
+            sseClients.delete(clientRes);
+          }
+        }
+        return sendJson(res, 200, { ok: true, messageId });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message || 'Bad request' });
+      }
+    }
+
+    if (pathname === '/__sync/chat/thread' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req);
+        const tid = String(body?.tournamentId || store.activeTournamentId || '').trim();
+        const creatorDeviceId = String(body?.deviceId || '').trim();
+        const rawTargets = Array.isArray(body?.targetDeviceIds) ? body.targetDeviceIds : [];
+        const targets = Array.from(
+          new Set(rawTargets.map((id) => String(id || '').trim()).filter((id) => id && id !== creatorDeviceId))
+        );
+        if (!tid || !creatorDeviceId || targets.length === 0) {
+          return sendJson(res, 400, { error: 'Select at least one recipient' });
+        }
+        const entry = store.tournaments[tid] || null;
+        const bucket = getOrCreateTournamentChat(tid);
+        const groupName = String(body?.groupName || '').trim().slice(0, 60);
+        const isGroup = targets.length > 1 || Boolean(groupName);
+        const memberDeviceIds = Array.from(new Set([creatorDeviceId, ...targets])).sort();
+        const threadId = isGroup
+          ? `grp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+          : `dm-${memberDeviceIds.join('__')}`;
+
+        let thread = bucket.threads[threadId];
+        const memberNames = { ...(thread?.memberNames || {}) };
+        for (const mId of memberDeviceIds) {
+          memberNames[mId] = resolveChatDisplayName(
+            entry,
+            mId,
+            mId === creatorDeviceId ? body?.deviceName : ''
+          );
+        }
+
+        if (!thread) {
+          thread = {
+            id: threadId,
+            tournamentId: tid,
+            kind: isGroup ? 'group' : 'dm',
+            name: isGroup ? groupName || memberDeviceIds.map((id) => memberNames[id]).join(', ').slice(0, 50) : '',
+            memberDeviceIds,
+            memberNames,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: [],
+          };
+          bucket.threads[threadId] = thread;
+        } else {
+          thread.memberNames = memberNames;
+        }
+
+        const initialText = String(body?.initialMessage || '').trim().slice(0, 500);
+        let initialMsg = null;
+        if (initialText) {
+          const adminIds = getAdminDeviceIds();
+          const senderRole = entry
+            ? resolveEffectiveRole(entry, creatorDeviceId, body?.tabId || '', { adminDeviceIds: adminIds })
+            : isDeviceAdmin(creatorDeviceId)
+              ? 'admin'
+              : 'spectator';
+          initialMsg = {
+            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            threadId,
+            fromDeviceId: creatorDeviceId,
+            fromName: memberNames[creatorDeviceId] || 'Player',
+            fromRole: senderRole,
+            text: initialText,
+            sentAt: Date.now(),
+          };
+          thread.messages.push(initialMsg);
+          if (thread.messages.length > 120) thread.messages = thread.messages.slice(-120);
+          thread.updatedAt = initialMsg.sentAt;
+        }
+
+        scheduleDiskSave();
+        const memberSet = new Set(thread.memberDeviceIds);
+        for (const [clientRes, meta] of sseClients.entries()) {
+          if (!memberSet.has(meta.deviceId)) continue;
+          try {
+            clientRes.write(
+              `event: CHAT_THREAD_UPDATE\ndata: ${JSON.stringify({
+                tournamentId: tid,
+                thread,
+                newMessage: initialMsg,
+              })}\n\n`
+            );
+          } catch {
+            sseClients.delete(clientRes);
+          }
+        }
+        if (initialMsg) {
+          const pushTargets = thread.memberDeviceIds.filter((id) => id !== creatorDeviceId);
+          sendWebPushToDevices(pushTargets, {
+            id: initialMsg.id,
+            tag: `pp-chat-${threadId}`,
+            title:
+              thread.kind === 'group'
+                ? `💬 ${thread.name} · ${initialMsg.fromName}`
+                : `💬 ${initialMsg.fromName}`,
+            body: initialMsg.text,
+            url: '/',
+          }).catch(() => {});
+        }
+        return sendJson(res, 200, { ok: true, thread, message: initialMsg });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message || 'Bad request' });
+      }
+    }
+
+    if (pathname === '/__sync/chat/send' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req);
+        const tid = String(body?.tournamentId || store.activeTournamentId || '').trim();
+        const threadId = String(body?.threadId || '').trim();
+        const devId = String(body?.deviceId || '').trim();
+        const text = String(body?.text || '').trim().slice(0, 500);
+        if (!tid || !threadId || !devId || !text) {
+          return sendJson(res, 400, { error: 'tournamentId, threadId, deviceId, and text are required' });
+        }
+        const entry = store.tournaments[tid] || null;
+        const bucket = getOrCreateTournamentChat(tid);
+        const thread = bucket.threads[threadId];
+        if (!thread || !Array.isArray(thread.memberDeviceIds) || !thread.memberDeviceIds.includes(devId)) {
+          return sendJson(res, 403, { error: 'You are not a member of this chat thread' });
+        }
+        const adminIds = getAdminDeviceIds();
+        const senderRole = entry
+          ? resolveEffectiveRole(entry, devId, body?.tabId || '', { adminDeviceIds: adminIds })
+          : isDeviceAdmin(devId)
+            ? 'admin'
+            : 'spectator';
+        const fromName = resolveChatDisplayName(entry, devId, body?.deviceName);
+        thread.memberNames = { ...(thread.memberNames || {}), [devId]: fromName };
+        const msg = {
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          threadId,
+          fromDeviceId: devId,
+          fromName,
+          fromRole: senderRole,
+          text,
+          sentAt: Date.now(),
+        };
+        thread.messages.push(msg);
+        if (thread.messages.length > 120) thread.messages = thread.messages.slice(-120);
+        thread.updatedAt = msg.sentAt;
+        scheduleDiskSave();
+
+        const memberSet = new Set(thread.memberDeviceIds);
+        for (const [clientRes, meta] of sseClients.entries()) {
+          if (!memberSet.has(meta.deviceId)) continue;
+          try {
+            clientRes.write(
+              `event: CHAT_MESSAGE\ndata: ${JSON.stringify({
+                tournamentId: tid,
+                threadId,
+                thread,
+                message: msg,
+              })}\n\n`
+            );
+          } catch {
+            sseClients.delete(clientRes);
+          }
+        }
+        const pushTargets = thread.memberDeviceIds.filter((id) => id !== devId);
+        sendWebPushToDevices(pushTargets, {
+          id: msg.id,
+          tag: `pp-chat-${threadId}`,
+          title:
+            thread.kind === 'group'
+              ? `💬 ${thread.name} · ${msg.fromName}`
+              : `💬 ${msg.fromName}`,
+          body: msg.text,
+          url: '/',
+        }).catch(() => {});
+        return sendJson(res, 200, { ok: true, thread, message: msg });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message || 'Bad request' });
       }
     }
 
