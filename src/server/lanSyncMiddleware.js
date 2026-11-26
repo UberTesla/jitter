@@ -1041,7 +1041,7 @@ export function createLanSyncHandler({
     res.end(JSON.stringify(data));
   };
 
-  return async function lanSyncMiddleware(req, res, next) {
+  const lanSyncMiddleware = async function lanSyncMiddleware(req, res, next) {
     const rawUrl = req.url || '/';
     const urlObj = new URL(rawUrl, 'http://localhost');
     const pathname = urlObj.pathname;
@@ -3340,12 +3340,18 @@ export function createLanSyncHandler({
       try {
         const body = await readJsonBody(req);
         const deviceId = String(body?.deviceId || '').trim();
-        const providedKey = normalizeFourWordId(body?.key || body?.adminKey || '');
-        if (!deviceId || !providedKey) {
-          return sendJson(res, 400, { error: 'deviceId and 4-word Admin Key are required' });
+        const rawProvided = String(body?.key || body?.adminKey || '').trim();
+        const providedKey = normalizeFourWordId(rawProvided);
+        const envAdminKey = String(process.env.ADMIN_KEY || '').trim();
+        if (!deviceId || !rawProvided) {
+          return sendJson(res, 400, { error: 'deviceId and Admin Key are required' });
         }
-        if (providedKey !== normalizeFourWordId(store.adminKey)) {
-          return sendJson(res, 403, { error: 'Invalid 4-word Hub Admin Key' });
+        const matchesEnvKey = Boolean(envAdminKey && rawProvided === envAdminKey);
+        const matchesStoreKey = Boolean(
+          providedKey && providedKey === normalizeFourWordId(store.adminKey)
+        );
+        if (!matchesEnvKey && !matchesStoreKey) {
+          return sendJson(res, 403, { error: 'Invalid Hub Admin Key' });
         }
         const serverInfo = collectLocalServerInfo(getPort(), appMeta);
         const reqIp = getDisplayIpForRequest(req, serverInfo);
@@ -3576,4 +3582,8 @@ export function createLanSyncHandler({
 
     return next();
   };
+
+  lanSyncMiddleware.getAdminKey = () => store.adminKey;
+
+  return lanSyncMiddleware;
 }

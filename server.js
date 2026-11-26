@@ -76,5 +76,11 @@ server.listen(PORT, '0.0.0.0', () => {
   for (const lan of info.lanAddresses) {
     console.log(`   Network: http://${lan.address}:${PORT}  (${lan.interfaceName})`);
   }
+  if (process.env.ADMIN_KEY?.trim()) {
+    console.log('   Admin:     ADMIN_KEY environment variable enabled');
+  }
+  if (typeof syncHandler.getAdminKey === 'function') {
+    console.log(`   Admin Key: ${syncHandler.getAdminKey()}`);
+  }
   console.log('');
 });
