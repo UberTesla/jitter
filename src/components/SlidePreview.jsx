@@ -183,18 +183,6 @@ export default function SlidePreview({
 
             {activeSlide === 'arena' && (
               <div className="title-slide-options-stack">
-                <div className="intermission-field">
-                  <label htmlFor="arena-subtitle-input">Live Arena Subtitle (Optional)</label>
-                  <input
-                    id="arena-subtitle-input"
-                    type="text"
-                    value={state.presentation?.arenaSubtitle ?? ''}
-                    onChange={(e) =>
-                      onUpdatePresentationConfig({ arenaSubtitle: e.target.value })
-                    }
-                    placeholder="Optional subtitle (leave blank to hide)"
-                  />
-                </div>
                 <div className="contextual-inline-row">
                   <label className="toggle-label">
                     <input

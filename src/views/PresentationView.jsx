@@ -635,9 +635,6 @@ export default function PresentationView({
               className={`slide-arena-layout ${showMiniBracket ? 'with-mini-bracket' : ''} ${showOnDeckBanner ? 'with-ondeck' : ''
                 }`}
             >
-              {Boolean(state.presentation?.arenaSubtitle?.trim()) && (
-                <p className="slide-optional-subtitle">{state.presentation.arenaSubtitle}</p>
-              )}
               <div className="arena-scoreboard-region">
                 <Scoreboard
                   match={activeMatch}
