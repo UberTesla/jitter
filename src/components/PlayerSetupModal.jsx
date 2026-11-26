@@ -606,7 +606,216 @@ export default function PlayerSetupModal({
         </header>
 
         <form onSubmit={handleSubmit} className="dialog-body scroller">
-          {/* Section 1: Identity & Format */}
+          {/* Section 1: Single-Source Player Roster (Always Individual Players!) */}
+          <div className="setup-section-box">
+            <div className="players-grid-header">
+              <h2 className="setup-section-heading">
+                Player Roster ({draftHumanCount} Player{draftHumanCount === 1 ? '' : 's'})
+              </h2>
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={handlePreviewRandomizeSeeds}
+                  disabled={draftHumanCount < 2}
+                  title="Preview a randomized seed order (only takes effect when saved)"
+                >
+                  🎲 Randomize Seeds
+                </button>
+                <button
+                  type="button"
+                  className="btn-danger-outline btn-sm"
+                  onClick={() => {
+                    onResetTournament();
+                    dialogRef.current?.close();
+                  }}
+                >
+                  ↺ Reset Scores
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="roster-add-row"
+              style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.65rem' }}
+            >
+              <input
+                ref={newPlayerInputRef}
+                type="text"
+                value={newPlayerName}
+                onChange={(e) => setNewPlayerName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddPlayer();
+                  }
+                }}
+                autoFocus
+                placeholder={nextDefaultPlayerName}
+                aria-label="Add player name"
+                disabled={draftHumanCount >= MAX_PLAYERS}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={handleAddPlayer}
+                disabled={draftHumanCount >= MAX_PLAYERS}
+              >
+                + Add
+              </button>
+            </div>
+
+            {!hasEnoughPlayers && (
+              <p className="setup-notice" style={{ marginBottom: '0.5rem' }}>
+                Add at least {minHumans} players ({isTeams ? '4 required for Teams' : '2 minimum'}) to save the tournament.
+              </p>
+            )}
+
+            {draftSeedsRandomized && (
+              <p className="setup-info">
+                🎲 Previewing randomized {isTeams ? 'team' : 'player'} seeds below — changes will
+                only take effect when you click Save (Cancel discards this preview).
+              </p>
+            )}
+
+            {draftHumanCount > 16 && (
+              <div className="roster-filter-row">
+                <input
+                  type="search"
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  placeholder={`Filter ${draftHumanCount} players by name or #number...`}
+                  aria-label="Filter player roster"
+                />
+                <span className="roster-filter-count">
+                  Showing {filteredRoster.length} / {draftHumanCount}
+                </span>
+              </div>
+            )}
+
+            <div className="roster-scroll-box scroller">
+              {draftHumanCount === 0 ? (
+                <p className="panel-subtitle" style={{ margin: '0.4rem 0' }}>
+                  No players yet — type a name above and click <strong>+ Add</strong>.
+                </p>
+              ) : (
+                <div className="player-inputs-grid">
+                  {filteredRoster.map(({ player, idx }) => (
+                    <div key={player.id} className="player-input-row">
+                      <span className="seed-tag">#{idx + 1}</span>
+                      <input
+                        type="text"
+                        value={player.name}
+                        onChange={(e) => handleRosterNameChange(idx, e.target.value)}
+                        placeholder={`Player ${idx + 1}`}
+                        aria-label={`Player ${idx + 1} name`}
+                      />
+                      <button
+                        type="button"
+                        className="btn-danger-outline btn-sm"
+                        onClick={() => handleRemovePlayer(idx)}
+                        aria-label={`Remove ${player.name || `Player ${idx + 1}`}`}
+                        title="Remove player"
+                        style={{ padding: '0.25rem 0.45rem', flexShrink: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 2 (Teams Mode Only): Randomly Generated Teams with Manual Override */}
+          {isTeams && (
+            <div className="setup-section-box">
+              <div className="players-grid-header">
+                <div>
+                  <h2 className="setup-section-heading">
+                    Generated Teams ({draftTeams.length} Teams · Override Anytime)
+                  </h2>
+                  <p className="team-override-hint">
+                    Paired randomly from your Player Roster. Pick any player in a dropdown to swap
+                    partners or rename any team.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-amber btn-sm"
+                  onClick={handleRandomizeTeams}
+                >
+                  🎲 Re-Roll Random Teams
+                </button>
+              </div>
+
+              <div className="roster-scroll-box scroller">
+                <div className="team-inputs-grid">
+                  {draftTeams.map((team, idx) => (
+                    <div key={team.id} className="team-input-card">
+                      <div className="team-card-top">
+                        <span className="seed-tag">#{team.seed}</span>
+                        <div className="team-name-field-wrap">
+                          <input
+                            type="text"
+                            value={team.name}
+                            onChange={(e) => handleTeamNameOverride(idx, e.target.value)}
+                            placeholder={`Team ${team.seed}`}
+                            aria-label={`Override Team ${team.seed} name`}
+                            className="team-name-input"
+                          />
+                          <button
+                            type="button"
+                            className="team-name-reroll-btn"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleRerollTeamName(idx)}
+                            title="Roll random team name"
+                            aria-label={`Roll random name for Team ${team.seed}`}
+                          >
+                            🎲
+                          </button>
+                        </div>
+                      </div>
+                      <div className="team-members-inputs">
+                        <select
+                          value={team.memberIds[0] || ''}
+                          onChange={(e) => handleTeamMemberOverride(idx, 0, e.target.value)}
+                          aria-label={`Team ${team.seed} Player A`}
+                          className="team-member-select"
+                        >
+                          <option value="">— Unassigned —</option>
+                          {draftRoster.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="member-amp" aria-hidden="true">
+                          &amp;
+                        </span>
+                        <select
+                          value={team.memberIds[1] || ''}
+                          onChange={(e) => handleTeamMemberOverride(idx, 1, e.target.value)}
+                          aria-label={`Team ${team.seed} Player B`}
+                          className="team-member-select"
+                        >
+                          <option value="">— Solo / None —</option>
+                          {draftRoster.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section 3: Identity & Format */}
           <div className="setup-section-box">
             <h2 className="setup-section-heading">Tournament Format &amp; Size</h2>
 
@@ -617,7 +826,6 @@ export default function PlayerSetupModal({
                 type="text"
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
-                autoFocus
                 placeholder="Grand Retro Ping Pong Championship"
               />
             </div>
@@ -957,214 +1165,6 @@ export default function PlayerSetupModal({
               )}
             </div>
           </div>
-
-          {/* Section 3: Single-Source Player Roster (Always Individual Players!) */}
-          <div className="setup-section-box">
-            <div className="players-grid-header">
-              <h2 className="setup-section-heading">
-                Player Roster ({draftHumanCount} Player{draftHumanCount === 1 ? '' : 's'})
-              </h2>
-              <div className="inline-actions">
-                <button
-                  type="button"
-                  className="btn-secondary btn-sm"
-                  onClick={handlePreviewRandomizeSeeds}
-                  disabled={draftHumanCount < 2}
-                  title="Preview a randomized seed order (only takes effect when saved)"
-                >
-                  🎲 Randomize Seeds
-                </button>
-                <button
-                  type="button"
-                  className="btn-danger-outline btn-sm"
-                  onClick={() => {
-                    onResetTournament();
-                    dialogRef.current?.close();
-                  }}
-                >
-                  ↺ Reset Scores
-                </button>
-              </div>
-            </div>
-
-            <div
-              className="roster-add-row"
-              style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.65rem' }}
-            >
-              <input
-                ref={newPlayerInputRef}
-                type="text"
-                value={newPlayerName}
-                onChange={(e) => setNewPlayerName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddPlayer();
-                  }
-                }}
-                placeholder={nextDefaultPlayerName}
-                aria-label="Add player name"
-                disabled={draftHumanCount >= MAX_PLAYERS}
-                style={{ flex: 1 }}
-              />
-              <button
-                type="button"
-                className="btn-primary btn-sm"
-                onClick={handleAddPlayer}
-                disabled={draftHumanCount >= MAX_PLAYERS}
-              >
-                + Add
-              </button>
-            </div>
-
-            {!hasEnoughPlayers && (
-              <p className="setup-notice" style={{ marginBottom: '0.5rem' }}>
-                Add at least {minHumans} players ({isTeams ? '4 required for Teams' : '2 minimum'}) to save the tournament.
-              </p>
-            )}
-
-            {draftSeedsRandomized && (
-              <p className="setup-info">
-                🎲 Previewing randomized {isTeams ? 'team' : 'player'} seeds below — changes will
-                only take effect when you click Save (Cancel discards this preview).
-              </p>
-            )}
-
-            {draftHumanCount > 16 && (
-              <div className="roster-filter-row">
-                <input
-                  type="search"
-                  value={rosterSearch}
-                  onChange={(e) => setRosterSearch(e.target.value)}
-                  placeholder={`Filter ${draftHumanCount} players by name or #number...`}
-                  aria-label="Filter player roster"
-                />
-                <span className="roster-filter-count">
-                  Showing {filteredRoster.length} / {draftHumanCount}
-                </span>
-              </div>
-            )}
-
-            <div className="roster-scroll-box scroller">
-              {draftHumanCount === 0 ? (
-                <p className="panel-subtitle" style={{ margin: '0.4rem 0' }}>
-                  No players yet — type a name above and click <strong>+ Add</strong>.
-                </p>
-              ) : (
-                <div className="player-inputs-grid">
-                  {filteredRoster.map(({ player, idx }) => (
-                    <div key={player.id} className="player-input-row">
-                      <span className="seed-tag">#{idx + 1}</span>
-                      <input
-                        type="text"
-                        value={player.name}
-                        onChange={(e) => handleRosterNameChange(idx, e.target.value)}
-                        placeholder={`Player ${idx + 1}`}
-                        aria-label={`Player ${idx + 1} name`}
-                      />
-                      <button
-                        type="button"
-                        className="btn-danger-outline btn-sm"
-                        onClick={() => handleRemovePlayer(idx)}
-                        aria-label={`Remove ${player.name || `Player ${idx + 1}`}`}
-                        title="Remove player"
-                        style={{ padding: '0.25rem 0.45rem', flexShrink: 0 }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Section 4 (Teams Mode Only): Randomly Generated Teams with Manual Override */}
-          {isTeams && (
-            <div className="setup-section-box">
-              <div className="players-grid-header">
-                <div>
-                  <h2 className="setup-section-heading">
-                    Generated Teams ({draftTeams.length} Teams · Override Anytime)
-                  </h2>
-                  <p className="team-override-hint">
-                    Paired randomly from your Player Roster. Pick any player in a dropdown to swap
-                    partners or rename any team.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn-amber btn-sm"
-                  onClick={handleRandomizeTeams}
-                >
-                  🎲 Re-Roll Random Teams
-                </button>
-              </div>
-
-              <div className="roster-scroll-box scroller">
-                <div className="team-inputs-grid">
-                  {draftTeams.map((team, idx) => (
-                    <div key={team.id} className="team-input-card">
-                      <div className="team-card-top">
-                        <span className="seed-tag">#{team.seed}</span>
-                        <div className="team-name-field-wrap">
-                          <input
-                            type="text"
-                            value={team.name}
-                            onChange={(e) => handleTeamNameOverride(idx, e.target.value)}
-                            placeholder={`Team ${team.seed}`}
-                            aria-label={`Override Team ${team.seed} name`}
-                            className="team-name-input"
-                          />
-                          <button
-                            type="button"
-                            className="team-name-reroll-btn"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => handleRerollTeamName(idx)}
-                            title="Roll random team name"
-                            aria-label={`Roll random name for Team ${team.seed}`}
-                          >
-                            🎲
-                          </button>
-                        </div>
-                      </div>
-                      <div className="team-members-inputs">
-                        <select
-                          value={team.memberIds[0] || ''}
-                          onChange={(e) => handleTeamMemberOverride(idx, 0, e.target.value)}
-                          aria-label={`Team ${team.seed} Player A`}
-                          className="team-member-select"
-                        >
-                          <option value="">— Unassigned —</option>
-                          {draftRoster.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="member-amp" aria-hidden="true">
-                          &amp;
-                        </span>
-                        <select
-                          value={team.memberIds[1] || ''}
-                          onChange={(e) => handleTeamMemberOverride(idx, 1, e.target.value)}
-                          aria-label={`Team ${team.seed} Player B`}
-                          className="team-member-select"
-                        >
-                          <option value="">— Solo / None —</option>
-                          {draftRoster.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Apply Strategy Selector: Non-Destructive vs Destructive */}
           <div className="setup-section-box apply-mode-box">

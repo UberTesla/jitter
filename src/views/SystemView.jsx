@@ -691,211 +691,6 @@ export default function SystemView({
           </div>
         </section>
 
-        {/* 3. Server IP / URL & Technical Environment Details */}
-        <section className="panel-card debug-tech-panel" aria-label="Server Network and Technical Details">
-          <div className="panel-header-row">
-            <div>
-              <h2 className="panel-title">🌐 Server Network, URLs &amp; Technical Details</h2>
-              <p className="panel-subtitle">
-                Live host IP addresses, LAN share URLs for phones/TVs, storage footprint, and browser runtime capabilities
-              </p>
-            </div>
-            {primaryLanIp && (
-              <span className="meta-chip chip-sync">
-                LAN IP: {primaryLanIp}
-                {effectivePort ? `:${effectivePort}` : ''}
-              </span>
-            )}
-          </div>
-
-          <div className="debug-tech-grid">
-            {/* Left Column: Server IP, Origin & Shareable Route URLs */}
-            <div className="debug-tech-col">
-              <div className="debug-group-label" style={{ marginTop: 0 }}>
-                Server &amp; Network Identity
-              </div>
-              <dl className="debug-kv-list">
-                <div className="debug-kv-row">
-                  <dt>Current URL</dt>
-                  <dd className="debug-mono-val">{currentHref || '—'}</dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Origin / Host</dt>
-                  <dd className="debug-mono-val">
-                    {currentOrigin || '—'} ({typeof window !== 'undefined' ? window.location.hostname : '—'}
-                    {effectivePort ? `:${effectivePort}` : ''})
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Server Hostname</dt>
-                  <dd className="debug-mono-val">
-                    {serverInfo?.hostname || '—'} · {serverInfo?.platform || 'Browser'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Runtime / Build</dt>
-                  <dd className="debug-mono-val">
-                    v{serverInfo?.appVersion || '1.0.0'} · {import.meta.env.MODE} · Node{' '}
-                    {serverInfo?.nodeVersion || '—'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>LAN IPv4 Addresses</dt>
-                  <dd className="debug-ip-list">
-                    {rankedLanAddresses.length > 0 ? (
-                      rankedLanAddresses.map((entry) => (
-                        <button
-                          key={`${entry.interfaceName}-${entry.address}`}
-                          type="button"
-                          className="debug-ip-chip"
-                          onClick={() =>
-                            handleCopyText(
-                              `${currentProtocol}//${entry.address}${effectivePort ? `:${effectivePort}` : ''}`,
-                              `${entry.interfaceName} URL`
-                            )
-                          }
-                          title="Click to copy LAN base URL"
-                        >
-                          <strong>{entry.address}</strong>
-                          <span>{entry.interfaceName}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <span className="debug-muted">None detected (localhost only)</span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="debug-group-label">Quick LAN / Device URLs</div>
-              <div className="debug-url-list">
-                {shareRoutes.map((route) => (
-                  <div key={route.label} className="debug-url-row">
-                    <div className="debug-url-meta">
-                      <span className="debug-url-lbl">{route.label}</span>
-                      <code className="debug-url-code">{route.url}</code>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm"
-                      onClick={() => handleCopyText(route.url, route.label)}
-                    >
-                      📋 Copy
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right Column: Client Display, Storage, Engine & Capabilities */}
-            <div className="debug-tech-col">
-              <div className="debug-group-label" style={{ marginTop: 0 }}>
-                Client Runtime, Storage &amp; Sync
-              </div>
-              <dl className="debug-kv-list">
-                <div className="debug-kv-row">
-                  <dt>Viewport / Screen</dt>
-                  <dd className="debug-mono-val">
-                    {viewport.w}×{viewport.h} (Screen{' '}
-                    {typeof window !== 'undefined'
-                      ? `${window.screen.width}×${window.screen.height}`
-                      : '—'}
-                    ) · DPR {Number(viewport.dpr).toFixed(2)}x
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Device / Network</dt>
-                  <dd className="debug-mono-val">
-                    {viewport.online ? 'Online' : 'Offline'} ·{' '}
-                    {typeof navigator !== 'undefined' && navigator.hardwareConcurrency
-                      ? `${navigator.hardwareConcurrency} CPU threads`
-                      : 'CPU N/A'}{' '}
-                    ·{' '}
-                    {typeof window !== 'undefined' &&
-                      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-                      ? 'Reduced Motion ON'
-                      : 'Full Motion'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>LocalStorage Usage</dt>
-                  <dd className="debug-mono-val">
-                    Live {(storageBreakdown.liveBytes / 1024).toFixed(2)} KB · Studio{' '}
-                    {(storageBreakdown.studioBytes / 1024).toFixed(2)} KB · Schema v
-                    {state.version || 5}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>IndexedDB TV Media</dt>
-                  <dd className="debug-mono-val">
-                    {mediaMeta
-                      ? `${mediaMeta.name} (${mediaMeta.type}, ${(mediaMeta.bytes / 1024).toFixed(1)} KB)`
-                      : 'Default Built-in Sitcom Loop (0 KB)'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Sync Channel &amp; Session</dt>
-                  <dd className="debug-mono-val">
-                    {SYNC_CHANNEL_NAME} · {tournamentStore.getTabId()}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Screen Keep-Alive</dt>
-                  <dd className="debug-mono-val">
-                    {wakeLockStatus?.mode === 'wake-lock'
-                      ? 'Active (Native Wake Lock)'
-                      : wakeLockStatus?.mode === 'video-fallback'
-                        ? 'Active (LAN Video Keep-Alive)'
-                        : wakeLockStatus?.mode === 'armed'
-                          ? 'Armed (activates on tap/click)'
-                          : 'Standby'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Last State / Point</dt>
-                  <dd className="debug-mono-val">
-                    State {state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : '—'} ·
-                    Point{' '}
-                    {storageBreakdown.lastPointAt
-                      ? new Date(storageBreakdown.lastPointAt).toLocaleTimeString()
-                      : 'None'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>Grandma Engine</dt>
-                  <dd className="debug-mono-val">
-                    {state.grandma?.activeSpeech
-                      ? `${state.grandma.activeSpeech.category} (#${state.grandma.activeSpeech.id})`
-                      : 'Idle'}{' '}
-                    · Next banter{' '}
-                    {state.grandma?.nextBanterAt
-                      ? new Date(state.grandma.nextBanterAt).toLocaleTimeString()
-                      : '—'}
-                  </dd>
-                </div>
-                <div className="debug-kv-row">
-                  <dt>User Agent</dt>
-                  <dd className="debug-mono-val debug-ua-val">
-                    {typeof navigator !== 'undefined' ? navigator.userAgent : '—'}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="debug-group-label">Browser API Capabilities</div>
-              <div className="debug-cap-badges">
-                {browserCapabilities.map((cap) => (
-                  <span
-                    key={cap.label}
-                    className={`cap-pill ${cap.supported ? 'is-supported' : 'is-unsupported'}`}
-                  >
-                    {cap.supported ? '✓' : '✕'} {cap.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
         <div className="debug-panels-grid">
           {/* Panel 1: Demo Mode, Auto Team Names & Stress Presets */}
           <section className="panel-card">
@@ -1176,6 +971,211 @@ export default function SystemView({
             )}
           </section>
         </div>
+
+        {/* 4. Server IP / URL & Technical Environment Details (Diagnostics at Bottom) */}
+        <section className="panel-card debug-tech-panel" aria-label="Server Network and Technical Details">
+          <div className="panel-header-row">
+            <div>
+              <h2 className="panel-title">🌐 Server Network, URLs &amp; Technical Details</h2>
+              <p className="panel-subtitle">
+                Live host IP addresses, LAN share URLs for phones/TVs, storage footprint, and browser runtime capabilities
+              </p>
+            </div>
+            {primaryLanIp && (
+              <span className="meta-chip chip-sync">
+                LAN IP: {primaryLanIp}
+                {effectivePort ? `:${effectivePort}` : ''}
+              </span>
+            )}
+          </div>
+
+          <div className="debug-tech-grid">
+            {/* Left Column: Server IP, Origin & Shareable Route URLs */}
+            <div className="debug-tech-col">
+              <div className="debug-group-label" style={{ marginTop: 0 }}>
+                Server &amp; Network Identity
+              </div>
+              <dl className="debug-kv-list">
+                <div className="debug-kv-row">
+                  <dt>Current URL</dt>
+                  <dd className="debug-mono-val">{currentHref || '—'}</dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Origin / Host</dt>
+                  <dd className="debug-mono-val">
+                    {currentOrigin || '—'} ({typeof window !== 'undefined' ? window.location.hostname : '—'}
+                    {effectivePort ? `:${effectivePort}` : ''})
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Server Hostname</dt>
+                  <dd className="debug-mono-val">
+                    {serverInfo?.hostname || '—'} · {serverInfo?.platform || 'Browser'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Runtime / Build</dt>
+                  <dd className="debug-mono-val">
+                    v{serverInfo?.appVersion || '1.0.0'} · {import.meta.env.MODE} · Node{' '}
+                    {serverInfo?.nodeVersion || '—'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>LAN IPv4 Addresses</dt>
+                  <dd className="debug-ip-list">
+                    {rankedLanAddresses.length > 0 ? (
+                      rankedLanAddresses.map((entry) => (
+                        <button
+                          key={`${entry.interfaceName}-${entry.address}`}
+                          type="button"
+                          className="debug-ip-chip"
+                          onClick={() =>
+                            handleCopyText(
+                              `${currentProtocol}//${entry.address}${effectivePort ? `:${effectivePort}` : ''}`,
+                              `${entry.interfaceName} URL`
+                            )
+                          }
+                          title="Click to copy LAN base URL"
+                        >
+                          <strong>{entry.address}</strong>
+                          <span>{entry.interfaceName}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <span className="debug-muted">None detected (localhost only)</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="debug-group-label">Quick LAN / Device URLs</div>
+              <div className="debug-url-list">
+                {shareRoutes.map((route) => (
+                  <div key={route.label} className="debug-url-row">
+                    <div className="debug-url-meta">
+                      <span className="debug-url-lbl">{route.label}</span>
+                      <code className="debug-url-code">{route.url}</code>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={() => handleCopyText(route.url, route.label)}
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column: Client Display, Storage, Engine & Capabilities */}
+            <div className="debug-tech-col">
+              <div className="debug-group-label" style={{ marginTop: 0 }}>
+                Client Runtime, Storage &amp; Sync
+              </div>
+              <dl className="debug-kv-list">
+                <div className="debug-kv-row">
+                  <dt>Viewport / Screen</dt>
+                  <dd className="debug-mono-val">
+                    {viewport.w}×{viewport.h} (Screen{' '}
+                    {typeof window !== 'undefined'
+                      ? `${window.screen.width}×${window.screen.height}`
+                      : '—'}
+                    ) · DPR {Number(viewport.dpr).toFixed(2)}x
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Device / Network</dt>
+                  <dd className="debug-mono-val">
+                    {viewport.online ? 'Online' : 'Offline'} ·{' '}
+                    {typeof navigator !== 'undefined' && navigator.hardwareConcurrency
+                      ? `${navigator.hardwareConcurrency} CPU threads`
+                      : 'CPU N/A'}{' '}
+                    ·{' '}
+                    {typeof window !== 'undefined' &&
+                      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+                      ? 'Reduced Motion ON'
+                      : 'Full Motion'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>LocalStorage Usage</dt>
+                  <dd className="debug-mono-val">
+                    Live {(storageBreakdown.liveBytes / 1024).toFixed(2)} KB · Studio{' '}
+                    {(storageBreakdown.studioBytes / 1024).toFixed(2)} KB · Schema v
+                    {state.version || 5}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>IndexedDB TV Media</dt>
+                  <dd className="debug-mono-val">
+                    {mediaMeta
+                      ? `${mediaMeta.name} (${mediaMeta.type}, ${(mediaMeta.bytes / 1024).toFixed(1)} KB)`
+                      : 'Default Built-in Sitcom Loop (0 KB)'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Sync Channel &amp; Session</dt>
+                  <dd className="debug-mono-val">
+                    {SYNC_CHANNEL_NAME} · {tournamentStore.getTabId()}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Screen Keep-Alive</dt>
+                  <dd className="debug-mono-val">
+                    {wakeLockStatus?.mode === 'wake-lock'
+                      ? 'Active (Native Wake Lock)'
+                      : wakeLockStatus?.mode === 'video-fallback'
+                        ? 'Active (LAN Video Keep-Alive)'
+                        : wakeLockStatus?.mode === 'armed'
+                          ? 'Armed (activates on tap/click)'
+                          : 'Standby'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Last State / Point</dt>
+                  <dd className="debug-mono-val">
+                    State {state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : '—'} ·
+                    Point{' '}
+                    {storageBreakdown.lastPointAt
+                      ? new Date(storageBreakdown.lastPointAt).toLocaleTimeString()
+                      : 'None'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>Grandma Engine</dt>
+                  <dd className="debug-mono-val">
+                    {state.grandma?.activeSpeech
+                      ? `${state.grandma.activeSpeech.category} (#${state.grandma.activeSpeech.id})`
+                      : 'Idle'}{' '}
+                    · Next banter{' '}
+                    {state.grandma?.nextBanterAt
+                      ? new Date(state.grandma.nextBanterAt).toLocaleTimeString()
+                      : '—'}
+                  </dd>
+                </div>
+                <div className="debug-kv-row">
+                  <dt>User Agent</dt>
+                  <dd className="debug-mono-val debug-ua-val">
+                    {typeof navigator !== 'undefined' ? navigator.userAgent : '—'}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="debug-group-label">Browser API Capabilities</div>
+              <div className="debug-cap-badges">
+                {browserCapabilities.map((cap) => (
+                  <span
+                    key={cap.label}
+                    className={`cap-pill ${cap.supported ? 'is-supported' : 'is-unsupported'}`}
+                  >
+                    {cap.supported ? '✓' : '✕'} {cap.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   );
