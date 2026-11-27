@@ -1866,7 +1866,7 @@ test('6-tier role hierarchy (admin > host > moderator > presenter > scorekeeper 
   assert.equal(canAssignRole('presenter', 'spectator', 'scorekeeper'), false);
 
   // 2. Exact Tab & Feature Access Matrix
-  // Spectator (0): Hub + Spectator
+  // Spectator (0): Hub + Spectator + Presentation (with local slides & sync)
   assert.deepEqual(
     {
       hub: getRolePermissions('spectator').canAccessHub,
@@ -1877,10 +1877,11 @@ test('6-tier role hierarchy (admin > host > moderator > presenter > scorekeeper 
       control: getRolePermissions('spectator').canAccessControl,
       system: getRolePermissions('spectator').canAccessSystem,
       present: getRolePermissions('spectator').canAccessPresent,
+      localSlides: getRolePermissions('spectator').canSelectLocalSlides,
     },
-    { hub: true, admin: false, spectator: true, scorekeeper: false, users: false, control: false, system: false, present: false }
+    { hub: true, admin: false, spectator: true, scorekeeper: false, users: false, control: false, system: false, present: true, localSlides: true }
   );
-  // Scorekeeper (1): Hub + Spectator + Scorekeeper
+  // Scorekeeper (1): Hub + Spectator + Scorekeeper + Presentation (with local slides & sync)
   assert.deepEqual(
     {
       hub: getRolePermissions('scorekeeper').canAccessHub,
@@ -1891,10 +1892,11 @@ test('6-tier role hierarchy (admin > host > moderator > presenter > scorekeeper 
       control: getRolePermissions('scorekeeper').canAccessControl,
       system: getRolePermissions('scorekeeper').canAccessSystem,
       present: getRolePermissions('scorekeeper').canAccessPresent,
+      localSlides: getRolePermissions('scorekeeper').canSelectLocalSlides,
     },
-    { hub: true, admin: false, spectator: true, scorekeeper: true, users: false, control: false, system: false, present: false }
+    { hub: true, admin: false, spectator: true, scorekeeper: true, users: false, control: false, system: false, present: true, localSlides: true }
   );
-  // Presenter (2): Hub + Presentation ONLY (no spectator/scorekeeper/users/control/system/admin)
+  // Presenter (2): Hub + Presentation ONLY (locked to live sync, no local slide picker)
   assert.deepEqual(
     {
       hub: getRolePermissions('presenter').canAccessHub,
@@ -1905,10 +1907,11 @@ test('6-tier role hierarchy (admin > host > moderator > presenter > scorekeeper 
       control: getRolePermissions('presenter').canAccessControl,
       system: getRolePermissions('presenter').canAccessSystem,
       present: getRolePermissions('presenter').canAccessPresent,
+      localSlides: getRolePermissions('presenter').canSelectLocalSlides,
     },
-    { hub: true, admin: false, spectator: false, scorekeeper: false, users: false, control: false, system: false, present: true }
+    { hub: true, admin: false, spectator: false, scorekeeper: false, users: false, control: false, system: false, present: true, localSlides: false }
   );
-  // Moderator (3): Hub + Spectator + Scorekeeper + Users + Control (NO System, NO Presentation, NO Admin)
+  // Moderator (3): Hub + Spectator + Scorekeeper + Users + Control + Presentation (NO System, NO Admin)
   assert.deepEqual(
     {
       hub: getRolePermissions('moderator').canAccessHub,
@@ -1919,8 +1922,9 @@ test('6-tier role hierarchy (admin > host > moderator > presenter > scorekeeper 
       control: getRolePermissions('moderator').canAccessControl,
       system: getRolePermissions('moderator').canAccessSystem,
       present: getRolePermissions('moderator').canAccessPresent,
+      localSlides: getRolePermissions('moderator').canSelectLocalSlides,
     },
-    { hub: true, admin: false, spectator: true, scorekeeper: true, users: true, control: true, system: false, present: false }
+    { hub: true, admin: false, spectator: true, scorekeeper: true, users: true, control: true, system: false, present: true, localSlides: true }
   );
   // Host (4): ALL tournament views (Hub, System, Users, Control, Presentation, Scorekeeper, Spectator), NO Hub Admin Panel
   assert.deepEqual(

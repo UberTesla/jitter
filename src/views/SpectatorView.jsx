@@ -1,22 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ROLE_META,
-  SLIDE_DEFINITIONS,
-  normalizeAutoRotateSlides,
   tournamentStore,
 } from '../state/tournamentStore.js';
-import PresentationView from './PresentationView.jsx';
+import {
+  evaluateMatchState,
+  formatMatchTimer,
+  computeMatchElapsedMs,
+} from '../engine/scoringEngine.js';
+import {
+  computeTournamentStats,
+  formatTeamMembers,
+  formatTeamMembersShort,
+  resolveClaimedPlayer,
+} from '../engine/bracketGenerator.js';
+import { renderLiveMessageText } from '../engine/grandmaVariables.js';
+import { trackUsageEvent } from '../engine/usageAnalytics.js';
 import ViewNavBar from '../components/ViewNavBar.jsx';
-import { useFullscreenMenu } from '../hooks/useFullscreenMenu.js';
+import BracketView from '../components/BracketView.jsx';
+import MatchTimer from '../components/MatchTimer.jsx';
+import TournamentStatsPanel from '../components/TournamentStatsPanel.jsx';
 
 /**
- * Dedicated Guest Spectator Mode (/spectator)
- * - Guests enter here upon joining a tournament and have access ONLY to Spectator Mode.
- * - Lets spectators locally switch between all presentation slides while offering
- *   a "Sync Presentation" toggle (enabled by default) to follow the live presentation.
- * - Provides a one-click button to Request Scorekeeper access (or Become Scorekeeper
- *   immediately when Require Approval is OFF).
- * - Wraps PresentationView cleanly without altering PresentationView itself.
+ * Native Mobile-First Spectator Companion (/spectator)
+ * - Live Match Hero Card (with multi-table switcher if multiple tables are live)
+ * - Personal Status Banner when the user has claimed a player
+ * - Active Sticky Announcement Banner
+ * - 3 Native Tabs: Live & Queue | Bracket | Leaders & Roster
+ * - One-click Request Scorekeeper for guests + quick link to TV Presentation View
  */
 export default function SpectatorView({
   state,
@@ -26,45 +37,23 @@ export default function SpectatorView({
   onNavigateMode,
   onOpenTournamentChooser,
 }) {
-  const baseLiveSlide = state.presentation?.activeSlide || 'title';
-  const autoRotateOn = Boolean(state.presentation?.autoRotate);
-  const rotateList = useMemo(
-    () => normalizeAutoRotateSlides(state.presentation?.autoRotateSlides),
-    [state.presentation?.autoRotateSlides]
-  );
-  const rotateSec = Math.max(5, Number(state.presentation?.autoRotateSec) || 18);
-  const [rotateSlot, setRotateSlot] = useState(() =>
-    Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000))
-  );
-  useEffect(() => {
-    if (!autoRotateOn || rotateList.length < 2) return undefined;
-    const syncSlot = () => {
-      const next = Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
-      setRotateSlot((prev) => (prev === next ? prev : next));
-    };
-    syncSlot();
-    const id = setInterval(syncSlot, 250);
-    return () => clearInterval(id);
-  }, [autoRotateOn, rotateList, rotateSec]);
-
-  const liveSlide =
-    autoRotateOn && rotateList.length > 0
-      ? rotateList[rotateSlot % rotateList.length]
-      : baseLiveSlide;
-  const [syncPresentation, setSyncPresentation] = useState(true);
-  const [localSlide, setLocalSlide] = useState(liveSlide);
+  const [activeTab, setActiveTab] = useState('live');
+  const [selectedTableMatchId, setSelectedTableMatchId] = useState(null);
+  const [bracketFilter, setBracketFilter] = useState('both');
   const [feedback, setFeedback] = useState('');
   const [accessDeniedMsg, setAccessDeniedMsg] = useState('');
-  const { isFullscreen, isMenuRevealed, toggleFullscreen, barHoverHandlers } = useFullscreenMenu();
+  const [bannerTick, setBannerTick] = useState(0);
 
-  const canScoreRole = rolePerms ? Boolean(rolePerms.canScore) : effectiveRole !== 'spectator' && effectiveRole !== 'presenter';
+  const isTeams = state.entryMode === 'teams';
+  const canScoreRole = rolePerms
+    ? Boolean(rolePerms.canScore)
+    : effectiveRole !== 'spectator' && effectiveRole !== 'presenter';
   const roleMeta = ROLE_META[effectiveRole] || ROLE_META.spectator;
-  const requireScorekeeperApproval = state.rules?.requireScorekeeperApproval !== false;
   const pendingRequestsCount =
     (state.scorekeeperRequests?.length || 0) + (state.joinRequests?.length || 0);
   const hasPendingRequest = Boolean(
     myDeviceId &&
-    (state.scorekeeperRequests || []).some((r) => r && r.deviceId === myDeviceId)
+      (state.scorekeeperRequests || []).some((r) => r && r.deviceId === myDeviceId)
   );
 
   // Listen for real-time Scorekeeper request approval / denial notices
@@ -85,50 +74,232 @@ export default function SpectatorView({
     return tournamentStore.subscribe((_s, nextMeta) => checkNotice(nextMeta));
   }, []);
 
-  // Keep localSlide synced when Sync Presentation is enabled
+  // Tick once per second while an active announcement banner is shown (supports live $countdown)
+  const activeBanner = state.presentation?.activeBanner || null;
   useEffect(() => {
-    if (syncPresentation) {
-      setLocalSlide(liveSlide);
+    if (!activeBanner || !activeBanner.text) return undefined;
+    const id = setInterval(() => setBannerTick((n) => (n + 1) % 100000), 1000);
+    return () => clearInterval(id);
+  }, [activeBanner]);
+
+  const bannerText = useMemo(() => {
+    if (!activeBanner?.text) return '';
+    return renderLiveMessageText(activeBanner, tournamentStore.getServerNow());
+  }, [activeBanner, bannerTick]);
+
+  const playerMap = useMemo(() => {
+    const map = new Map();
+    for (const p of state.players || []) map.set(p.id, p);
+    return map;
+  }, [state.players]);
+
+  const claimedPlayerObj = useMemo(
+    () => resolveClaimedPlayer(state, myDeviceId ? state.playerClaims?.[myDeviceId] : null),
+    [state, myDeviceId]
+  );
+  const claimedEntrantId = claimedPlayerObj?.teamId || null;
+
+  const stats = useMemo(() => computeTournamentStats(state), [state]);
+
+  // Identify live/featured matches and upcoming queue
+  const { liveMatches, featuredMatch, onDeckQueue, recentResults } = useMemo(() => {
+    const matches = state.matches || [];
+    const activeMatch =
+      matches.find((m) => m.id === state.activeMatchId && !m.completed && m.player1Id && m.player2Id) ||
+      null;
+
+    // Matches currently in play (started & not completed)
+    const startedLive = matches.filter(
+      (m) => !m.completed && m.started && m.player1Id && m.player2Id
+    );
+    const liveList = [...startedLive];
+    if (activeMatch && !liveList.some((m) => m.id === activeMatch.id)) {
+      liveList.unshift(activeMatch);
     }
-  }, [syncPresentation, liveSlide]);
+
+    // Determine which match is featured in the Hero Card
+    let hero = null;
+    if (selectedTableMatchId && liveList.some((m) => m.id === selectedTableMatchId)) {
+      hero = liveList.find((m) => m.id === selectedTableMatchId);
+    } else if (activeMatch) {
+      hero = activeMatch;
+    } else if (liveList.length > 0) {
+      hero = liveList[0];
+    } else {
+      // Fallback: first ready uncompleted match
+      hero =
+        matches.find((m) => !m.completed && m.player1Id && m.player2Id) || null;
+    }
+
+    // On Deck Queue: ready uncompleted matches not currently started (and not the hero)
+    const liveIds = new Set(liveList.map((m) => m.id));
+    if (hero) liveIds.add(hero.id);
+    const queue = matches.filter(
+      (m) => !m.completed && !m.started && m.player1Id && m.player2Id && !liveIds.has(m.id)
+    );
+
+    // Recent completed matches (most recent first)
+    const completed = matches
+      .filter((m) => m.completed && !m.isBye && m.player1Id && m.player2Id)
+      .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+      .slice(0, 12);
+
+    return {
+      liveMatches: liveList,
+      featuredMatch: hero,
+      onDeckQueue: queue,
+      recentResults: completed,
+    };
+  }, [state.matches, state.activeMatchId, selectedTableMatchId]);
+
+  // Compute personal status for the claimed player
+  const myStatus = useMemo(() => {
+    if (!claimedEntrantId || !claimedPlayerObj) return null;
+    const team = playerMap.get(claimedEntrantId);
+    const myDisplayName = claimedPlayerObj.memberName
+      ? `${claimedPlayerObj.memberName} (${team?.name || ''})`
+      : team?.name || claimedPlayerObj.displayName;
+
+    if (state.championId && state.championId === claimedEntrantId) {
+      return {
+        tone: 'champion',
+        icon: '🏆',
+        title: "YOU'RE THE CHAMPION!",
+        detail: `${myDisplayName} won the tournament!`,
+      };
+    }
+
+    const myLive = (state.matches || []).find(
+      (m) =>
+        !m.completed &&
+        (m.started || m.id === state.activeMatchId) &&
+        (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId)
+    );
+    if (myLive) {
+      const oppId = myLive.player1Id === claimedEntrantId ? myLive.player2Id : myLive.player1Id;
+      const oppName = playerMap.get(oppId)?.name || 'TBD';
+      const tableNum = myLive.tableNumber || 1;
+      return {
+        tone: 'live',
+        icon: '🏓',
+        title: myLive.started ? "YOU'RE PLAYING NOW!" : "YOU'RE UP ON TABLE!",
+        detail: `${myLive.label} · Table ${tableNum} vs ${oppName}`,
+        matchId: myLive.id,
+      };
+    }
+
+    const queueIdx = onDeckQueue.findIndex(
+      (m) => m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId
+    );
+    if (queueIdx >= 0) {
+      const qm = onDeckQueue[queueIdx];
+      const oppId = qm.player1Id === claimedEntrantId ? qm.player2Id : qm.player1Id;
+      const oppName = playerMap.get(oppId)?.name || 'TBD';
+      return {
+        tone: queueIdx === 0 ? 'next' : 'queued',
+        icon: '⏳',
+        title: queueIdx === 0 ? "YOU'RE UP NEXT!" : `#${queueIdx + 1} IN ON DECK QUEUE`,
+        detail: `${qm.label} vs ${oppName}`,
+      };
+    }
+
+    const hasPendingSlot = (state.matches || []).some(
+      (m) =>
+        !m.completed &&
+        (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId)
+    );
+    if (hasPendingSlot) {
+      return {
+        tone: 'waiting',
+        icon: '🎯',
+        title: 'STILL IN THE BRACKET',
+        detail: `${myDisplayName} — waiting for your next opponent`,
+      };
+    }
+
+    const hasPlayed = (state.matches || []).some(
+      (m) =>
+        m.completed &&
+        (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId)
+    );
+    if (hasPlayed) {
+      return {
+        tone: 'done',
+        icon: '👏',
+        title: 'GREAT RUN!',
+        detail: `${myDisplayName} — eliminated from the bracket`,
+      };
+    }
+
+    return {
+      tone: 'waiting',
+      icon: '🏓',
+      title: 'REGISTERED',
+      detail: `${myDisplayName} — awaiting tournament start`,
+    };
+  }, [claimedEntrantId, claimedPlayerObj, playerMap, state.championId, state.matches, state.activeMatchId, onDeckQueue]);
+
+  // Compute roster rows with live status badges
+  const rosterRows = useMemo(() => {
+    const recordMap = new Map();
+    for (const row of stats.leaderboard || []) {
+      recordMap.set(row.playerId, row);
+    }
+    const liveIds = new Set();
+    const onDeckIds = new Set();
+    const activeBracketIds = new Set();
+    for (const m of state.matches || []) {
+      if (m.completed) continue;
+      if (m.player1Id) activeBracketIds.add(m.player1Id);
+      if (m.player2Id) activeBracketIds.add(m.player2Id);
+      if (m.started || m.id === state.activeMatchId) {
+        if (m.player1Id) liveIds.add(m.player1Id);
+        if (m.player2Id) liveIds.add(m.player2Id);
+      } else if (m.player1Id && m.player2Id) {
+        onDeckIds.add(m.player1Id);
+        onDeckIds.add(m.player2Id);
+      }
+    }
+
+    return [...(state.players || [])]
+      .sort((a, b) => (a.seed || 999) - (b.seed || 999))
+      .map((p) => {
+        const rec = recordMap.get(p.id);
+        let statusLabel = 'Waiting';
+        let statusTone = 'muted';
+        if (state.championId === p.id) {
+          statusLabel = '🏆 Champ';
+          statusTone = 'champion';
+        } else if (liveIds.has(p.id)) {
+          statusLabel = '🏓 Playing';
+          statusTone = 'live';
+        } else if (onDeckIds.has(p.id)) {
+          statusLabel = '⏳ On Deck';
+          statusTone = 'next';
+        } else if (activeBracketIds.has(p.id)) {
+          statusLabel = 'Active';
+          statusTone = 'active';
+        } else if (rec && (rec.wins > 0 || rec.losses > 0)) {
+          statusLabel = 'Out';
+          statusTone = 'out';
+        }
+        return {
+          ...p,
+          wins: rec?.wins || 0,
+          losses: rec?.losses || 0,
+          pointDiff: rec?.pointDiff || 0,
+          statusLabel,
+          statusTone,
+          isMine: claimedEntrantId === p.id,
+        };
+      });
+  }, [state.players, state.matches, state.activeMatchId, state.championId, stats.leaderboard, claimedEntrantId]);
 
   const flashFeedback = (msg) => {
     setFeedback(msg);
     setTimeout(() => {
       setFeedback((curr) => (curr === msg ? '' : curr));
     }, 3000);
-  };
-
-  const activeLocalSlide = syncPresentation ? liveSlide : localSlide;
-
-  // Build local-only presentation state copy (never mutates or broadcasts slide changes!)
-  const spectatorState = useMemo(() => {
-    return {
-      ...state,
-      presentation: {
-        ...(state.presentation || {}),
-        activeSlide: activeLocalSlide,
-        autoRotate: syncPresentation ? Boolean(state.presentation?.autoRotate) : false,
-        followLiveAutomation: syncPresentation,
-      },
-    };
-  }, [state, activeLocalSlide, syncPresentation]);
-
-  const handleSelectSlide = (slideId) => {
-    setLocalSlide(slideId);
-    if (syncPresentation) {
-      setSyncPresentation(false);
-    }
-  };
-
-  const handleToggleSync = () => {
-    setSyncPresentation((prev) => {
-      const next = !prev;
-      if (next) {
-        setLocalSlide(liveSlide);
-      }
-      return next;
-    });
   };
 
   const handleRequestScorekeeper = async () => {
@@ -144,63 +315,71 @@ export default function SpectatorView({
     }
   };
 
+  const handleSelectTab = (tabId) => {
+    setActiveTab(tabId);
+    trackUsageEvent('spectator:tab_change', { category: 'spectator', tab: tabId });
+  };
+
+  const handleSelectTable = (matchId) => {
+    setSelectedTableMatchId(matchId);
+    trackUsageEvent('spectator:switch_table', { category: 'spectator', matchId });
+  };
+
+  const heroEval = useMemo(
+    () => (featuredMatch ? evaluateMatchState(featuredMatch, state.rules) : null),
+    [featuredMatch, state.rules]
+  );
+
+  const championPlayer = state.championId ? playerMap.get(state.championId) : null;
+  const finalMatch = useMemo(() => {
+    if (!state.championId) return null;
+    const completed = (state.matches || []).filter(
+      (m) => m.completed && !m.isBye && m.winnerId === state.championId
+    );
+    completed.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+    return completed[0] || null;
+  }, [state.championId, state.matches]);
+
+  const heroP1 = featuredMatch ? playerMap.get(featuredMatch.player1Id) : null;
+  const heroP2 = featuredMatch ? playerMap.get(featuredMatch.player2Id) : null;
+
+  const getHeroStatusBadge = () => {
+    if (!featuredMatch || !heroEval) return { text: 'READY', tone: 'ready' };
+    if (heroEval.status === 'won') return { text: 'FINAL', tone: 'final' };
+    if (!featuredMatch.started) return { text: 'READY ON TABLE', tone: 'ready' };
+    if (heroEval.isSkunkPoint) return { text: '🦨 SKUNK POINT', tone: 'alert' };
+    if (heroEval.status === 'game_point') return { text: '⚡ GAME POINT', tone: 'alert' };
+    if (heroEval.isInDeuceZone) return { text: '🔥 DEUCE', tone: 'deuce' };
+    return { text: '● LIVE', tone: 'live' };
+  };
+
+  const heroBadge = getHeroStatusBadge();
+
   return (
     <div className="spectator-shell" data-theme={state.ui?.theme || 'arena'}>
-      <header
-        className={`spectator-topbar ${
-          isFullscreen ? `is-fullscreen-topbar ${isMenuRevealed ? 'is-revealed' : ''}` : ''
-        }`}
-        aria-label="Spectator Controls"
-        {...barHoverHandlers}
-      >
+      <header className="spectator-topbar" aria-label="Spectator Navigation">
         <ViewNavBar
           activeMode="spectator"
           rolePerms={rolePerms}
           pendingRequestsCount={pendingRequestsCount}
           onNavigateMode={onNavigateMode}
           onOpenTournamentChooser={onOpenTournamentChooser}
-          isFullscreen={isFullscreen}
         />
 
-        <div className="spectator-submenu" role="toolbar" aria-label="Spectator Slide Controls">
-          <div className="spectator-submenu-left">
-            <button
-              type="button"
-              className="btn-secondary btn-sm"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
-            >
-              {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
-            </button>
+        <div className="spectator-submenu" role="toolbar" aria-label="Tournament Info and Actions">
+          <div className="spectator-title-block">
+            <span className="spectator-title-name">
+              {state.tournamentName || 'Ping-Pong Tournament'}
+            </span>
+            {state.tournamentSubtitle && (
+              <>
+                <span className="spectator-title-dot" aria-hidden="true">·</span>
+                <span className="spectator-title-sub">{state.tournamentSubtitle}</span>
+              </>
+            )}
+          </div>
 
-            <div className="spectator-slide-pills" role="group" aria-label="Local Slides">
-              {SLIDE_DEFINITIONS.map((slide) => (
-                <button
-                  key={slide.id}
-                  type="button"
-                  className={`spectator-slide-btn ${
-                    activeLocalSlide === slide.id ? 'is-active' : ''
-                  }`}
-                  onClick={() => handleSelectSlide(slide.id)}
-                  aria-pressed={activeLocalSlide === slide.id}
-                >
-                  {slide.shortLabel}
-                </button>
-              ))}
-            </div>
-
-            <label
-              className={`spectator-sync-toggle ${syncPresentation ? 'is-synced' : ''}`}
-              title="When enabled, automatically follows the live presentation slide"
-            >
-              <input
-                type="checkbox"
-                checked={syncPresentation}
-                onChange={handleToggleSync}
-              />
-              <span>{syncPresentation ? '🔗 Sync Presentation' : '🔓 Sync Presentation'}</span>
-            </label>
-
+          <div className="spectator-submenu-actions">
             {!canScoreRole &&
               (hasPendingRequest ? (
                 <button
@@ -208,7 +387,7 @@ export default function SpectatorView({
                   className="btn-secondary btn-sm spectator-pending-btn"
                   disabled
                 >
-                  ⏳ Scorekeeper Requested
+                  ⏳ Requested
                 </button>
               ) : (
                 <button
@@ -219,9 +398,7 @@ export default function SpectatorView({
                   🙋 Request Scorekeeper
                 </button>
               ))}
-          </div>
 
-          <div className="spectator-right">
             <span className="spectator-role-pill">
               {effectiveRole === 'spectator'
                 ? '👁️ SPECTATOR'
@@ -234,7 +411,8 @@ export default function SpectatorView({
       {accessDeniedMsg && (
         <div className="spectator-denied-banner" role="alert">
           <span>
-            <strong>🚫 Access Denied:</strong> {accessDeniedMsg.replace(/^Access denied\s*[—:-]?\s*/i, '')}
+            <strong>🚫 Access Denied:</strong>{' '}
+            {accessDeniedMsg.replace(/^Access denied\s*[—:-]?\s*/i, '')}
           </span>
           <button
             type="button"
@@ -253,13 +431,525 @@ export default function SpectatorView({
         </div>
       )}
 
-      <div className="spectator-stage-host">
-        <PresentationView
-          state={spectatorState}
-          embedded={true}
-          forceSessionIdPill={isFullscreen}
-        />
-      </div>
+      <main className="spectator-body">
+        <div className="spectator-container">
+          {/* Sticky Host Announcement Banner */}
+          {bannerText && (
+            <div className="spec-announcement" role="status" aria-live="polite">
+              <span className="spec-announcement-icon" aria-hidden="true">📢</span>
+              <span className="spec-announcement-text">{bannerText}</span>
+            </div>
+          )}
+
+          {/* Personal Status Banner when user claimed a player */}
+          {myStatus && (
+            <div className={`spec-my-status is-${myStatus.tone}`}>
+              <span className="spec-my-status-icon" aria-hidden="true">{myStatus.icon}</span>
+              <div className="spec-my-status-copy">
+                <strong className="spec-my-status-title">{myStatus.title}</strong>
+                <span className="spec-my-status-detail">{myStatus.detail}</span>
+              </div>
+              {myStatus.matchId && featuredMatch?.id !== myStatus.matchId && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => handleSelectTable(myStatus.matchId)}
+                >
+                  Watch
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Hero Section: Champion Celebration OR Live Match Scoreboard OR Waiting */}
+          {championPlayer ? (
+            <section className="spec-hero-card is-champion" aria-label="Tournament Champion">
+              <div className="spec-champ-crown" aria-hidden="true">🏆</div>
+              <div className="spec-champ-eyebrow">TOURNAMENT CHAMPION</div>
+              <h1 className="spec-champ-name">{championPlayer.name}</h1>
+              {isTeams && championPlayer.members?.length > 0 && (
+                <div className="spec-champ-members">
+                  {formatTeamMembers(championPlayer)}
+                </div>
+              )}
+              {finalMatch && (
+                <div className="spec-champ-final">
+                  Final: {playerMap.get(finalMatch.player1Id)?.name || 'P1'}{' '}
+                  <strong>
+                    {finalMatch.score1}–{finalMatch.score2}
+                  </strong>{' '}
+                  {playerMap.get(finalMatch.player2Id)?.name || 'P2'}
+                </div>
+              )}
+              <div className="spec-hero-footer">
+                <span>
+                  {stats.completedCount} matches · {stats.totalPointsPlayed} total points
+                </span>
+                <button
+                  type="button"
+                  className="spec-tv-link"
+                  onClick={() => onNavigateMode?.('presentation')}
+                >
+                  📺 TV Display
+                </button>
+              </div>
+            </section>
+          ) : featuredMatch ? (
+            <section className="spec-hero-card" aria-label="Live Match Scoreboard">
+              {/* Multi-table switcher if more than 1 match is live */}
+              {liveMatches.length > 1 && (
+                <div className="spec-table-switcher" role="tablist" aria-label="Live Tables">
+                  {liveMatches.map((lm) => {
+                    const p1 = playerMap.get(lm.player1Id);
+                    const p2 = playerMap.get(lm.player2Id);
+                    const isSelected = lm.id === featuredMatch.id;
+                    return (
+                      <button
+                        key={lm.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isSelected}
+                        className={`spec-table-pill ${isSelected ? 'is-active' : ''}`}
+                        onClick={() => handleSelectTable(lm.id)}
+                      >
+                        <span className="spec-table-pill-num">T{lm.tableNumber || 1}</span>
+                        <span className="spec-table-pill-names">
+                          {p1?.name || 'TBD'} {lm.score1}–{lm.score2} {p2?.name || 'TBD'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="spec-hero-head">
+                <div className="spec-hero-meta">
+                  <span className="spec-match-code">{featuredMatch.label}</span>
+                  <span className="spec-table-tag">TABLE {featuredMatch.tableNumber || 1}</span>
+                </div>
+                <div className="spec-hero-status-group">
+                  <span className={`spec-status-pill is-${heroBadge.tone}`}>
+                    {heroBadge.text}
+                  </span>
+                  <MatchTimer match={featuredMatch} />
+                </div>
+              </div>
+
+              <div className="spec-hero-board">
+                {/* Side 1 */}
+                <div
+                  className={`spec-side-card is-p1 ${
+                    featuredMatch.started && heroEval?.servingSide === 1 && heroEval?.status !== 'won'
+                      ? 'is-serving'
+                      : ''
+                  } ${heroEval?.winnerSide === 1 ? 'is-winner' : ''} ${
+                    claimedEntrantId && featuredMatch.player1Id === claimedEntrantId ? 'is-mine' : ''
+                  }`}
+                >
+                  <div className="spec-side-top">
+                    <span className="spec-seed">#{heroP1?.seed || 1}</span>
+                    {claimedEntrantId && featuredMatch.player1Id === claimedEntrantId && (
+                      <span className="spec-you-tag">YOU</span>
+                    )}
+                    {featuredMatch.started &&
+                      heroEval?.servingSide === 1 &&
+                      heroEval?.status !== 'won' && (
+                        <span className="spec-serve-badge">● SERVING</span>
+                      )}
+                  </div>
+                  <div className="spec-side-name">{heroP1?.name || 'TBD'}</div>
+                  {isTeams && heroP1?.members?.length > 0 && (
+                    <div className="spec-side-members">
+                      {heroP1.members.map((m, idx) => {
+                        const isActiveServer =
+                          featuredMatch.started &&
+                          heroEval?.servingSide === 1 &&
+                          heroEval?.status !== 'won' &&
+                          heroEval?.activeServerMemberIndex === idx;
+                        return (
+                          <span
+                            key={`${m}-${idx}`}
+                            className={isActiveServer ? 'is-active-server' : ''}
+                          >
+                            {idx > 0 ? ' · ' : ''}
+                            {m}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="spec-side-score">
+                    {String(featuredMatch.score1 ?? 0).padStart(2, '0')}
+                  </div>
+                </div>
+
+                {/* Side 2 */}
+                <div
+                  className={`spec-side-card is-p2 ${
+                    featuredMatch.started && heroEval?.servingSide === 2 && heroEval?.status !== 'won'
+                      ? 'is-serving'
+                      : ''
+                  } ${heroEval?.winnerSide === 2 ? 'is-winner' : ''} ${
+                    claimedEntrantId && featuredMatch.player2Id === claimedEntrantId ? 'is-mine' : ''
+                  }`}
+                >
+                  <div className="spec-side-top">
+                    <span className="spec-seed">#{heroP2?.seed || 2}</span>
+                    {claimedEntrantId && featuredMatch.player2Id === claimedEntrantId && (
+                      <span className="spec-you-tag">YOU</span>
+                    )}
+                    {featuredMatch.started &&
+                      heroEval?.servingSide === 2 &&
+                      heroEval?.status !== 'won' && (
+                        <span className="spec-serve-badge">● SERVING</span>
+                      )}
+                  </div>
+                  <div className="spec-side-name">{heroP2?.name || 'TBD'}</div>
+                  {isTeams && heroP2?.members?.length > 0 && (
+                    <div className="spec-side-members">
+                      {heroP2.members.map((m, idx) => {
+                        const isActiveServer =
+                          featuredMatch.started &&
+                          heroEval?.servingSide === 2 &&
+                          heroEval?.status !== 'won' &&
+                          heroEval?.activeServerMemberIndex === idx;
+                        return (
+                          <span
+                            key={`${m}-${idx}`}
+                            className={isActiveServer ? 'is-active-server' : ''}
+                          >
+                            {idx > 0 ? ' · ' : ''}
+                            {m}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="spec-side-score">
+                    {String(featuredMatch.score2 ?? 0).padStart(2, '0')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="spec-hero-footer">
+                <span>
+                  Play to {state.rules?.targetScore ?? 11} · Win by {state.rules?.winBy ?? 2} ·
+                  Serve every {state.rules?.serveChangeInterval ?? 2}
+                </span>
+                <button
+                  type="button"
+                  className="spec-tv-link"
+                  onClick={() => onNavigateMode?.('presentation')}
+                >
+                  📺 TV Display
+                </button>
+              </div>
+            </section>
+          ) : (
+            <section className="spec-hero-card is-waiting" aria-label="Tournament Waiting">
+              <div className="spec-waiting-icon" aria-hidden="true">🏓</div>
+              <h1 className="spec-waiting-title">
+                {state.tournamentName || 'Ping-Pong Tournament'}
+              </h1>
+              <p className="spec-waiting-sub">
+                {(state.players || []).length} {isTeams ? 'Teams' : 'Players'} ·{' '}
+                {state.format === 'double' ? 'Double Elimination' : 'Single Elimination'} ·
+                Play to {state.rules?.targetScore ?? 11}
+              </p>
+              <div className="spec-hero-footer">
+                <span>Waiting for the first match to begin</span>
+                <button
+                  type="button"
+                  className="spec-tv-link"
+                  onClick={() => onNavigateMode?.('presentation')}
+                >
+                  📺 TV Display
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* 3 Native Section Tabs */}
+          <nav className="spec-tabs" role="tablist" aria-label="Spectator Sections">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'live'}
+              className={`spec-tab-btn ${activeTab === 'live' ? 'is-active' : ''}`}
+              onClick={() => handleSelectTab('live')}
+            >
+              <span>🔴 Live &amp; Queue</span>
+              {onDeckQueue.length > 0 && (
+                <span className="spec-tab-count">{onDeckQueue.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'bracket'}
+              className={`spec-tab-btn ${activeTab === 'bracket' ? 'is-active' : ''}`}
+              onClick={() => handleSelectTab('bracket')}
+            >
+              <span>🏆 Bracket</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'stats'}
+              className={`spec-tab-btn ${activeTab === 'stats' ? 'is-active' : ''}`}
+              onClick={() => handleSelectTab('stats')}
+            >
+              <span>📊 Leaders &amp; Roster</span>
+            </button>
+          </nav>
+
+          {/* TAB 1: LIVE & QUEUE */}
+          {activeTab === 'live' && (
+            <div className="spec-tab-panel" role="tabpanel">
+              {/* On Deck Queue */}
+              <section className="spec-section">
+                <div className="spec-section-head">
+                  <h2>⏳ On Deck Queue</h2>
+                  <span className="spec-section-meta">
+                    {onDeckQueue.length} upcoming
+                  </span>
+                </div>
+
+                {onDeckQueue.length === 0 ? (
+                  <div className="spec-empty-card">
+                    No matches currently queued on deck.
+                  </div>
+                ) : (
+                  <div className="spec-queue-list">
+                    {onDeckQueue.map((m, idx) => {
+                      const p1 = playerMap.get(m.player1Id);
+                      const p2 = playerMap.get(m.player2Id);
+                      const p1Sub = isTeams ? formatTeamMembersShort(p1, ' & ') : '';
+                      const p2Sub = isTeams ? formatTeamMembersShort(p2, ' & ') : '';
+                      const isMine =
+                        Boolean(claimedEntrantId) &&
+                        (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId);
+                      return (
+                        <div
+                          key={m.id}
+                          className={`spec-queue-card ${idx === 0 ? 'is-next' : ''} ${
+                            isMine ? 'is-mine' : ''
+                          }`}
+                        >
+                          <div className="spec-queue-meta">
+                            <span className={`spec-queue-order ${idx === 0 ? 'is-next' : ''}`}>
+                              {idx === 0 ? 'UP NEXT' : `#${idx + 1}`}
+                            </span>
+                            <span className="spec-queue-label">{m.label}</span>
+                            {isMine && <span className="spec-you-tag">YOU</span>}
+                          </div>
+
+                          <div className="spec-queue-matchup">
+                            <div className="spec-qm-side is-left">
+                              <span className="spec-qm-name">{p1?.name || 'TBD'}</span>
+                              {p1Sub && <span className="spec-qm-sub">{p1Sub}</span>}
+                            </div>
+                            <span className="spec-qm-vs">vs</span>
+                            <div className="spec-qm-side is-right">
+                              <span className="spec-qm-name">{p2?.name || 'TBD'}</span>
+                              {p2Sub && <span className="spec-qm-sub">{p2Sub}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              {/* Recent Results */}
+              <section className="spec-section">
+                <div className="spec-section-head">
+                  <h2>✅ Recent Results</h2>
+                  <span className="spec-section-meta">
+                    {stats.completedCount} / {stats.totalMatches} done
+                  </span>
+                </div>
+
+                {recentResults.length === 0 ? (
+                  <div className="spec-empty-card">
+                    Completed match results will appear here as games finish.
+                  </div>
+                ) : (
+                  <div className="spec-results-list">
+                    {recentResults.map((m) => {
+                      const p1 = playerMap.get(m.player1Id);
+                      const p2 = playerMap.get(m.player2Id);
+                      const p1Won = m.winnerId === m.player1Id;
+                      const p2Won = m.winnerId === m.player2Id;
+                      const elapsed = computeMatchElapsedMs(m);
+                      return (
+                        <div key={m.id} className="spec-result-card">
+                          <div className="spec-result-head">
+                            <span className="spec-result-label">{m.label}</span>
+                            {elapsed > 0 && (
+                              <span className="spec-result-time">
+                                {formatMatchTimer(elapsed)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="spec-result-row">
+                            <span className={`spec-result-name is-left ${p1Won ? 'is-winner' : ''}`}>
+                              {p1Won && <span aria-hidden="true">🏆 </span>}
+                              {p1?.name || 'TBD'}
+                            </span>
+                            <span className="spec-result-score">
+                              <strong className={p1Won ? 'is-winner' : ''}>{m.score1}</strong>
+                              <span className="spec-result-dash">–</span>
+                              <strong className={p2Won ? 'is-winner' : ''}>{m.score2}</strong>
+                            </span>
+                            <span className={`spec-result-name is-right ${p2Won ? 'is-winner' : ''}`}>
+                              {p2?.name || 'TBD'}
+                              {p2Won && <span aria-hidden="true"> 🏆</span>}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {/* TAB 2: BRACKET */}
+          {activeTab === 'bracket' && (
+            <div className="spec-tab-panel" role="tabpanel">
+              <section className="spec-section">
+                <div className="spec-section-head">
+                  <h2>🏆 Tournament Bracket</h2>
+                  {state.format === 'double' && (
+                    <div className="spec-bracket-filters" role="group" aria-label="Bracket Filter">
+                      {[
+                        { id: 'both', label: 'All' },
+                        { id: 'winners', label: 'Winners' },
+                        { id: 'losers', label: 'Losers' },
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          className={`spec-filter-btn ${bracketFilter === f.id ? 'is-active' : ''}`}
+                          onClick={() => setBracketFilter(f.id)}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="spec-bracket-scroll">
+                  <BracketView
+                    matches={state.matches}
+                    players={state.players}
+                    format={state.format}
+                    entryMode={state.entryMode}
+                    activeMatchId={state.activeMatchId}
+                    championId={state.championId}
+                    interactive={false}
+                    bracketFilter={bracketFilter}
+                  />
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* TAB 3: LEADERS & ROSTER */}
+          {activeTab === 'stats' && (
+            <div className="spec-tab-panel" role="tabpanel">
+              {/* Tournament Progress */}
+              <section className="spec-section">
+                <div className="spec-progress-card">
+                  <div className="spec-progress-head">
+                    <span>TOURNAMENT PROGRESS</span>
+                    <strong>
+                      {stats.completedCount} / {stats.totalMatches} Matches ({stats.progressPct}%)
+                    </strong>
+                  </div>
+                  <div className="spec-progress-bar" role="progressbar" aria-valuenow={stats.progressPct} aria-valuemin={0} aria-valuemax={100}>
+                    <div
+                      className="spec-progress-fill"
+                      style={{ width: `${Math.min(100, Math.max(0, stats.progressPct))}%` }}
+                    />
+                  </div>
+                  <div className="spec-mini-stats">
+                    <div className="spec-mini-stat">
+                      <span>TOTAL PTS</span>
+                      <strong>{stats.totalPointsPlayed}</strong>
+                    </div>
+                    <div className="spec-mini-stat">
+                      <span>AVG PTS/GAME</span>
+                      <strong>{stats.avgPointsPerMatch || '—'}</strong>
+                    </div>
+                    <div className="spec-mini-stat">
+                      <span>DEUCES</span>
+                      <strong>{stats.deuceMatchesCount}</strong>
+                    </div>
+                    <div className="spec-mini-stat">
+                      <span>REMAINING</span>
+                      <strong>{stats.remainingCount}</strong>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Leaderboard & Highlights */}
+              <section className="spec-section spec-stats-wrap">
+                <TournamentStatsPanel
+                  stats={stats}
+                  playerMap={playerMap}
+                  isTeams={isTeams}
+                  rules={state.rules}
+                  variant="full"
+                  leaderCount={8}
+                  extras={false}
+                />
+              </section>
+
+              {/* Full Roster */}
+              <section className="spec-section">
+                <div className="spec-section-head">
+                  <h2>👥 {isTeams ? 'Teams' : 'Players'} Roster</h2>
+                  <span className="spec-section-meta">{rosterRows.length} total</span>
+                </div>
+
+                <div className="spec-roster-list">
+                  {rosterRows.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`spec-roster-row ${p.isMine ? 'is-mine' : ''}`}
+                    >
+                      <span className="spec-roster-seed">#{p.seed}</span>
+                      <div className="spec-roster-info">
+                        <div className="spec-roster-name-line">
+                          <strong className="spec-roster-name">{p.name}</strong>
+                          {p.isMine && <span className="spec-you-tag">YOU</span>}
+                        </div>
+                        {isTeams && p.members?.length > 0 && (
+                          <span className="spec-roster-members">
+                            {formatTeamMembers(p)}
+                          </span>
+                        )}
+                      </div>
+                      <span className="spec-roster-record">
+                        {p.wins}W–{p.losses}L
+                      </span>
+                      <span className={`spec-roster-badge is-${p.statusTone}`}>
+                        {p.statusLabel}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

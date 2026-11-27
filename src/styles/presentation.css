@@ -49,8 +49,17 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.45rem 0.65rem;
   width: 100%;
+  min-width: 0;
+}
+
+.presentation-submenu-primary {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
 }
 
 /* Protect scaled Presentation stage scoreboards from control.css mobile media queries */

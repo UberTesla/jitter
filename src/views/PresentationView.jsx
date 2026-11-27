@@ -25,6 +25,7 @@ import RetroTVCorner from '../components/RetroTVCorner.jsx';
 import TitleAmbianceCanvas from '../components/TitleAmbianceCanvas.jsx';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import { useFullscreenMenu } from '../hooks/useFullscreenMenu.js';
+import { trackUsageEvent } from '../engine/usageAnalytics.js';
 
 const BASE_REF_WIDTH = 1600;
 const BASE_REF_HEIGHT = 900;
@@ -77,7 +78,11 @@ export default function PresentationView({
   }, [liveChatMessages.length]);
 
   const baseSlide = state.presentation?.activeSlide || 'title';
-  const allowLiveAutomation = !embedded || Boolean(state.presentation?.followLiveAutomation);
+  const canSelectLocalSlides = !embedded && rolePerms?.role !== 'presenter';
+  const [syncLive, setSyncLive] = useState(true);
+  const [localSlideOverride, setLocalSlideOverride] = useState(baseSlide);
+
+  const allowLiveAutomation = (!embedded && syncLive) || Boolean(state.presentation?.followLiveAutomation);
   const autoRotateOn = Boolean(state.presentation?.autoRotate) && allowLiveAutomation;
   const rotateList = React.useMemo(
     () => normalizeAutoRotateSlides(state.presentation?.autoRotateSlides),
@@ -136,11 +141,36 @@ export default function PresentationView({
     baseSlide !== 'title' &&
     baseSlide !== 'bracket'
   );
-  const targetSlide = forceSpotlightBetween
+  const liveTargetSlide = forceSpotlightBetween
     ? 'spotlight'
     : autoRotateOn && rotateList.length > 0
       ? rotateList[rotateIdx % rotateList.length]
       : baseSlide;
+  const targetSlide =
+    canSelectLocalSlides && !syncLive ? localSlideOverride : liveTargetSlide;
+
+  useEffect(() => {
+    if (syncLive) {
+      setLocalSlideOverride(liveTargetSlide);
+    }
+  }, [syncLive, liveTargetSlide]);
+
+  const handleSelectLocalSlide = (slideId) => {
+    if (!canSelectLocalSlides) return;
+    setLocalSlideOverride(slideId);
+    if (syncLive) setSyncLive(false);
+    trackUsageEvent('present:local_slide', { category: 'present', slide: slideId });
+  };
+
+  const handleToggleSyncLive = () => {
+    if (!canSelectLocalSlides) return;
+    setSyncLive((prev) => {
+      const next = !prev;
+      if (next) setLocalSlideOverride(liveTargetSlide);
+      trackUsageEvent('present:toggle_sync', { category: 'present', synced: next });
+      return next;
+    });
+  };
   const [renderedSlide, setRenderedSlide] = useState(targetSlide);
   const [stageMetrics, setStageMetrics] = useState({
     width: BASE_REF_WIDTH,
@@ -1065,14 +1095,48 @@ export default function PresentationView({
         />
 
         <div className="presentation-submenu" role="toolbar" aria-label="Presentation Controls">
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
-          >
-            {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
-          </button>
+          <div className="presentation-submenu-primary">
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
+            >
+              {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
+            </button>
+
+            {canSelectLocalSlides && (
+              <label
+                className={`spectator-sync-toggle ${syncLive ? 'is-synced' : ''}`}
+                title="When enabled, automatically follows the live presentation slide and auto-rotate"
+              >
+                <input
+                  type="checkbox"
+                  checked={syncLive}
+                  onChange={handleToggleSyncLive}
+                />
+                <span>{syncLive ? '🔗 Sync Live' : '🔓 Sync Live'}</span>
+              </label>
+            )}
+          </div>
+
+          {canSelectLocalSlides && (
+            <div className="spectator-slide-pills" role="group" aria-label="Presentation Slides">
+              {SLIDE_DEFINITIONS.map((slide) => (
+                <button
+                  key={slide.id}
+                  type="button"
+                  className={`spectator-slide-btn ${
+                    targetSlide === slide.id ? 'is-active' : ''
+                  }`}
+                  onClick={() => handleSelectLocalSlide(slide.id)}
+                  aria-pressed={targetSlide === slide.id}
+                >
+                  {slide.shortLabel}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
       {stageContent}
