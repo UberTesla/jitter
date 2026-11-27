@@ -42,6 +42,39 @@
   gap: 0.45rem;
 }
 
+@media (max-width: 768px) {
+  .control-topbar {
+    padding: 0.45rem 0.7rem;
+    gap: 0.4rem;
+  }
+
+  .brand-emblem {
+    display: none;
+  }
+
+  .brand-title {
+    font-size: 0.92rem;
+    line-height: 1.25;
+  }
+
+  .brand-meta {
+    gap: 0.3rem;
+    margin-top: 0.16rem;
+  }
+
+  .brand-meta .meta-chip:not(.chip-demo):not(.chip-sync) {
+    display: none;
+  }
+}
+
+@media (max-height: 500px) {
+  .control-topbar {
+    position: relative;
+    padding: 0.4rem 0.7rem;
+    gap: 0.35rem;
+  }
+}
+
 .brand-block {
   display: flex;
   align-items: center;

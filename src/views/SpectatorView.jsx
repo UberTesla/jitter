@@ -164,6 +164,15 @@ export default function SpectatorView({
 
         <div className="spectator-submenu" role="toolbar" aria-label="Spectator Slide Controls">
           <div className="spectator-submenu-left">
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
+            >
+              {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
+            </button>
+
             <div className="spectator-slide-pills" role="group" aria-label="Local Slides">
               {SLIDE_DEFINITIONS.map((slide) => (
                 <button
@@ -210,15 +219,6 @@ export default function SpectatorView({
                   🙋 Request Scorekeeper
                 </button>
               ))}
-
-            <button
-              type="button"
-              className="btn-secondary btn-sm"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
-            >
-              {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
-            </button>
           </div>
 
           <div className="spectator-right">

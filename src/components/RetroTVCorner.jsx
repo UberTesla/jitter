@@ -456,7 +456,7 @@ export default function RetroTVCorner({
           aria-hidden="true"
           style={{
             width: variant === 'stage' ? '100%' : `${scaledWidthPx}px`,
-            maxWidth: variant === 'stage' ? '780px' : inStage ? '960px' : '92vw',
+            maxWidth: variant === 'stage' ? '780px' : inStage ? 'min(92%, 960px)' : 'min(92vw, 100%)',
             aspectRatio: `${LOGICAL_WIDTH} / ${LOGICAL_HEIGHT}`,
           }}
         />

@@ -126,8 +126,8 @@ export default function ShareTournamentModal({
     if (!canNativeShare || !autoJoinUrl) return;
     try {
       await navigator.share({
-        title: tournamentName || 'Ping Pong Tournament',
-        text: `Join "${tournamentName || 'Ping Pong Tournament'}" — Key: ${joinCode}`,
+        title: tournamentName || 'Jitter Tournament',
+        text: `Join "${tournamentName || 'Jitter Tournament'}"`,
         url: autoJoinUrl,
       });
     } catch {

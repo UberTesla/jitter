@@ -462,7 +462,7 @@ export default function HubView({
     <div className="simple-hub-shell">
       <div className="simple-hub-container">
         {/* 1. Minimal Single-Row Top Bar */}
-        <header className="simple-hub-header">
+        <header className="simple-hub-header" style={{ position: 'relative' }}>
           <div className="simple-hub-brand">
             <span className="simple-hub-logo" aria-hidden="true">
               🏓
@@ -504,14 +504,20 @@ export default function HubView({
             >
               + New Tournament
             </button>
-            <span
-              className="nav-tab-id-pill"
-              style={{ marginLeft: 0 }}
-              title={`Current Session ID: ${tournamentStore.getTabId()}`}
-            >
-              {tournamentStore.getTabId()}
-            </span>
           </div>
+          <span
+            className="nav-tab-id-pill"
+            style={{
+              position: 'fixed',
+              top: '0.55rem',
+              right: '0.65rem',
+              zIndex: 52,
+              marginLeft: 0,
+            }}
+            title={`Current Session ID: ${tournamentStore.getTabId()} (per browser tab)`}
+          >
+            {tournamentStore.getTabId()}
+          </span>
         </header>
 
         {/* Collapsible Device & Network Settings Drawer (Closed by Default) */}

@@ -434,24 +434,6 @@ export default function ControlView({
                   {state.rules.serveRotation} · {state.rules.tableCount ?? 1}{' '}
                   {(state.rules.tableCount ?? 1) === 1 ? 'Table' : 'Tables'}
                 </span>
-                {state.joinCode && (
-                  <button
-                    type="button"
-                    className="meta-chip meta-chip-key"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(state.joinCode);
-                        showToast(`Copied 4-word join key: ${state.joinCode}`);
-                      } catch {
-                        showToast(`4-word join key: ${state.joinCode}`);
-                      }
-                    }}
-                    title="Click to copy this tournament's 4-word join key"
-                    aria-label={`Copy 4-word join key ${state.joinCode}`}
-                  >
-                    🔑 {state.joinCode}
-                  </button>
-                )}
                 {state.demoMode && <span className="meta-chip chip-demo">DEMO MODE</span>}
 
                 {/* Fixed-width OBS Sync Cluster so toggling Live <-> Studio never shifts or wraps UI */}

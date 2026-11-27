@@ -183,16 +183,6 @@ export default function UsersView({
               <span className="meta-chip">
                 Your Role: {myRoleMeta.icon} {myRoleMeta.label}
               </span>
-              {state.joinCode && (
-                <button
-                  type="button"
-                  className="meta-chip meta-chip-key"
-                  onClick={handleCopyKey}
-                  title="Click to copy current 4-word Key"
-                >
-                  🔑 {state.joinCode}
-                </button>
-              )}
               {totalPendingRequests > 0 && (
                 <span className="meta-chip chip-demo">
                   🔔 {totalPendingRequests} Pending Request

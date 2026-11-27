@@ -254,6 +254,7 @@ kbd {
 .retro-tv-canvas-frame {
   position: relative;
   display: inline-block;
+  max-width: 100%;
   pointer-events: none;
 }
 
@@ -283,6 +284,8 @@ kbd {
   position: relative;
   z-index: 1;
   display: block;
+  max-width: 100%;
+  height: auto;
   background: transparent;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
 }

@@ -561,6 +561,16 @@ export default function ScorekeeperView({
           }}
         >
           <div className="sk-top-left">
+            {!isPopout && (
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
+              >
+                {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
+              </button>
+            )}
             {isPopout && <span className="sk-badge-title">🎯 SCOREKEEPER</span>}
             <button
               type="button"
@@ -590,16 +600,6 @@ export default function ScorekeeperView({
               >
                 Locked (0–0 to switch)
               </span>
-            )}
-            {!isPopout && (
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                onClick={toggleFullscreen}
-                title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen (hover top edge for menu)'}
-              >
-                {isFullscreen ? '⤢ Exit Full Screen' : '⛶ Full Screen'}
-              </button>
             )}
           </div>
 

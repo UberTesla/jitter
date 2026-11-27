@@ -79,6 +79,7 @@ export default function PlayerInboxDrawer({
   const [sendingLive, setSendingLive] = useState(false);
   const [chatNameDraft, setChatNameDraft] = useState('');
   const [showSetNameForm, setShowSetNameForm] = useState(false);
+  const [showInlineClaimPicker, setShowInlineClaimPicker] = useState(false);
   const liveEndRef = useRef(null);
 
   // 2-Way DMs & Group Chats state
@@ -422,26 +423,147 @@ export default function PlayerInboxDrawer({
         border: '1px solid rgba(148, 163, 184, 0.25)',
       }}
     >
-      {!showSetNameForm ? (
-        <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+      {showInlineClaimPicker ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}
+          >
+            <span>🏓 Tap your name to claim:</span>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              style={{ padding: '0.12rem 0.45rem', fontSize: '0.7rem' }}
+              onClick={() => {
+                setShowInlineClaimPicker(false);
+                setConfirmingClaim(false);
+                setSelectedPlayerId('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {confirmingClaim && selectedPlayerObj ? (
+            <div className="inbox-claim-confirm" style={{ margin: 0 }}>
+              <p style={{ margin: '0 0 0.35rem', fontSize: '0.76rem' }}>
+                Claim <strong>{selectedPlayerObj.name}</strong>
+                {selectedPlayerObj.teamName ? ` (${selectedPlayerObj.teamName})` : ''}? Once claimed,
+                only a Moderator or Host can change it.
+              </p>
+              <div className="inline-actions" style={{ flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  disabled={claimBusy}
+                  onClick={async () => {
+                    await handleConfirmClaim();
+                    setShowInlineClaimPicker(false);
+                  }}
+                >
+                  {claimBusy ? 'Claiming...' : `✓ Confirm (${selectedPlayerObj.name})`}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  disabled={claimBusy}
+                  onClick={() => {
+                    setConfirmingClaim(false);
+                    setSelectedPlayerId('');
+                  }}
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          ) : availablePlayers.length === 0 ? (
+            <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.78 }}>
+              All players have already been claimed. Use &ldquo;Set Name&rdquo; to chat as a spectator!
+            </p>
+          ) : (
+            <div
+              className="scroller"
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '0.3rem',
+                maxHeight: '130px',
+                overflowY: 'auto',
+              }}
+            >
+              {availablePlayers.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  style={{ fontSize: '0.75rem', padding: '0.24rem 0.5rem' }}
+                  onClick={() => {
+                    setSelectedPlayerId(p.id);
+                    setConfirmingClaim(true);
+                  }}
+                >
+                  {p.teamName
+                    ? `${p.name} (${p.teamName})`
+                    : p.seed
+                    ? `#${p.seed} ${p.name}`
+                    : p.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : !showSetNameForm ? (
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
           <button
             type="button"
             className="btn-primary btn-sm"
-            style={{ flex: 1 }}
-            onClick={() => setActiveTab('alerts')}
+            style={{ flex: 1, minWidth: 0 }}
+            onClick={() => {
+              setShowSetNameForm(false);
+              setShowInlineClaimPicker(true);
+            }}
           >
             🏓 Claim Player
           </button>
+          <span
+            style={{
+              fontSize: '0.72rem',
+              opacity: 0.65,
+              fontWeight: 600,
+              flexShrink: 0,
+              textTransform: 'lowercase',
+            }}
+          >
+            or
+          </span>
           <button
             type="button"
             className="btn-secondary btn-sm"
-            onClick={() => setShowSetNameForm(true)}
+            style={{ flexShrink: 0 }}
+            onClick={() => {
+              setShowInlineClaimPicker(false);
+              setShowSetNameForm(true);
+            }}
           >
             ✏️ Set Name
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSaveChatName} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+        <form
+          onSubmit={handleSaveChatName}
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.35rem',
+            alignItems: 'center',
+            width: '100%',
+            minWidth: 0,
+          }}
+        >
           <input
             type="text"
             value={chatNameDraft}
@@ -449,25 +571,27 @@ export default function PlayerInboxDrawer({
             placeholder="Your name (e.g. Uncle Dave)"
             maxLength={40}
             autoFocus
-            style={{ flex: 1 }}
+            style={{ flex: '1 1 130px', minWidth: 0 }}
           />
-          <button
-            type="submit"
-            className="btn-amber btn-sm"
-            disabled={!chatNameDraft.trim()}
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => {
-              setShowSetNameForm(false);
-              setChatNameDraft('');
-            }}
-          >
-            Cancel
-          </button>
+          <div style={{ display: 'inline-flex', gap: '0.3rem', flexShrink: 0 }}>
+            <button
+              type="submit"
+              className="btn-amber btn-sm"
+              disabled={!chatNameDraft.trim()}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => {
+                setShowSetNameForm(false);
+                setChatNameDraft('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
     </div>

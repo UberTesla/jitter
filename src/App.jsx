@@ -185,11 +185,6 @@ export default function App() {
       await tournamentStore.syncWithRemoteServer();
       const res = await tournamentStore.joinTournamentByCode(joinKey);
       if (cancelled) return;
-      // Strip ?join=... from the address bar cleanly after attempting auto-join
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('join');
-      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
-
       if (res?.found && res.state) {
         try {
           sessionStorage.setItem(SESSION_PICKED_KEY, res.state.tournamentId || 'active');
@@ -210,11 +205,17 @@ export default function App() {
         const allowedMode = clampModeForPermissions(initialRequested, nextPerms);
         setViewMode(allowedMode);
         const targetPath = pathForMode(allowedMode);
-        if (window.location.pathname !== targetPath) {
-          window.history.replaceState({}, '', targetPath);
+        const resolvedCode = res.state.joinCode || joinKey;
+        const preserveUrl = `${targetPath}?join=${encodeURIComponent(resolvedCode)}`;
+        if (`${window.location.pathname}${window.location.search}` !== preserveUrl) {
+          window.history.replaceState({}, '', preserveUrl);
         }
         setShowHub(false);
       } else {
+        // Strip invalid ?join=... only when auto-join failed
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('join');
+        window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
         setShowHub(true);
       }
     })();
