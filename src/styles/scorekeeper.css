@@ -842,18 +842,45 @@
   }
 
   .sk-dock {
-    padding: 0.32rem 120px 0.32rem 0.65rem;
-    gap: 0.35rem;
+    padding: 0.32rem 112px 0.32rem 0.65rem;
+    gap: 0.4rem;
     flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .sk-dock-controls {
+  .sk-dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sk-dock-controls,
+  .sk-dock-cues {
     flex-wrap: nowrap;
+    flex-shrink: 0;
     gap: 0.35rem;
   }
 
   .sk-dock-controls button {
     padding: 0.32rem 0.6rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .sk-grandma-menu-btn {
+    width: 34px;
+    height: 32px;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .sk-complete-btn {
+    min-width: 0;
+    width: auto;
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 0.34rem 0.72rem;
     font-size: 0.75rem;
     white-space: nowrap;
   }
