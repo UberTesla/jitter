@@ -43,6 +43,7 @@ export default function RetroTVCorner({
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
+  const youtubeRevealTimerRef = useRef(null);
   const objectUrlRef = useRef(null);
   const mediaSourceRef = useRef(null);
 
@@ -213,6 +214,13 @@ export default function RetroTVCorner({
 
   // Keep canvas CRT cutout synchronized with DOM media readiness & collapsed state
   useEffect(() => {
+    if (collapsedToMug) {
+      if (youtubeRevealTimerRef.current) {
+        clearTimeout(youtubeRevealTimerRef.current);
+        youtubeRevealTimerRef.current = null;
+      }
+      setDomMediaReady(false);
+    }
     const active = Boolean(mediaSource && domMediaReady && !collapsedToMug);
     sceneRef.current?.setDomMediaActive(active);
   }, [mediaSource, domMediaReady, collapsedToMug]);
@@ -441,10 +449,14 @@ export default function RetroTVCorner({
       try {
         const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
         if (msg?.event === 'onReady') {
+          if (effectiveMuted || collapsedToMug) {
+            sendYoutubeCommand('mute');
+          }
           disableYoutubeCaptions();
           if (youtubeQuality && youtubeQuality !== 'auto') {
             sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
           }
+          sendYoutubeCommand('playVideo');
           return;
         }
         const playerState =
@@ -453,9 +465,25 @@ export default function RetroTVCorner({
             : msg?.event === 'infoDelivery'
             ? msg?.info?.playerState
             : undefined;
-        if (playerState === 1 || playerState === 3) {
-          // YouTube enables captions automatically on muted autoplay when playback starts — strip them
+        if (playerState === 1) {
+          // Video is actively playing — strip captions and wait ~450ms for YouTube's play/pause
+          // overlay animation to fade out completely before revealing the CRT glass cutout.
           disableYoutubeCaptions();
+          if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
+          youtubeRevealTimerRef.current = setTimeout(() => {
+            youtubeRevealTimerRef.current = null;
+            setDomMediaReady(true);
+          }, 450);
+        } else if (playerState === 3) {
+          // Buffering — strip captions while keeping overlay hidden until playback actually starts
+          disableYoutubeCaptions();
+        } else if (playerState === 2 || playerState === -1) {
+          // Paused or unstarted — cover YouTube's play/pause symbol behind the CRT canvas
+          if (youtubeRevealTimerRef.current) {
+            clearTimeout(youtubeRevealTimerRef.current);
+            youtubeRevealTimerRef.current = null;
+          }
+          setDomMediaReady(false);
         } else if (playerState === 0 && canAutoAdvance) {
           advancePlaylistItem();
         }
@@ -464,10 +492,18 @@ export default function RetroTVCorner({
       }
     };
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      if (youtubeRevealTimerRef.current) {
+        clearTimeout(youtubeRevealTimerRef.current);
+        youtubeRevealTimerRef.current = null;
+      }
+    };
   }, [
     mediaSource?.kind,
     mediaSource?.provider,
+    effectiveMuted,
+    collapsedToMug,
     youtubeQuality,
     hasPlaylist,
     tvPlaylist?.length,
@@ -519,10 +555,12 @@ export default function RetroTVCorner({
                   ...youtubeIframeScaleStyle,
                 }}
                 onLoad={() => {
-                  setDomMediaReady(true);
-                  if (mediaSource?.provider === 'youtube') {
-                    const win = iframeRef.current?.contentWindow;
-                    if (!win) return;
+                  if (mediaSource?.provider !== 'youtube') {
+                    setDomMediaReady(true);
+                    return;
+                  }
+                  const win = iframeRef.current?.contentWindow;
+                  if (win) {
                     try {
                       win.postMessage(JSON.stringify({ event: 'listening' }), '*');
                       if (effectiveMuted || collapsedToMug) {
@@ -532,10 +570,17 @@ export default function RetroTVCorner({
                         sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
                       }
                       disableYoutubeCaptions();
+                      sendYoutubeCommand('playVideo');
                     } catch {
                       // Ignore cross-origin postMessage errors
                     }
                   }
+                  // Safety fallback in case a browser/extension blocks YouTube postMessage events
+                  if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
+                  youtubeRevealTimerRef.current = setTimeout(() => {
+                    youtubeRevealTimerRef.current = null;
+                    setDomMediaReady(true);
+                  }, 3500);
                 }}
               />
             ) : mediaSource.kind === 'video' ? (
