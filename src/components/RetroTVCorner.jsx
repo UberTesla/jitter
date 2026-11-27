@@ -71,11 +71,54 @@ export default function RetroTVCorner({
     ? tvPlaylist[localPlaylistIdx % tvPlaylist.length] || tvPlaylist[0]
     : null;
   const effectiveMuted = Boolean(tvMuted || currentPlaylistItem?.muted);
-  const isYoutubeLowData = Boolean(
-    mediaSource?.kind === 'embed' &&
-      mediaSource?.provider === 'youtube' &&
-      (currentPlaylistItem?.lowData || mediaSource?.lowData)
-  );
+  const youtubeQuality =
+    mediaSource?.kind === 'embed' && mediaSource?.provider === 'youtube'
+      ? currentPlaylistItem?.quality || mediaSource?.quality || 'tiny'
+      : null;
+
+  // Map YouTube resolution choice to an iframe viewport scale that nudges ABR to that exact tier
+  // while still filling 100% x 100% of the 4:3 CRT screen cutout cleanly.
+  const youtubeIframeScaleStyle = (() => {
+    if (!youtubeQuality || youtubeQuality === 'auto' || youtubeQuality === 'medium') return {};
+    if (youtubeQuality === 'tiny') {
+      return { width: '50%', height: '50%', transform: 'scale(2)', transformOrigin: 'top left' };
+    }
+    if (youtubeQuality === 'small') {
+      return {
+        width: '75%',
+        height: '75%',
+        transform: 'scale(1.3334)',
+        transformOrigin: 'top left',
+      };
+    }
+    if (youtubeQuality === 'large') {
+      return { width: '200%', height: '200%', transform: 'scale(0.5)', transformOrigin: 'top left' };
+    }
+    if (youtubeQuality === 'hd720') {
+      return {
+        width: '300%',
+        height: '300%',
+        transform: 'scale(0.3334)',
+        transformOrigin: 'top left',
+      };
+    }
+    return {};
+  })();
+
+  const sendYoutubeCommand = useCallback((func, args = []) => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+    } catch {
+      // Ignore cross-origin postMessage errors
+    }
+  }, []);
+
+  const disableYoutubeCaptions = useCallback(() => {
+    sendYoutubeCommand('unloadModule', ['captions']);
+    sendYoutubeCommand('unloadModule', ['cc']);
+  }, [sendYoutubeCommand]);
 
   const advancePlaylistItem = useCallback(() => {
     if (!hasPlaylist || tvPlaylist.length <= 1) return;
@@ -258,7 +301,7 @@ export default function RetroTVCorner({
     currentPlaylistItem?.id,
     currentPlaylistItem?.kind,
     currentPlaylistItem?.url,
-    currentPlaylistItem?.lowData,
+    currentPlaylistItem?.quality,
     currentPlaylistItem?.updatedAt,
     mediaRefreshToken,
     applyMediaSource,
@@ -362,50 +405,58 @@ export default function RetroTVCorner({
     ensureVideoPlaying(videoEl);
   }, [effectiveMuted, mediaSource, collapsedToMug, ensureVideoPlaying]);
 
-  // Live mute/unmute & low-data quality hint for YouTube embed iframes without reloading the stream
+  // Live mute/unmute, quality hint & caption suppression for YouTube embed iframes
   useEffect(() => {
     if (mediaSource?.kind !== 'embed' || mediaSource?.provider !== 'youtube') return;
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    try {
-      win.postMessage(
-        JSON.stringify({
-          event: 'command',
-          func: effectiveMuted || collapsedToMug ? 'mute' : 'unMute',
-          args: [],
-        }),
-        '*'
-      );
-      if (isYoutubeLowData) {
-        win.postMessage(
-          JSON.stringify({
-            event: 'command',
-            func: 'setPlaybackQuality',
-            args: ['tiny'],
-          }),
-          '*'
-        );
-      }
-    } catch {
-      // Ignore cross-origin postMessage errors
+    sendYoutubeCommand(effectiveMuted || collapsedToMug ? 'mute' : 'unMute');
+    if (youtubeQuality && youtubeQuality !== 'auto') {
+      sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
     }
-  }, [effectiveMuted, collapsedToMug, isYoutubeLowData, mediaSource?.kind, mediaSource?.provider]);
+    disableYoutubeCaptions();
+  }, [
+    effectiveMuted,
+    collapsedToMug,
+    youtubeQuality,
+    mediaSource?.kind,
+    mediaSource?.provider,
+    sendYoutubeCommand,
+    disableYoutubeCaptions,
+  ]);
 
-  // Advance playlist immediately if a YouTube iframe reports ENDED (playerState === 0)
+  // Listen for YouTube iframe player events: suppress muted-autoplay captions & advance on ENDED
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     if (mediaSource?.kind !== 'embed' || mediaSource?.provider !== 'youtube') return undefined;
-    if (!hasPlaylist || tvPlaylist.length <= 1 || tvPlaylistPaused || tvPlaylistMode === 'single') {
-      return undefined;
-    }
+    const canAutoAdvance =
+      hasPlaylist && tvPlaylist.length > 1 && !tvPlaylistPaused && tvPlaylistMode !== 'single';
     const onMessage = (ev) => {
-      if (!ev || typeof ev.origin !== 'string' || !ev.origin.includes('youtube.com')) return;
+      if (
+        !ev ||
+        typeof ev.origin !== 'string' ||
+        (!ev.origin.includes('youtube.com') && !ev.origin.includes('youtube-nocookie.com'))
+      ) {
+        return;
+      }
       if (iframeRef.current?.contentWindow && ev.source !== iframeRef.current.contentWindow) return;
       try {
         const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
-        if (msg?.event === 'onStateChange' && msg.info === 0) {
-          advancePlaylistItem();
-        } else if (msg?.event === 'infoDelivery' && msg?.info?.playerState === 0) {
+        if (msg?.event === 'onReady') {
+          disableYoutubeCaptions();
+          if (youtubeQuality && youtubeQuality !== 'auto') {
+            sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
+          }
+          return;
+        }
+        const playerState =
+          msg?.event === 'onStateChange'
+            ? msg.info
+            : msg?.event === 'infoDelivery'
+            ? msg?.info?.playerState
+            : undefined;
+        if (playerState === 1 || playerState === 3) {
+          // YouTube enables captions automatically on muted autoplay when playback starts — strip them
+          disableYoutubeCaptions();
+        } else if (playerState === 0 && canAutoAdvance) {
           advancePlaylistItem();
         }
       } catch {
@@ -417,11 +468,14 @@ export default function RetroTVCorner({
   }, [
     mediaSource?.kind,
     mediaSource?.provider,
+    youtubeQuality,
     hasPlaylist,
     tvPlaylist?.length,
     tvPlaylistPaused,
     tvPlaylistMode,
     advancePlaylistItem,
+    disableYoutubeCaptions,
+    sendYoutubeCommand,
   ]);
 
   const safeScale = Math.max(0.4, Math.min(1.5, Number(scale) || 1.0));
@@ -462,14 +516,7 @@ export default function RetroTVCorner({
                 style={{
                   border: 0,
                   pointerEvents: 'none',
-                  ...(isYoutubeLowData
-                    ? {
-                        width: '50%',
-                        height: '50%',
-                        transform: 'scale(2)',
-                        transformOrigin: 'top left',
-                      }
-                    : {}),
+                  ...youtubeIframeScaleStyle,
                 }}
                 onLoad={() => {
                   setDomMediaReady(true);
@@ -479,21 +526,12 @@ export default function RetroTVCorner({
                     try {
                       win.postMessage(JSON.stringify({ event: 'listening' }), '*');
                       if (effectiveMuted || collapsedToMug) {
-                        win.postMessage(
-                          JSON.stringify({ event: 'command', func: 'mute', args: [] }),
-                          '*'
-                        );
+                        sendYoutubeCommand('mute');
                       }
-                      if (isYoutubeLowData) {
-                        win.postMessage(
-                          JSON.stringify({
-                            event: 'command',
-                            func: 'setPlaybackQuality',
-                            args: ['tiny'],
-                          }),
-                          '*'
-                        );
+                      if (youtubeQuality && youtubeQuality !== 'auto') {
+                        sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
                       }
+                      disableYoutubeCaptions();
                     } catch {
                       // Ignore cross-origin postMessage errors
                     }

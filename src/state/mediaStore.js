@@ -511,11 +511,30 @@ export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '', gcsObje
   }
 }
 
+export const YOUTUBE_QUALITY_OPTIONS = [
+  { id: 'tiny', label: '144p' },
+  { id: 'small', label: '240p' },
+  { id: 'medium', label: '360p' },
+  { id: 'large', label: '480p' },
+  { id: 'hd720', label: '720p' },
+  { id: 'auto', label: 'Auto' },
+];
+
+const VALID_YT_QUALITIES = new Set(YOUTUBE_QUALITY_OPTIONS.map((q) => q.id));
+
+export function normalizeYoutubeQuality(quality, legacyLowData = false) {
+  if (quality && VALID_YT_QUALITIES.has(quality)) return quality;
+  return legacyLowData ? 'tiny' : 'tiny';
+}
+
 /**
  * Detects YouTube, Twitch, or Vimeo URLs and returns a clean autoplay-ready embed config,
  * or `null` for direct image/GIF/video URLs.
  */
-export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowData = false } = {}) {
+export function resolveEmbedStreamUrl(
+  rawUrl,
+  { muted = true, loop = true, quality = 'tiny', lowData = false } = {}
+) {
   const cleaned = String(rawUrl || '').trim();
   if (!cleaned) return null;
   let u;
@@ -529,6 +548,7 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowDa
 
   // YouTube (watch, youtu.be, live, shorts, embed, playlist)
   if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be') {
+    const resolvedQuality = normalizeYoutubeQuality(quality, lowData);
     let videoId = '';
     const listId = u.searchParams.get('list') || '';
     if (host === 'youtu.be') {
@@ -551,8 +571,8 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowDa
         iv_load_policy: '3',
         cc_load_policy: '0',
       });
-      if (lowData) {
-        params.set('vq', 'tiny');
+      if (resolvedQuality !== 'auto') {
+        params.set('vq', resolvedQuality);
       }
       if (loop) {
         params.set('loop', '1');
@@ -563,8 +583,8 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowDa
       return {
         kind: 'embed',
         provider: 'youtube',
-        lowData: Boolean(lowData),
-        embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`,
+        quality: resolvedQuality,
+        embedUrl: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`,
         defaultName: `YouTube (${videoId})`,
       };
     }
@@ -579,14 +599,14 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowDa
         iv_load_policy: '3',
         cc_load_policy: '0',
       });
-      if (lowData) {
-        params.set('vq', 'tiny');
+      if (resolvedQuality !== 'auto') {
+        params.set('vq', resolvedQuality);
       }
       return {
         kind: 'embed',
         provider: 'youtube',
-        lowData: Boolean(lowData),
-        embedUrl: `https://www.youtube.com/embed/videoseries?${params.toString()}`,
+        quality: resolvedQuality,
+        embedUrl: `https://www.youtube-nocookie.com/embed/videoseries?${params.toString()}`,
         defaultName: 'YouTube Playlist',
       };
     }
@@ -632,9 +652,9 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowDa
 export async function loadTvPlaylistItemSource(item, { muted = true, loop = true } = {}) {
   if (!item || item.kind === 'sitcom') return null;
   const effectiveMuted = Boolean(muted || item.muted);
-  const lowData = Boolean(item.lowData);
+  const quality = normalizeYoutubeQuality(item.quality, Boolean(item.lowData));
   if (item.kind === 'url' && item.url) {
-    const embed = resolveEmbedStreamUrl(item.url, { muted: effectiveMuted, loop, lowData });
+    const embed = resolveEmbedStreamUrl(item.url, { muted: effectiveMuted, loop, quality });
     if (embed) {
       return {
         hasMedia: true,
@@ -642,7 +662,7 @@ export async function loadTvPlaylistItemSource(item, { muted = true, loop = true
         rawUrl: item.url,
         name: item.name || embed.defaultName,
         provider: embed.provider,
-        lowData: Boolean(embed.lowData || lowData),
+        quality: embed.quality || quality,
         type: 'text/html',
         kind: 'embed',
         updatedAt: item.updatedAt || Date.now(),

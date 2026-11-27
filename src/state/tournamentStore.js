@@ -6447,7 +6447,7 @@ export class TournamentStore {
           url: item.url || '',
           gcsObject: item.gcsObject || '',
           muted: Boolean(item.muted),
-          lowData: Boolean(item.lowData),
+          ...(item.quality ? { quality: String(item.quality) } : {}),
           durationSec: Math.max(1, Math.min(86400, Math.round(Number(item.durationSec) || 12))),
           updatedAt: Number(item.updatedAt) || Date.now(),
         };
@@ -6540,7 +6540,7 @@ export class TournamentStore {
                   ? { durationSec: Math.max(1, Math.min(86400, Math.round(Number(partial.durationSec) || 12))) }
                   : {}),
                 ...(partial.muted !== undefined ? { muted: Boolean(partial.muted) } : {}),
-                ...(partial.lowData !== undefined ? { lowData: Boolean(partial.lowData) } : {}),
+                ...(partial.quality !== undefined ? { quality: String(partial.quality) } : {}),
               }
             : x
         );

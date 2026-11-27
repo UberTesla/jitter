@@ -9,6 +9,7 @@ import {
   fetchYoutubeVideoMeta,
   parseGifDurationSec,
   resolveEmbedStreamUrl,
+  YOUTUBE_QUALITY_OPTIONS,
 } from '../state/mediaStore.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
 import { appendAppLog } from '../engine/appLog.js';
@@ -347,7 +348,7 @@ export default function ControlView({
       name: derivedName,
       url: cleanedUrl,
       muted: isYoutubeEmbed,
-      lowData: isYoutubeEmbed,
+      ...(isYoutubeEmbed ? { quality: 'tiny' } : {}),
       durationSec: finalDurationSec,
       updatedAt: Date.now(),
     });
@@ -1350,32 +1351,33 @@ export default function ControlView({
                             )}
 
                             {isYoutubeItem && (
-                              <button
-                                type="button"
-                                className="btn-secondary btn-sm"
-                                onClick={() =>
+                              <select
+                                aria-label="YouTube resolution"
+                                value={item.quality || 'tiny'}
+                                onChange={(e) =>
                                   tournamentStore.updateTvPlaylistItem(item.id, {
-                                    lowData: !item.lowData,
+                                    quality: e.target.value,
                                   })
                                 }
-                                title={
-                                  item.lowData
-                                    ? 'Low-data mode ON (tiny 144p iframe viewport + lowest quality hint)'
-                                    : 'Low-data mode OFF (click to force tiny low-bitrate YouTube iframe)'
-                                }
-                                aria-pressed={Boolean(item.lowData)}
+                                title="YouTube playback resolution (defaults to lowest available: 144p)"
                                 style={{
-                                  padding: '0.12rem 0.36rem',
-                                  fontSize: '0.66rem',
+                                  padding: '0.12rem 0.25rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(56, 189, 248, 0.45)',
+                                  background: 'rgba(15, 23, 42, 0.92)',
+                                  color: '#7dd3fc',
+                                  fontSize: '0.68rem',
                                   fontWeight: 700,
                                   flexShrink: 0,
-                                  borderColor: item.lowData ? 'rgba(56, 189, 248, 0.65)' : undefined,
-                                  background: item.lowData ? 'rgba(56, 189, 248, 0.2)' : undefined,
-                                  color: item.lowData ? '#7dd3fc' : undefined,
+                                  cursor: 'pointer',
                                 }}
                               >
-                                144p
-                              </button>
+                                {YOUTUBE_QUALITY_OPTIONS.map((opt) => (
+                                  <option key={opt.id} value={opt.id}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
                             )}
 
                             <button
