@@ -27,6 +27,7 @@ import TitleAmbianceCanvas from '../components/TitleAmbianceCanvas.jsx';
 import ViewNavBar from '../components/ViewNavBar.jsx';
 import { useFullscreenMenu } from '../hooks/useFullscreenMenu.js';
 import { trackUsageEvent } from '../engine/usageAnalytics.js';
+import { resolveSwipeSlide } from '../engine/slideSwipe.js';
 
 const BASE_REF_WIDTH = 1600;
 const BASE_REF_HEIGHT = 900;
@@ -147,8 +148,8 @@ export default function PresentationView({
     : autoRotateOn && rotateList.length > 0
       ? rotateList[rotateIdx % rotateList.length]
       : baseSlide;
-  const targetSlide =
-    canSelectLocalSlides && !syncLive ? localSlideOverride : liveTargetSlide;
+  const canSwipeSlides = canSelectLocalSlides && !syncLive;
+  const targetSlide = canSwipeSlides ? localSlideOverride : liveTargetSlide;
 
   useEffect(() => {
     if (syncLive) {
@@ -156,11 +157,11 @@ export default function PresentationView({
     }
   }, [syncLive, liveTargetSlide]);
 
-  const handleSelectLocalSlide = (slideId) => {
+  const handleSelectLocalSlide = (slideId, via = 'pill') => {
     if (!canSelectLocalSlides) return;
     setLocalSlideOverride(slideId);
     if (syncLive) setSyncLive(false);
-    trackUsageEvent('present:local_slide', { category: 'present', slide: slideId });
+    trackUsageEvent('present:local_slide', { category: 'present', slide: slideId, via });
   };
 
   const handleToggleSyncLive = () => {
@@ -471,8 +472,59 @@ export default function PresentationView({
     </div>
   ) : null;
 
+  const swipeGestureRef = useRef(null);
+  const lastSwipeAtRef = useRef(0);
+
+  const handleStagePointerDown = (e) => {
+    if (!canSwipeSlides || !e.isPrimary) {
+      swipeGestureRef.current = null;
+      return;
+    }
+    if (e.pointerType === 'mouse' && e.button !== 0) {
+      return;
+    }
+    if (
+      e.target?.closest?.('button, a, input, select, textarea, [role="button"], dialog, iframe, video')
+    ) {
+      swipeGestureRef.current = null;
+      return;
+    }
+    swipeGestureRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startTime: Date.now(),
+    };
+  };
+
+  const handleStagePointerUp = (e) => {
+    const gesture = swipeGestureRef.current;
+    swipeGestureRef.current = null;
+    if (!gesture || !canSwipeSlides || gesture.pointerId !== e.pointerId) return;
+
+    const nextSlideId = resolveSwipeSlide({
+      enabled: canSwipeSlides,
+      currentSlideId: targetSlide,
+      deltaX: e.clientX - gesture.startX,
+      deltaY: e.clientY - gesture.startY,
+      durationMs: Date.now() - gesture.startTime,
+      slides: SLIDE_DEFINITIONS,
+    });
+    if (!nextSlideId) return;
+
+    lastSwipeAtRef.current = Date.now();
+    handleSelectLocalSlide(nextSlideId, 'swipe');
+  };
+
+  const handleStagePointerCancel = () => {
+    swipeGestureRef.current = null;
+  };
+
   const handleStageClick = (e) => {
     if (embedded) return;
+    if (Date.now() - lastSwipeAtRef.current < 400) {
+      return;
+    }
     if (e.target?.closest?.('button, a, input, select, textarea, [role="button"], dialog')) {
       return;
     }
@@ -483,8 +535,11 @@ export default function PresentationView({
     <div
       ref={viewportHostRef}
       className={`presentation-viewport ${embedded || (showRoleMenu && !isFullscreen) ? 'has-role-topbar' : ''
-        }`}
+        } ${canSwipeSlides ? 'is-swipeable' : ''}`}
       data-theme={activeTheme}
+      onPointerDown={handleStagePointerDown}
+      onPointerUp={handleStagePointerUp}
+      onPointerCancel={handleStagePointerCancel}
       onClick={handleStageClick}
     >
       <div
@@ -1185,7 +1240,11 @@ export default function PresentationView({
             {canSelectLocalSlides && (
               <label
                 className={`spectator-sync-toggle ${syncLive ? 'is-synced' : ''}`}
-                title="When enabled, automatically follows the live presentation slide and auto-rotate"
+                title={
+                  syncLive
+                    ? 'When enabled, automatically follows the live presentation slide and auto-rotate (uncheck to swipe or pick slides locally)'
+                    : 'Sync paused — click slide pills or swipe left/right to browse slides locally'
+                }
               >
                 <input
                   type="checkbox"

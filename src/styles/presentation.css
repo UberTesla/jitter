@@ -37,6 +37,11 @@
   background: #04070e;
 }
 
+.presentation-viewport.is-swipeable {
+  touch-action: pan-y;
+  user-select: none;
+}
+
 @media (max-width: 768px) {
   .presentation-role-topbar {
     min-height: 48px;
