@@ -744,9 +744,9 @@ export default function PlayerInboxDrawer({
         type="button"
         className={`inbox-launcher-pill ${totalUnread > 0 ? 'has-unread' : ''}`}
         onClick={handleOpen}
-        aria-label={`Open ${claimedPlayerObj ? `${claimedPlayerObj.name}'s Chat & Inbox` : 'Chat & Inbox'} (${totalUnread} unread)`}
+        aria-label={`Open ${claimedPlayerObj ? `${claimedPlayerObj.name}'s Chat & Inbox` : 'Claim Player & Chat'} (${totalUnread} unread)`}
       >
-        <span>💬 {claimedPlayerObj ? claimedPlayerObj.name : hasCustomChatName ? remoteSync.deviceName : 'Chat'}</span>
+        <span>{claimedPlayerObj ? `💬 ${claimedPlayerObj.name}` : '🏓 Claim Player'}</span>
         {totalUnread > 0 && <span className="inbox-unread-badge">{totalUnread}</span>}
       </button>
 
