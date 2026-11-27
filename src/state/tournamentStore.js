@@ -6448,6 +6448,7 @@ export class TournamentStore {
           gcsObject: item.gcsObject || '',
           muted: Boolean(item.muted),
           ...(item.quality ? { quality: String(item.quality) } : {}),
+          ...(item.autoDuration !== undefined ? { autoDuration: Boolean(item.autoDuration) } : {}),
           durationSec: Math.max(1, Math.min(86400, Math.round(Number(item.durationSec) || 12))),
           updatedAt: Number(item.updatedAt) || Date.now(),
         };
@@ -6541,6 +6542,7 @@ export class TournamentStore {
                   : {}),
                 ...(partial.muted !== undefined ? { muted: Boolean(partial.muted) } : {}),
                 ...(partial.quality !== undefined ? { quality: String(partial.quality) } : {}),
+                ...(partial.autoDuration !== undefined ? { autoDuration: Boolean(partial.autoDuration) } : {}),
               }
             : x
         );

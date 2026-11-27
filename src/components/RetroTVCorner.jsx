@@ -38,6 +38,7 @@ export default function RetroTVCorner({
   viewKey = null,
   allowLocalToggle = true,
   mediaRefreshToken = 0,
+  onYoutubeMetaDetected = null,
 }) {
   const canvasRef = useRef(null);
   const sceneRef = useRef(null);
@@ -448,6 +449,24 @@ export default function RetroTVCorner({
       if (iframeRef.current?.contentWindow && ev.source !== iframeRef.current.contentWindow) return;
       try {
         const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        if (msg?.event === 'infoDelivery' && msg?.info) {
+          const reportedDur = Number(msg.info.duration);
+          const reportedTitle = String(msg.info.videoData?.title || '').trim();
+          if (
+            onYoutubeMetaDetected &&
+            currentPlaylistItem?.id &&
+            ((Number.isFinite(reportedDur) && reportedDur > 0) || reportedTitle)
+          ) {
+            onYoutubeMetaDetected({
+              itemId: currentPlaylistItem.id,
+              durationSec:
+                Number.isFinite(reportedDur) && reportedDur > 0
+                  ? Math.min(86400, Math.round(reportedDur))
+                  : null,
+              title: reportedTitle || null,
+            });
+          }
+        }
         if (msg?.event === 'onReady') {
           if (effectiveMuted || collapsedToMug) {
             sendYoutubeCommand('mute');
@@ -512,6 +531,8 @@ export default function RetroTVCorner({
     advancePlaylistItem,
     disableYoutubeCaptions,
     sendYoutubeCommand,
+    onYoutubeMetaDetected,
+    currentPlaylistItem?.id,
   ]);
 
   const safeScale = Math.max(0.4, Math.min(1.5, Number(scale) || 1.0));

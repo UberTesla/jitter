@@ -348,7 +348,7 @@ export default function ControlView({
       name: derivedName,
       url: cleanedUrl,
       muted: isYoutubeEmbed,
-      ...(isYoutubeEmbed ? { quality: 'tiny' } : {}),
+      ...(isYoutubeEmbed ? { quality: 'tiny', autoDuration: !ytMeta?.durationSec } : {}),
       durationSec: finalDurationSec,
       updatedAt: Date.now(),
     });
@@ -1279,6 +1279,7 @@ export default function ControlView({
                                         const nextTotal = Math.max(1, nextM * 60 + durSecs);
                                         tournamentStore.updateTvPlaylistItem(item.id, {
                                           durationSec: nextTotal,
+                                          autoDuration: false,
                                         });
                                       }}
                                       style={{
@@ -1304,6 +1305,7 @@ export default function ControlView({
                                         const nextTotal = Math.max(1, durMins * 60 + nextS);
                                         tournamentStore.updateTvPlaylistItem(item.id, {
                                           durationSec: nextTotal,
+                                          autoDuration: false,
                                         });
                                       }}
                                       style={{
@@ -1632,6 +1634,26 @@ export default function ControlView({
           bubbleScale={bubbleScale}
           variant="corner"
           mediaRefreshToken={mediaRefreshToken}
+          onYoutubeMetaDetected={({ itemId, durationSec, title }) => {
+            const target = tvPlaylist.find((x) => x.id === itemId);
+            if (!target) return;
+            const patch = {};
+            // Auto-fill exact duration from the live YouTube iframe when server-side metadata fell back to 60s
+            if (
+              durationSec &&
+              durationSec !== target.durationSec &&
+              (target.autoDuration === true || (target.autoDuration !== false && target.durationSec === 60))
+            ) {
+              patch.durationSec = durationSec;
+              patch.autoDuration = false;
+            }
+            if (title && /^YouTube \([^)]+\)$/i.test(target.name || '')) {
+              patch.name = title;
+            }
+            if (Object.keys(patch).length > 0) {
+              tournamentStore.updateTvPlaylistItem(itemId, patch);
+            }
+          }}
         />
       )}
     </div>

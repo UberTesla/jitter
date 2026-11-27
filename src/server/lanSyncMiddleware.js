@@ -4206,48 +4206,77 @@ export function createLanSyncHandler({
             'User-Agent':
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
+            Cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+478',
           },
           signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(6000) : undefined,
         });
-        if (!ytRes.ok) {
-          return sendJson(res, 200, { ok: false, videoId, durationSec: null, title: null });
-        }
-        const html = await ytRes.text();
         let durationSec = null;
-        const lenMatch = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/);
-        if (lenMatch) {
-          const parsed = Number(lenMatch[1]);
-          if (Number.isFinite(parsed) && parsed > 0) {
-            durationSec = Math.min(86400, Math.round(parsed));
-          }
-        }
-        if (!durationSec) {
-          const approxMatch = html.match(/"approxDurationMs"\s*:\s*"(\d+)"/);
-          if (approxMatch) {
-            const parsed = Math.round(Number(approxMatch[1]) / 1000);
+        let title = null;
+        let isLive = false;
+        if (ytRes.ok) {
+          const html = await ytRes.text();
+          const lenMatch = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/);
+          if (lenMatch) {
+            const parsed = Number(lenMatch[1]);
             if (Number.isFinite(parsed) && parsed > 0) {
-              durationSec = Math.min(86400, parsed);
+              durationSec = Math.min(86400, Math.round(parsed));
+            }
+          }
+          if (!durationSec) {
+            const approxMatch = html.match(/"approxDurationMs"\s*:\s*"(\d+)"/);
+            if (approxMatch) {
+              const parsed = Math.round(Number(approxMatch[1]) / 1000);
+              if (Number.isFinite(parsed) && parsed > 0) {
+                durationSec = Math.min(86400, parsed);
+              }
+            }
+          }
+          if (!durationSec) {
+            const isoMatch = html.match(/itemprop="duration"\s+content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/i);
+            if (isoMatch) {
+              const h = Number(isoMatch[1] || 0);
+              const m = Number(isoMatch[2] || 0);
+              const s = Number(isoMatch[3] || 0);
+              const total = h * 3600 + m * 60 + s;
+              if (total > 0) durationSec = Math.min(86400, total);
+            }
+          }
+          isLive = /"isLiveContent"\s*:\s*true/.test(html) && !durationSec;
+          const titleMatch = html.match(/<title>([\s\S]*?)<\/title>/i);
+          if (titleMatch) {
+            const decoded = titleMatch[1]
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'")
+              .replace(/\s*-\s*YouTube\s*$/i, '')
+              .trim();
+            if (decoded && decoded.toLowerCase() !== 'youtube') {
+              title = decoded;
             }
           }
         }
-        const isLive = /"isLiveContent"\s*:\s*true/.test(html) && !durationSec;
-        let title = null;
-        const titleMatch = html.match(/<title>([\s\S]*?)<\/title>/i);
-        if (titleMatch) {
-          const decoded = titleMatch[1]
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/\s*-\s*YouTube\s*$/i, '')
-            .trim();
-          if (decoded && decoded.toLowerCase() !== 'youtube') {
-            title = decoded;
+        // Fallback to YouTube oEmbed for title if watch page was blocked by datacenter IP check
+        if (!title) {
+          try {
+            const oembedRes = await fetch(
+              `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`,
+              {
+                signal:
+                  typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(4000) : undefined,
+              }
+            );
+            if (oembedRes.ok) {
+              const odata = await oembedRes.json();
+              if (odata?.title) title = String(odata.title).trim();
+            }
+          } catch {
+            // Ignore oEmbed errors
           }
         }
         return sendJson(res, 200, {
-          ok: true,
+          ok: Boolean(durationSec || title),
           videoId,
           title,
           durationSec,
