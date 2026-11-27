@@ -434,6 +434,105 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
   };
 }
 
+/**
+ * Client-side fallback: probes a YouTube video's exact duration & title directly from
+ * the user's browser via a temporary hidden 1x1 youtube-nocookie iframe (never blocked
+ * by cloud datacenter IP checks, and works even when Grandma Corner is collapsed to mug).
+ */
+export function probeYoutubeMetaInBrowser(videoId, { timeoutMs = 5500 } = {}) {
+  if (typeof window === 'undefined' || typeof document === 'undefined' || !videoId) {
+    return Promise.resolve({ durationSec: null, title: null });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let retryTimer = null;
+    let timeoutTimer = null;
+    const iframe = document.createElement('iframe');
+    const pageOrigin = window.location?.origin || '';
+    const params = new URLSearchParams({
+      enablejsapi: '1',
+      autoplay: '0',
+      mute: '1',
+      controls: '0',
+      playsinline: '1',
+    });
+    if (pageOrigin && /^https?:\/\//i.test(pageOrigin)) {
+      params.set('origin', pageOrigin);
+      params.set('widget_referrer', pageOrigin);
+    }
+    iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.tabIndex = -1;
+    iframe.style.cssText =
+      'position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;border:0;';
+
+    let bestDuration = null;
+    let bestTitle = null;
+
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      if (retryTimer) clearTimeout(retryTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      try {
+        iframe.remove();
+      } catch {
+        // Ignore
+      }
+      resolve({ durationSec: bestDuration, title: bestTitle });
+    };
+
+    const sendListening = () => {
+      try {
+        iframe.contentWindow?.postMessage(
+          JSON.stringify({ event: 'listening', id: 99, channel: 'widget' }),
+          '*'
+        );
+      } catch {
+        // Ignore
+      }
+    };
+
+    const onMessage = (ev) => {
+      if (
+        !ev ||
+        typeof ev.origin !== 'string' ||
+        (!ev.origin.includes('youtube.com') && !ev.origin.includes('youtube-nocookie.com'))
+      ) {
+        return;
+      }
+      if (iframe.contentWindow && ev.source !== iframe.contentWindow) return;
+      try {
+        const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        if (msg?.event === 'infoDelivery' && msg?.info) {
+          const d = Number(msg.info.duration);
+          if (Number.isFinite(d) && d > 0) {
+            bestDuration = Math.min(86400, Math.round(d));
+          }
+          const t = String(msg.info.videoData?.title || '').trim();
+          if (t) {
+            bestTitle = t;
+          }
+          if (bestDuration) {
+            cleanup();
+          }
+        }
+      } catch {
+        // Ignore non-JSON messages
+      }
+    };
+
+    window.addEventListener('message', onMessage);
+    iframe.onload = () => {
+      sendListening();
+      retryTimer = setTimeout(sendListening, 450);
+    };
+    timeoutTimer = setTimeout(cleanup, timeoutMs);
+    document.body.appendChild(iframe);
+  });
+}
+
 export async function fetchYoutubeVideoMeta(rawUrl) {
   if (!rawUrl || typeof fetch === 'undefined') {
     return { ok: false, durationSec: null, title: null };
@@ -588,6 +687,7 @@ export function resolveEmbedStreamUrl(
       return {
         kind: 'embed',
         provider: 'youtube',
+        videoId,
         quality: resolvedQuality,
         embedUrl: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`,
         defaultName: `YouTube (${videoId})`,

@@ -7,6 +7,7 @@ import {
   deleteTvPlaylistItemBlob,
   listCloudTvMediaLibrary,
   fetchYoutubeVideoMeta,
+  probeYoutubeMetaInBrowser,
   parseGifDurationSec,
   resolveEmbedStreamUrl,
   YOUTUBE_QUALITY_OPTIONS,
@@ -322,6 +323,14 @@ export default function ControlView({
     let ytMeta = null;
     if (isYoutubeEmbed) {
       ytMeta = await fetchYoutubeVideoMeta(cleanedUrl);
+      if (!ytMeta?.durationSec && embedInfo?.videoId) {
+        const browserMeta = await probeYoutubeMetaInBrowser(embedInfo.videoId);
+        ytMeta = {
+          ...ytMeta,
+          durationSec: browserMeta.durationSec || ytMeta?.durationSec || null,
+          title: ytMeta?.title || browserMeta.title || null,
+        };
+      }
     }
     const derivedName =
       tvUrlNameInput.trim() ||
