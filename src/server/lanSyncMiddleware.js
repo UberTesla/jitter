@@ -134,10 +134,14 @@ async function resolveClientDeviceName(req, serverInfo) {
   };
 }
 
-const DATA_FILENAME = '.pingpong-sync-data.json';
-const MEDIA_BIN_FILENAME = '.pingpong-sync-media.bin';
-const MEDIA_META_FILENAME = '.pingpong-sync-media.json';
-const ANALYTICS_FILENAME = '.pingpong-usage-stats.json';
+const DATA_FILENAME = '.jitter-sync-data.json';
+const MEDIA_BIN_FILENAME = '.jitter-sync-media.bin';
+const MEDIA_META_FILENAME = '.jitter-sync-media.json';
+const ANALYTICS_FILENAME = '.jitter-usage-stats.json';
+const LEGACY_DATA_FILENAME = '.pingpong-sync-data.json';
+const LEGACY_MEDIA_BIN_FILENAME = '.pingpong-sync-media.bin';
+const LEGACY_MEDIA_META_FILENAME = '.pingpong-sync-media.json';
+const LEGACY_ANALYTICS_FILENAME = '.pingpong-usage-stats.json';
 const MAX_ANALYTICS_EVENTS = 15000;
 
 const DEFAULT_HUB_SETTINGS = Object.freeze({
@@ -208,7 +212,7 @@ export function collectLocalServerInfo(port = 5173, appMeta = {}) {
   // Always prioritize real physical LAN Wi-Fi / Ethernet IPv4 addresses over VPN/Tailscale/WSL/virtual adapters
   const lanAddresses = rankLanAddresses(rawLanAddresses);
   return {
-    appName: appMeta.name || 'ping-pong-championship-scoreboard',
+    appName: appMeta.name || 'jitter',
     appVersion: appMeta.version || '1.0.0',
     hostname: os.hostname(),
     platform: `${process.platform} (${process.arch})`,
@@ -326,10 +330,24 @@ export function createLanSyncHandler({
   getPort = () => 5173,
   appMeta = {},
 } = {}) {
+  const migrateLegacyFile = (legacyName, nextPath) => {
+    try {
+      const legacyPath = path.join(rootDir, legacyName);
+      if (!fs.existsSync(nextPath) && fs.existsSync(legacyPath)) {
+        fs.renameSync(legacyPath, nextPath);
+      }
+    } catch {
+      // Non-fatal; continue with new path
+    }
+  };
   const dataPath = path.join(rootDir, DATA_FILENAME);
   const mediaBinPath = path.join(rootDir, MEDIA_BIN_FILENAME);
   const mediaMetaPath = path.join(rootDir, MEDIA_META_FILENAME);
   const analyticsPath = path.join(rootDir, ANALYTICS_FILENAME);
+  migrateLegacyFile(LEGACY_DATA_FILENAME, dataPath);
+  migrateLegacyFile(LEGACY_MEDIA_BIN_FILENAME, mediaBinPath);
+  migrateLegacyFile(LEGACY_MEDIA_META_FILENAME, mediaMetaPath);
+  migrateLegacyFile(LEGACY_ANALYTICS_FILENAME, analyticsPath);
   const sseClients = new Map(); // res -> { tabId, deviceId, deviceName, ip, viewMode, tournamentId, connectedAt }
   const destructionTimers = new Map(); // tournamentId -> Timeout
   const serverBootId = `boot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;

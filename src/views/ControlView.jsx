@@ -376,7 +376,7 @@ export default function ControlView({
     const presentUrl = `${window.location.origin}/present`;
     const popup = window.open(
       presentUrl,
-      'pingpong-presentation-screen',
+      'jitter-presentation-screen',
       'width=1440,height=810,menubar=no,toolbar=no,location=no,status=no'
     );
     if (!popup) {

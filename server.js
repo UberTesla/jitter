@@ -1,5 +1,5 @@
 /**
- * Standalone Zero-Dependency Production Server for Ping Pong Championship Scoreboard.
+ * Standalone Zero-Dependency Production Server for Jitter.
  * Run `npm run build && npm start` on ANY device with Node.js (laptop, desktop,
  * Raspberry Pi, or Android Termux) to serve the app and real-time LAN Sync Hub.
  */

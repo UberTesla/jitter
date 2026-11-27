@@ -408,7 +408,7 @@ export default function SpectatorView({
         <div className="spectator-submenu" role="toolbar" aria-label="Tournament Info and Actions">
           <div className="spectator-title-block">
             <span className="spectator-title-name">
-              {state.tournamentName || 'Ping-Pong Tournament'}
+              {state.tournamentName || 'Jitter Tournament'}
             </span>
             {state.tournamentSubtitle && (
               <>
@@ -705,7 +705,7 @@ export default function SpectatorView({
             <section className="spec-hero-card is-waiting" aria-label="Tournament Waiting">
               <div className="spec-waiting-icon" aria-hidden="true">🏓</div>
               <h1 className="spec-waiting-title">
-                {state.tournamentName || 'Ping-Pong Tournament'}
+                {state.tournamentName || 'Jitter Tournament'}
               </h1>
               <p className="spec-waiting-sub">
                 {(state.players || []).length} {isTeams ? 'Teams' : 'Players'} ·{' '}

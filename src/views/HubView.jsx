@@ -641,7 +641,7 @@ export default function HubView({
                   type="button"
                   className="btn-secondary btn-sm"
                   onClick={() => importFileInputRef.current?.click()}
-                  title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
+                  title="Upload a tournament JSON backup or .jitter-sync-data.json file"
                 >
                   ⬆ Import JSON
                 </button>

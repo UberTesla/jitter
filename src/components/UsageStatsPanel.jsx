@@ -125,7 +125,7 @@ export default function UsageStatsPanel({ onNotify }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ping-pong-usage-stats-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `jitter-usage-stats-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();

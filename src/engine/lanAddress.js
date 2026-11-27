@@ -62,7 +62,7 @@ export function isIpv4Address(hostname = '') {
 }
 
 /**
- * Returns true only for real deployed public domains (e.g. `pingpong.example.com`),
+ * Returns true only for real deployed public domains (e.g. `jitter.example.com`),
  * and false for localhost, raw IPs, single-label LAN hostnames, `.local`/`.lan`,
  * and Tailscale MagicDNS (`.ts.net`).
  */
@@ -87,7 +87,7 @@ export function isDeployedPublicHost(hostname = '') {
 /**
  * Resolves the best shareable origin:
  * - If a custom server URL is explicitly configured, uses it.
- * - If deployed online on a real public domain (e.g. `pingpong.example.com`), uses that URL.
+ * - If deployed online on a real public domain (e.g. `jitter.example.com`), uses that URL.
  * - If running locally (localhost, LAN IP, `.local`, `.ts.net`, etc.), ranks all known
  *   interfaces client-side too so the real local Wi-Fi / Ethernet LAN IPv4 always beats
  *   Tailscale / VPN / virtual adapters even if server metadata arrived unsorted.

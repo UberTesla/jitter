@@ -5,6 +5,11 @@ node_modules/
 dist/
 
 # Local runtime sync state & uploaded media
+.jitter-sync-data.json
+.jitter-sync-media.bin
+.jitter-sync-media.json
+.jitter-usage-stats.json
+.jitter-media/
 .pingpong-sync-data.json
 .pingpong-usage-stats.json
 .pingpong-media/

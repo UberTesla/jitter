@@ -268,7 +268,7 @@ export default function SystemView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ping-pong-tournament-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `jitter-tournament-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -346,7 +346,7 @@ export default function SystemView({
               type="button"
               className="btn-secondary btn-sm"
               onClick={() => importFileInputRef.current?.click()}
-              title="Upload a tournament JSON backup or .pingpong-sync-data.json file"
+              title="Upload a tournament JSON backup or .jitter-sync-data.json file"
             >
               ⬆ Import JSON
             </button>
