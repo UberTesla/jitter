@@ -228,13 +228,28 @@ export default function ControlView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [setupOpen, phrasesOpen, switchConfirmRequest, editCompletedOpen, activeMatch, state.players]);
 
-  const handleToggleSyncMode = () => {
-    const next = tournamentStore.toggleSyncMode();
-    if (next === 'studio') {
-      showToast('Studio Mode ON — edit safely in Preview, then click Push Live');
-    } else {
-      showToast('LIVE Mode ON — changes update the Presentation screen in real time');
+  const handleSelectLiveMode = () => {
+    if (!isStudio) return;
+    const hadStaged = hasUnpublished;
+    if (hadStaged) {
+      tournamentStore.publishStudioToLive();
     }
+    tournamentStore.toggleSyncMode();
+    showToast(
+      hadStaged
+        ? '▶ Pushed staged changes & returned to LIVE Mode'
+        : 'LIVE Mode ON — changes update the Presentation screen in real time'
+    );
+  };
+
+  const handleSelectStudioOrPush = () => {
+    if (!isStudio) {
+      tournamentStore.toggleSyncMode();
+      showToast('Studio Mode ON — edit safely in Preview, then click PUSH');
+      return;
+    }
+    tournamentStore.publishStudioToLive();
+    showToast('▶ Pushed staged preview live to Presentation View!');
   };
 
   const handlePushLive = () => {
@@ -618,32 +633,36 @@ export default function ControlView({
                 </span>
                 {state.demoMode && <span className="meta-chip chip-demo">DEMO MODE</span>}
 
-                {/* Fixed-width OBS Sync Cluster so toggling Live <-> Studio never shifts or wraps UI */}
-                <div className="sync-control-cluster">
+                {/* Unified split-pill: LIVE | STUDIO (default LIVE lit) -> LIVE | PUSH (PUSH lit) */}
+                <div className="sync-split-pill" role="group" aria-label="Broadcast Sync Mode">
                   <button
                     type="button"
-                    className={`sync-mode-btn ${isStudio ? 'is-studio' : 'is-live'}`}
-                    onClick={handleToggleSyncMode}
+                    className={`sync-split-half is-live-half ${!isStudio ? 'is-lit' : ''}`}
+                    onClick={handleSelectLiveMode}
+                    aria-pressed={!isStudio}
                     title={
                       isStudio
-                        ? 'Studio Mode: edits stay in preview until pushed live. Click to return to Live Mode.'
-                        : 'Live Mode: edits sync immediately to Presentation View. Click to switch to OBS Studio Mode.'
+                        ? 'Auto-push any staged changes and return to Live Mode'
+                        : 'Live Mode active — changes sync immediately to Presentation View'
                     }
                   >
                     <span className="sync-mode-dot" aria-hidden="true" />
-                    {isStudio ? 'STUDIO MODE' : 'LIVE SYNC'}
+                    LIVE
                   </button>
-
                   <button
                     type="button"
-                    className={`btn-push-live-chip ${hasUnpublished ? 'has-changes' : ''} ${isStudio ? '' : 'is-slot-hidden'
-                      }`}
-                    onClick={handlePushLive}
-                    disabled={!isStudio}
-                    tabIndex={isStudio ? 0 : -1}
-                    aria-hidden={!isStudio}
+                    className={`sync-split-half is-studio-half ${isStudio ? 'is-lit' : ''} ${
+                      isStudio && hasUnpublished ? 'has-changes' : ''
+                    }`}
+                    onClick={handleSelectStudioOrPush}
+                    aria-pressed={isStudio}
+                    title={
+                      isStudio
+                        ? 'Push staged preview changes live to Presentation View'
+                        : 'Switch to Studio Mode to stage edits in Preview before pushing live'
+                    }
                   >
-                    ▶ Push Live{hasUnpublished ? ' ●' : ''}
+                    {isStudio ? `▶ PUSH${hasUnpublished ? ' ●' : ''}` : 'STUDIO'}
                   </button>
                 </div>
               </div>

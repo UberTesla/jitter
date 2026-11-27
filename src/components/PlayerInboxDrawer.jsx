@@ -903,99 +903,6 @@ export default function PlayerInboxDrawer({
 
             <div className="inbox-drawer-body">
               <div className="inbox-drawer-sidebar scroller">
-            {/* Banner 1 (All Categories except On Deck tab where queue & status are already shown) */}
-            {activeTab !== 'ondeck' &&
-              (upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('ondeck')}
-                title="Click to view full On Deck queue & roster"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '0.24rem 0.5rem',
-                  borderRadius: '7px',
-                  background:
-                    myPlayerStatus?.tone === 'playing'
-                      ? 'rgba(16, 185, 129, 0.16)'
-                      : 'rgba(56, 189, 248, 0.12)',
-                  border: `1px solid ${
-                    myPlayerStatus?.tone === 'playing'
-                      ? 'rgba(16, 185, 129, 0.45)'
-                      : 'rgba(56, 189, 248, 0.3)'
-                  }`,
-                  color: 'inherit',
-                  fontSize: '0.74rem',
-                  cursor: 'pointer',
-                }}
-              >
-                <span
-                  style={{
-                    fontWeight: 800,
-                    color: myPlayerStatus?.tone === 'playing' ? '#34d399' : '#38bdf8',
-                    flexShrink: 0,
-                  }}
-                >
-                  ⏳ {(myPlayerStatus?.tabLabel || 'On Deck').toUpperCase()}
-                </span>
-                <span
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    minWidth: 0,
-                    flex: 1,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {myPlayerStatus?.tone === 'playing' ? (
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {myPlayerStatus.detail}
-                    </span>
-                  ) : (() => {
-                      const nextM = upNextMatches[0];
-                      if (isTeams && nextM) {
-                        return (
-                          <span
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
-                              alignItems: 'center',
-                              gap: '0.45rem',
-                              width: '100%',
-                              minWidth: 0,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {renderDrawerOnDeckSide(nextM.player1Id, nextM.source1Label, 'left')}
-                            <span style={{ opacity: 0.6, fontSize: '0.7rem', textAlign: 'center' }}>
-                              vs
-                            </span>
-                            {renderDrawerOnDeckSide(nextM.player2Id, nextM.source2Label, 'right')}
-                          </span>
-                        );
-                      }
-                      return (
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {upNextMatches
-                            .slice(0, 2)
-                            .map(
-                              (m) =>
-                                `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
-                                  m.player2Id,
-                                  m.source2Label
-                                )}`
-                            )
-                            .join('  ·  ')}
-                        </span>
-                      );
-                    })()}
-                </span>
-              </button>
-            )}
-
             {/* Mini Announcement Banner (dismissible; includes active sticky announcements for newly joined users) */}
             {latestAnnouncement && (
               <div
@@ -1195,6 +1102,100 @@ export default function PlayerInboxDrawer({
               </div>
 
               <div className="inbox-drawer-main">
+            {/* Smart On Deck Banner inside tab body (below tabs so hiding on On Deck tab never shifts the tab bar) */}
+            {activeTab !== 'ondeck' &&
+              (upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('ondeck')}
+                title="Click to view full On Deck queue & roster"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '0.24rem 0.5rem',
+                  marginBottom: '0.35rem',
+                  borderRadius: '7px',
+                  flexShrink: 0,
+                  background:
+                    myPlayerStatus?.tone === 'playing'
+                      ? 'rgba(16, 185, 129, 0.16)'
+                      : 'rgba(56, 189, 248, 0.12)',
+                  border: `1px solid ${
+                    myPlayerStatus?.tone === 'playing'
+                      ? 'rgba(16, 185, 129, 0.45)'
+                      : 'rgba(56, 189, 248, 0.3)'
+                  }`,
+                  color: 'inherit',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  style={{
+                    fontWeight: 800,
+                    color: myPlayerStatus?.tone === 'playing' ? '#34d399' : '#38bdf8',
+                    flexShrink: 0,
+                  }}
+                >
+                  ⏳ {(myPlayerStatus?.tabLabel || 'On Deck').toUpperCase()}
+                </span>
+                <span
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minWidth: 0,
+                    flex: 1,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {myPlayerStatus?.tone === 'playing' ? (
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {myPlayerStatus.detail}
+                    </span>
+                  ) : (() => {
+                      const nextM = upNextMatches[0];
+                      if (isTeams && nextM) {
+                        return (
+                          <span
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+                              alignItems: 'center',
+                              gap: '0.45rem',
+                              width: '100%',
+                              minWidth: 0,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {renderDrawerOnDeckSide(nextM.player1Id, nextM.source1Label, 'left')}
+                            <span style={{ opacity: 0.6, fontSize: '0.7rem', textAlign: 'center' }}>
+                              vs
+                            </span>
+                            {renderDrawerOnDeckSide(nextM.player2Id, nextM.source2Label, 'right')}
+                          </span>
+                        );
+                      }
+                      return (
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {upNextMatches
+                            .slice(0, 2)
+                            .map(
+                              (m) =>
+                                `${getPlayerLabel(m.player1Id, m.source1Label)} vs ${getPlayerLabel(
+                                  m.player2Id,
+                                  m.source2Label
+                                )}`
+                            )
+                            .join('  ·  ')}
+                        </span>
+                      );
+                    })()}
+                </span>
+              </button>
+            )}
             {chatError && (
               <p className="inbox-feedback" style={{ margin: '0 0 0.35rem', color: '#f87171' }}>
                 {chatError}

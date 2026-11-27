@@ -1574,9 +1574,10 @@ export class RetroTVScene {
     let padX = Math.round(18 * effectiveScale);
     let padY = Math.round(14 * effectiveScale);
     let lineH = Math.round(26 * effectiveScale);
-    let iconSize = Math.round(fontSize * 1.65);
-    let iconGap = Math.max(8, Math.round(fontSize * 0.52));
-    let iconSlotW = iconSize + iconGap;
+    const showGrandmaIcon = Boolean(this.collapsedToMug);
+    let iconSize = showGrandmaIcon ? Math.round(fontSize * 1.65) : 0;
+    let iconGap = showGrandmaIcon ? Math.max(8, Math.round(fontSize * 0.52)) : 0;
+    let iconSlotW = showGrandmaIcon ? iconSize + iconGap : 0;
     const maxBubbleW = isGameComment
       ? LOGICAL_WIDTH - margin * 2
       : Math.min(LOGICAL_WIDTH - margin * 2, Math.round(420 * effectiveScale));
@@ -1591,9 +1592,9 @@ export class RetroTVScene {
       lineH = Math.round(fontSize * 1.28);
       padX = Math.max(12, Math.round(fontSize * 0.85));
       padY = Math.max(10, Math.round(fontSize * 0.68));
-      iconSize = Math.round(fontSize * 1.65);
-      iconGap = Math.max(8, Math.round(fontSize * 0.52));
-      iconSlotW = iconSize + iconGap;
+      iconSize = showGrandmaIcon ? Math.round(fontSize * 1.65) : 0;
+      iconGap = showGrandmaIcon ? Math.max(8, Math.round(fontSize * 0.52)) : 0;
+      iconSlotW = showGrandmaIcon ? iconSize + iconGap : 0;
       maxTextW = Math.max(120, maxBubbleW - padX * 2 - iconSlotW);
       fontStr = `700 ${fontSize}px "Inter", system-ui, -apple-system, sans-serif`;
       ctx.font = fontStr;
@@ -1661,24 +1662,26 @@ export class RetroTVScene {
     ctx.fillStyle = isGameComment ? '#fffbeb' : '#faf8f2';
     ctx.fillRect(tailBaseLeft + 1.5, by + bh - 4, tailBaseRight - tailBaseLeft - 3, 5);
 
-    // Grandma avatar badge on the left inside the speech bubble
-    ctx.save();
-    const iconCx = bx + padX + iconSize * 0.5;
-    const iconCy = by + bh * 0.5;
-    const iconR = iconSize * 0.5;
-    ctx.fillStyle = isGameComment ? '#fef3c7' : '#ede7d9';
-    ctx.strokeStyle = isGameComment ? '#d97706' : '#94a3b8';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.arc(iconCx, iconCy, iconR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    // Grandma avatar badge on the left inside the speech bubble (only when collapsed to coffee cup)
+    if (showGrandmaIcon) {
+      ctx.save();
+      const iconCx = bx + padX + iconSize * 0.5;
+      const iconCy = by + bh * 0.5;
+      const iconR = iconSize * 0.5;
+      ctx.fillStyle = isGameComment ? '#fef3c7' : '#ede7d9';
+      ctx.strokeStyle = isGameComment ? '#d97706' : '#94a3b8';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(iconCx, iconCy, iconR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
 
-    ctx.font = `${Math.round(iconSize * 0.66)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('👵', iconCx, iconCy + 1);
-    ctx.restore();
+      ctx.font = `${Math.round(iconSize * 0.66)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👵', iconCx, iconCy + 1);
+      ctx.restore();
+    }
 
     // Typewriter lines (vertically centered alongside the Grandma badge)
     const textBlockH = fullLines.length * lineH;
