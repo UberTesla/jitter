@@ -70,6 +70,12 @@ export default function RetroTVCorner({
   const currentPlaylistItem = hasPlaylist
     ? tvPlaylist[localPlaylistIdx % tvPlaylist.length] || tvPlaylist[0]
     : null;
+  const effectiveMuted = Boolean(tvMuted || currentPlaylistItem?.muted);
+  const isYoutubeLowData = Boolean(
+    mediaSource?.kind === 'embed' &&
+      mediaSource?.provider === 'youtube' &&
+      (currentPlaylistItem?.lowData || mediaSource?.lowData)
+  );
 
   const advancePlaylistItem = useCallback(() => {
     if (!hasPlaylist || tvPlaylist.length <= 1) return;
@@ -237,7 +243,7 @@ export default function RetroTVCorner({
       return undefined;
     }
     loadTvPlaylistItemSource(currentPlaylistItem, {
-      muted: Boolean(tvMuted),
+      muted: effectiveMuted,
       loop: tvPlaylist.length <= 1 || tvPlaylistMode === 'single' || tvPlaylistPaused,
     }).then((source) => {
       if (active) {
@@ -252,6 +258,7 @@ export default function RetroTVCorner({
     currentPlaylistItem?.id,
     currentPlaylistItem?.kind,
     currentPlaylistItem?.url,
+    currentPlaylistItem?.lowData,
     currentPlaylistItem?.updatedAt,
     mediaRefreshToken,
     applyMediaSource,
@@ -331,7 +338,7 @@ export default function RetroTVCorner({
     (videoEl) => {
       if (!videoEl || collapsedToMug) return;
       videoEl.defaultMuted = true;
-      videoEl.muted = Boolean(tvMuted);
+      videoEl.muted = effectiveMuted;
       videoEl.playsInline = true;
       const playPromise = videoEl.play();
       if (playPromise && typeof playPromise.catch === 'function') {
@@ -341,7 +348,7 @@ export default function RetroTVCorner({
         });
       }
     },
-    [tvMuted, collapsedToMug]
+    [effectiveMuted, collapsedToMug]
   );
 
   useEffect(() => {
@@ -353,9 +360,9 @@ export default function RetroTVCorner({
       return;
     }
     ensureVideoPlaying(videoEl);
-  }, [tvMuted, mediaSource, collapsedToMug, ensureVideoPlaying]);
+  }, [effectiveMuted, mediaSource, collapsedToMug, ensureVideoPlaying]);
 
-  // Live mute/unmute for YouTube embed iframes without reloading the stream
+  // Live mute/unmute & low-data quality hint for YouTube embed iframes without reloading the stream
   useEffect(() => {
     if (mediaSource?.kind !== 'embed' || mediaSource?.provider !== 'youtube') return;
     const win = iframeRef.current?.contentWindow;
@@ -364,15 +371,25 @@ export default function RetroTVCorner({
       win.postMessage(
         JSON.stringify({
           event: 'command',
-          func: tvMuted || collapsedToMug ? 'mute' : 'unMute',
+          func: effectiveMuted || collapsedToMug ? 'mute' : 'unMute',
           args: [],
         }),
         '*'
       );
+      if (isYoutubeLowData) {
+        win.postMessage(
+          JSON.stringify({
+            event: 'command',
+            func: 'setPlaybackQuality',
+            args: ['tiny'],
+          }),
+          '*'
+        );
+      }
     } catch {
       // Ignore cross-origin postMessage errors
     }
-  }, [tvMuted, collapsedToMug, mediaSource?.kind, mediaSource?.provider]);
+  }, [effectiveMuted, collapsedToMug, isYoutubeLowData, mediaSource?.kind, mediaSource?.provider]);
 
   const safeScale = Math.max(0.4, Math.min(1.5, Number(scale) || 1.0));
   const safeOpacity = Math.max(0.15, Math.min(1.0, Number(opacity) || 1.0));
@@ -409,8 +426,45 @@ export default function RetroTVCorner({
                 className="retro-tv-media-el"
                 allow="autoplay; encrypted-media; picture-in-picture"
                 referrerPolicy="strict-origin-when-cross-origin"
-                style={{ border: 0, pointerEvents: 'none' }}
-                onLoad={() => setDomMediaReady(true)}
+                style={{
+                  border: 0,
+                  pointerEvents: 'none',
+                  ...(isYoutubeLowData
+                    ? {
+                        width: '50%',
+                        height: '50%',
+                        transform: 'scale(2)',
+                        transformOrigin: 'top left',
+                      }
+                    : {}),
+                }}
+                onLoad={() => {
+                  setDomMediaReady(true);
+                  if (mediaSource?.provider === 'youtube') {
+                    const win = iframeRef.current?.contentWindow;
+                    if (!win) return;
+                    try {
+                      if (effectiveMuted || collapsedToMug) {
+                        win.postMessage(
+                          JSON.stringify({ event: 'command', func: 'mute', args: [] }),
+                          '*'
+                        );
+                      }
+                      if (isYoutubeLowData) {
+                        win.postMessage(
+                          JSON.stringify({
+                            event: 'command',
+                            func: 'setPlaybackQuality',
+                            args: ['tiny'],
+                          }),
+                          '*'
+                        );
+                      }
+                    } catch {
+                      // Ignore cross-origin postMessage errors
+                    }
+                  }
+                }}
               />
             ) : mediaSource.kind === 'video' ? (
               <video

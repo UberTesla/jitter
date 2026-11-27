@@ -458,7 +458,7 @@ export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '', gcsObje
  * Detects YouTube, Twitch, or Vimeo URLs and returns a clean autoplay-ready embed config,
  * or `null` for direct image/GIF/video URLs.
  */
-export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true } = {}) {
+export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true, lowData = false } = {}) {
   const cleaned = String(rawUrl || '').trim();
   if (!cleaned) return null;
   let u;
@@ -491,7 +491,12 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true } = {}
         modestbranding: '1',
         playsinline: '1',
         enablejsapi: '1',
+        iv_load_policy: '3',
+        cc_load_policy: '0',
       });
+      if (lowData) {
+        params.set('vq', 'tiny');
+      }
       if (loop) {
         params.set('loop', '1');
         params.set('playlist', listId || videoId);
@@ -501,6 +506,7 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true } = {}
       return {
         kind: 'embed',
         provider: 'youtube',
+        lowData: Boolean(lowData),
         embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`,
         defaultName: `YouTube (${videoId})`,
       };
@@ -513,10 +519,16 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true } = {}
         controls: '0',
         playsinline: '1',
         enablejsapi: '1',
+        iv_load_policy: '3',
+        cc_load_policy: '0',
       });
+      if (lowData) {
+        params.set('vq', 'tiny');
+      }
       return {
         kind: 'embed',
         provider: 'youtube',
+        lowData: Boolean(lowData),
         embedUrl: `https://www.youtube.com/embed/videoseries?${params.toString()}`,
         defaultName: 'YouTube Playlist',
       };
@@ -562,8 +574,10 @@ export function resolveEmbedStreamUrl(rawUrl, { muted = true, loop = true } = {}
 
 export async function loadTvPlaylistItemSource(item, { muted = true, loop = true } = {}) {
   if (!item || item.kind === 'sitcom') return null;
+  const effectiveMuted = Boolean(muted || item.muted);
+  const lowData = Boolean(item.lowData);
   if (item.kind === 'url' && item.url) {
-    const embed = resolveEmbedStreamUrl(item.url, { muted, loop });
+    const embed = resolveEmbedStreamUrl(item.url, { muted: effectiveMuted, loop, lowData });
     if (embed) {
       return {
         hasMedia: true,
@@ -571,6 +585,7 @@ export async function loadTvPlaylistItemSource(item, { muted = true, loop = true
         rawUrl: item.url,
         name: item.name || embed.defaultName,
         provider: embed.provider,
+        lowData: Boolean(embed.lowData || lowData),
         type: 'text/html',
         kind: 'embed',
         updatedAt: item.updatedAt || Date.now(),

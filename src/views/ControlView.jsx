@@ -324,11 +324,14 @@ export default function ControlView({
         // CORS or network error — fall back to 12s
       }
     }
+    const isYoutubeEmbed = embedInfo?.provider === 'youtube';
     tournamentStore.addTvPlaylistItem({
       id: `tvu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       kind: 'url',
       name: derivedName,
       url: cleanedUrl,
+      muted: isYoutubeEmbed,
+      lowData: isYoutubeEmbed,
       durationSec: detectedSec || 12,
       updatedAt: Date.now(),
     });
@@ -913,8 +916,9 @@ export default function ControlView({
                     >
                       {tvPlaylist.map((item, idx) => {
                         const isActive = idx === tvPlaylistIndex;
-                        const isEmbedStream =
-                          item.kind === 'url' && Boolean(resolveEmbedStreamUrl(item.url));
+                        const embedMeta = item.kind === 'url' ? resolveEmbedStreamUrl(item.url) : null;
+                        const isEmbedStream = Boolean(embedMeta);
+                        const isYoutubeItem = embedMeta?.provider === 'youtube';
                         const icon =
                           item.kind === 'sitcom'
                             ? '📺'
@@ -928,6 +932,7 @@ export default function ControlView({
                         const isVideo =
                           item.kind === 'video' ||
                           (item.kind === 'url' && /\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(item.url || ''));
+                        const supportsAudio = isVideo || isEmbedStream;
                         return (
                           <div
                             key={item.id}
@@ -1037,6 +1042,62 @@ export default function ControlView({
                                 />
                                 <span>s</span>
                               </label>
+                            )}
+
+                            {supportsAudio && (
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm"
+                                onClick={() =>
+                                  tournamentStore.updateTvPlaylistItem(item.id, {
+                                    muted: !item.muted,
+                                  })
+                                }
+                                title={
+                                  item.muted
+                                    ? 'Always muted (click to follow global TV sound)'
+                                    : 'Follows global TV mute (click to always mute this item)'
+                                }
+                                aria-pressed={Boolean(item.muted)}
+                                style={{
+                                  padding: '0.12rem 0.34rem',
+                                  fontSize: '0.7rem',
+                                  flexShrink: 0,
+                                  borderColor: item.muted ? 'rgba(245, 158, 11, 0.65)' : undefined,
+                                  background: item.muted ? 'rgba(245, 158, 11, 0.2)' : undefined,
+                                }}
+                              >
+                                {item.muted ? '🔇' : '🔊'}
+                              </button>
+                            )}
+
+                            {isYoutubeItem && (
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm"
+                                onClick={() =>
+                                  tournamentStore.updateTvPlaylistItem(item.id, {
+                                    lowData: !item.lowData,
+                                  })
+                                }
+                                title={
+                                  item.lowData
+                                    ? 'Low-data mode ON (tiny 144p iframe viewport + lowest quality hint)'
+                                    : 'Low-data mode OFF (click to force tiny low-bitrate YouTube iframe)'
+                                }
+                                aria-pressed={Boolean(item.lowData)}
+                                style={{
+                                  padding: '0.12rem 0.36rem',
+                                  fontSize: '0.66rem',
+                                  fontWeight: 700,
+                                  flexShrink: 0,
+                                  borderColor: item.lowData ? 'rgba(56, 189, 248, 0.65)' : undefined,
+                                  background: item.lowData ? 'rgba(56, 189, 248, 0.2)' : undefined,
+                                  color: item.lowData ? '#7dd3fc' : undefined,
+                                }}
+                              >
+                                144p
+                              </button>
                             )}
 
                             <button
