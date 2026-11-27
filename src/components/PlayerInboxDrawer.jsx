@@ -901,6 +901,8 @@ export default function PlayerInboxDrawer({
               </button>
             </div>
 
+            <div className="inbox-drawer-body">
+              <div className="inbox-drawer-sidebar scroller">
             {/* Banner 1 (All Categories): Smart On Deck Banner directly under header/mini scoreboard */}
             {(upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
               <button
@@ -1189,7 +1191,9 @@ export default function PlayerInboxDrawer({
                 📬 Alerts{unreadInbox > 0 ? ` (${unreadInbox})` : ''}
               </button>
             </div>
+              </div>
 
+              <div className="inbox-drawer-main">
             {chatError && (
               <p className="inbox-feedback" style={{ margin: '0 0 0.35rem', color: '#f87171' }}>
                 {chatError}
@@ -1917,6 +1921,8 @@ export default function PlayerInboxDrawer({
                 </section>
               </div>
             )}
+              </div>
+            </div>
           </div>
         </div>
       )}
