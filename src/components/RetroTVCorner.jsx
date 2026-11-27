@@ -475,7 +475,6 @@ export default function RetroTVCorner({
           if (youtubeQuality && youtubeQuality !== 'auto') {
             sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
           }
-          sendYoutubeCommand('playVideo');
           return;
         }
         const playerState =
@@ -484,20 +483,32 @@ export default function RetroTVCorner({
             : msg?.event === 'infoDelivery'
             ? msg?.info?.playerState
             : undefined;
-        if (playerState === 1) {
-          // Video is actively playing — strip captions and wait ~450ms for YouTube's play/pause
-          // overlay animation to fade out completely before revealing the CRT glass cutout.
+        const currentTime =
+          msg?.event === 'infoDelivery' && typeof msg?.info?.currentTime === 'number'
+            ? msg.info.currentTime
+            : null;
+        if (currentTime !== null && currentTime >= 1.2 && playerState !== 2 && playerState !== 0) {
+          // Playback has progressed past YouTube's initial play/pause bezel & title overlay
           disableYoutubeCaptions();
-          if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
-          youtubeRevealTimerRef.current = setTimeout(() => {
+          if (youtubeRevealTimerRef.current) {
+            clearTimeout(youtubeRevealTimerRef.current);
             youtubeRevealTimerRef.current = null;
-            setDomMediaReady(true);
-          }, 450);
-        } else if (playerState === 3) {
-          // Buffering — strip captions while keeping overlay hidden until playback actually starts
+          }
+          setDomMediaReady(true);
+        } else if (playerState === 1) {
+          // Video is actively playing — strip captions and wait 1200ms for YouTube's play/pause
+          // bezel + title overlay to completely fade out before revealing the CRT glass cutout.
           disableYoutubeCaptions();
-        } else if (playerState === 2 || playerState === -1) {
-          // Paused or unstarted — cover YouTube's play/pause symbol behind the CRT canvas
+          if (!domMediaReady) {
+            if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
+            youtubeRevealTimerRef.current = setTimeout(() => {
+              youtubeRevealTimerRef.current = null;
+              setDomMediaReady(true);
+            }, 1200);
+          }
+        } else if (playerState === 3 || playerState === 2 || playerState === -1) {
+          // Buffering, paused, or unstarted — keep YouTube's play/pause/spinner hidden behind CRT canvas
+          disableYoutubeCaptions();
           if (youtubeRevealTimerRef.current) {
             clearTimeout(youtubeRevealTimerRef.current);
             youtubeRevealTimerRef.current = null;
@@ -580,10 +591,14 @@ export default function RetroTVCorner({
                     setDomMediaReady(true);
                     return;
                   }
-                  const win = iframeRef.current?.contentWindow;
-                  if (win) {
+                  const sendListening = () => {
+                    const win = iframeRef.current?.contentWindow;
+                    if (!win) return;
                     try {
-                      win.postMessage(JSON.stringify({ event: 'listening' }), '*');
+                      win.postMessage(
+                        JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+                        '*'
+                      );
                       if (effectiveMuted || collapsedToMug) {
                         sendYoutubeCommand('mute');
                       }
@@ -591,17 +606,18 @@ export default function RetroTVCorner({
                         sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
                       }
                       disableYoutubeCaptions();
-                      sendYoutubeCommand('playVideo');
                     } catch {
                       // Ignore cross-origin postMessage errors
                     }
-                  }
-                  // Safety fallback in case a browser/extension blocks YouTube postMessage events
+                  };
+                  sendListening();
+                  setTimeout(sendListening, 450);
+                  // Safety fallback only if a browser/extension blocks YouTube postMessage events
                   if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
                   youtubeRevealTimerRef.current = setTimeout(() => {
                     youtubeRevealTimerRef.current = null;
                     setDomMediaReady(true);
-                  }, 3500);
+                  }, 6000);
                 }}
               />
             ) : mediaSource.kind === 'video' ? (

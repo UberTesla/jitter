@@ -545,6 +545,7 @@ export function resolveEmbedStreamUrl(
   }
   const host = u.hostname.replace(/^www\./i, '').toLowerCase();
   const hostname = typeof window !== 'undefined' && window.location?.hostname ? window.location.hostname : 'localhost';
+  const pageOrigin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
 
   // YouTube (watch, youtu.be, live, shorts, embed, playlist)
   if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be') {
@@ -571,6 +572,10 @@ export function resolveEmbedStreamUrl(
         iv_load_policy: '3',
         cc_load_policy: '0',
       });
+      if (pageOrigin && /^https?:\/\//i.test(pageOrigin)) {
+        params.set('origin', pageOrigin);
+        params.set('widget_referrer', pageOrigin);
+      }
       if (resolvedQuality !== 'auto') {
         params.set('vq', resolvedQuality);
       }
@@ -599,6 +604,10 @@ export function resolveEmbedStreamUrl(
         iv_load_policy: '3',
         cc_load_policy: '0',
       });
+      if (pageOrigin && /^https?:\/\//i.test(pageOrigin)) {
+        params.set('origin', pageOrigin);
+        params.set('widget_referrer', pageOrigin);
+      }
       if (resolvedQuality !== 'auto') {
         params.set('vq', resolvedQuality);
       }
