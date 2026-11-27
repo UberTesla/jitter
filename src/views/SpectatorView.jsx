@@ -445,6 +445,19 @@ export default function SpectatorView({
             </span>
           </div>
         </div>
+
+        {/* Sticky Live Grandma Commentary Banner (pinned to top for its duration, zero layout shift) */}
+        {liveGrandmaQuote && (
+          <div className="spec-grandma-sticky-slot" role="status" aria-live="polite">
+            <div className="spec-grandma-card">
+              <div className="spec-grandma-avatar" aria-hidden="true">👵</div>
+              <div className="spec-grandma-body">
+                <span className="spec-grandma-label">GRANDMA SAYS</span>
+                <p className="spec-grandma-quote">“{liveGrandmaQuote.text}”</p>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {accessDeniedMsg && (
@@ -710,17 +723,6 @@ export default function SpectatorView({
                 </button>
               </div>
             </section>
-          )}
-
-          {/* Live Grandma Commentary Card (great on mobile when CRT corner is collapsed to coffee cup) */}
-          {liveGrandmaQuote && (
-            <div className="spec-grandma-card" role="status" aria-live="polite">
-              <div className="spec-grandma-avatar" aria-hidden="true">👵</div>
-              <div className="spec-grandma-body">
-                <span className="spec-grandma-label">GRANDMA SAYS</span>
-                <p className="spec-grandma-quote">“{liveGrandmaQuote.text}”</p>
-              </div>
-            </div>
           )}
 
           {/* 3 Native Section Tabs */}

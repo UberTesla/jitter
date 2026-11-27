@@ -577,16 +577,32 @@
   color: #fef3c7;
 }
 
-/* ---------- Live Grandma Commentary Card ---------- */
+/* ---------- Sticky Live Grandma Commentary Banner ---------- */
+.spec-grandma-sticky-slot {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 35;
+  padding: 0 0.85rem;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
 .spec-grandma-card {
+  width: 100%;
+  max-width: 920px;
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.7rem 0.95rem;
+  padding: 0.65rem 0.9rem;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(15, 23, 42, 0.94));
-  border: 1.5px solid rgba(251, 191, 36, 0.55);
-  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.14);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.24), rgba(15, 23, 42, 0.97));
+  backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(251, 191, 36, 0.65);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 22px rgba(245, 158, 11, 0.2);
   animation: specGrandmaPop 0.24s ease-out;
 }
 
