@@ -36,6 +36,28 @@ const QUICK_CUE_QUOTES = [
   'Frank would\'ve flipped the table!',
 ];
 
+const TV_URL_HISTORY_KEY = 'jitter-tv-url-history-v1';
+
+function readTvUrlHistory() {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(TV_URL_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x) => x && typeof x.url === 'string' && x.url.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTvUrlHistory(list) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(TV_URL_HISTORY_KEY, JSON.stringify((list || []).slice(0, 30)));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export default function ControlView({
   state,
   syncMeta,
@@ -58,6 +80,7 @@ export default function ControlView({
   const [cloudLibraryGcsEnabled, setCloudLibraryGcsEnabled] = useState(false);
   const [tvUrlInput, setTvUrlInput] = useState('');
   const [tvUrlNameInput, setTvUrlNameInput] = useState('');
+  const [tvUrlHistory, setTvUrlHistory] = useState(() => readTvUrlHistory());
   const [tvUploadLog, setTvUploadLog] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
   const fileInputRef = useRef(null);
@@ -314,6 +337,54 @@ export default function ControlView({
     }
   };
 
+  const rememberTvUrl = (entry) => {
+    const cleaned = String(entry?.url || '').trim();
+    if (!cleaned) return;
+    setTvUrlHistory((prev) => {
+      const existing = prev.find((x) => x.url === cleaned);
+      const merged = {
+        url: cleaned,
+        name: String(entry.name || existing?.name || cleaned).trim(),
+        durationSec: Math.max(1, Math.round(Number(entry.durationSec || existing?.durationSec) || 12)),
+        muted: entry.muted !== undefined ? Boolean(entry.muted) : Boolean(existing?.muted),
+        quality: entry.quality || existing?.quality || '',
+        savedAt: Date.now(),
+      };
+      const next = [merged, ...prev.filter((x) => x.url !== cleaned)].slice(0, 30);
+      writeTvUrlHistory(next);
+      return next;
+    });
+  };
+
+  const handleReaddSavedTvUrl = (saved) => {
+    if (!saved?.url) return;
+    const embedInfo = resolveEmbedStreamUrl(saved.url);
+    const isYoutubeEmbed = embedInfo?.provider === 'youtube';
+    tournamentStore.addTvPlaylistItem({
+      id: `tvu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'url',
+      name: saved.name || embedInfo?.defaultName || 'Web Media',
+      url: saved.url,
+      muted: saved.muted !== undefined ? Boolean(saved.muted) : isYoutubeEmbed,
+      ...(isYoutubeEmbed ? { quality: saved.quality || 'tiny' } : {}),
+      durationSec: Math.max(1, Math.round(Number(saved.durationSec) || 12)),
+      updatedAt: Date.now(),
+    });
+    trackUsageEvent('tv:playlist_readd_url', {
+      category: 'control',
+      provider: embedInfo?.provider || 'direct',
+    });
+    showToast(`Re-added "${saved.name || 'URL'}" to CRT TV playlist`);
+  };
+
+  const handleForgetSavedTvUrl = (urlToRemove) => {
+    setTvUrlHistory((prev) => {
+      const next = prev.filter((x) => x.url !== urlToRemove);
+      writeTvUrlHistory(next);
+      return next;
+    });
+  };
+
   const handleAddTvUrl = async (e) => {
     e.preventDefault();
     const cleanedUrl = tvUrlInput.trim();
@@ -351,7 +422,7 @@ export default function ControlView({
       }
     }
     const finalDurationSec = detectedSec || 12;
-    tournamentStore.addTvPlaylistItem({
+    const newUrlItem = {
       id: `tvu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       kind: 'url',
       name: derivedName,
@@ -360,7 +431,9 @@ export default function ControlView({
       ...(isYoutubeEmbed ? { quality: 'tiny', autoDuration: !ytMeta?.durationSec } : {}),
       durationSec: finalDurationSec,
       updatedAt: Date.now(),
-    });
+    };
+    tournamentStore.addTvPlaylistItem(newUrlItem);
+    rememberTvUrl(newUrlItem);
     trackUsageEvent('tv:playlist_add_url', {
       category: 'control',
       provider: embedInfo?.provider || 'direct',
@@ -455,12 +528,17 @@ export default function ControlView({
   };
 
   const handleRemoveTvPlaylistItem = (item) => {
-    // Only remove from the active playlist queue; keep uploaded files in Cloud/Server Library so they can be re-added!
+    // Only remove from the active playlist queue; keep uploaded files in Cloud/Server Library and URLs in history!
+    if (item.kind === 'url' && item.url) {
+      rememberTvUrl(item);
+    }
     tournamentStore.removeTvPlaylistItem(item.id);
     trackUsageEvent('tv:playlist_remove', { category: 'control' });
     setMediaRefreshToken((n) => n + 1);
     if (item.kind === 'video' || item.kind === 'image') {
       showToast(`Removed "${item.name}" from queue (still saved in ☁ Library)`);
+    } else if (item.kind === 'url' && item.url) {
+      showToast(`Removed "${item.name}" from queue (re-add under 🔗 Add URL)`);
     }
   };
 
@@ -908,36 +986,141 @@ export default function ControlView({
                     </div>
 
                     {showAddUrlRow && (
-                      <form
-                        onSubmit={handleAddTvUrl}
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '0.35rem',
-                          marginBottom: '0.5rem',
-                        }}
-                      >
-                        <input
-                          type="url"
-                          className="panel-input"
-                          value={tvUrlInput}
-                          onChange={(e) => setTvUrlInput(e.target.value)}
-                          placeholder="YouTube, Twitch, Vimeo, or direct GIF/image/MP4 URL..."
-                          style={{ flex: '2 1 180px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
-                          required
-                        />
-                        <input
-                          type="text"
-                          className="panel-input"
-                          value={tvUrlNameInput}
-                          onChange={(e) => setTvUrlNameInput(e.target.value)}
-                          placeholder="Label (optional)"
-                          style={{ flex: '1 1 100px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
-                        />
-                        <button type="submit" className="btn-amber btn-sm">
-                          Add
-                        </button>
-                      </form>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <form
+                          onSubmit={handleAddTvUrl}
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.35rem',
+                            marginBottom: '0.35rem',
+                          }}
+                        >
+                          <input
+                            type="url"
+                            className="panel-input"
+                            value={tvUrlInput}
+                            onChange={(e) => setTvUrlInput(e.target.value)}
+                            placeholder="YouTube, Twitch, Vimeo, or direct GIF/image/MP4 URL..."
+                            style={{ flex: '2 1 180px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
+                            required
+                          />
+                          <input
+                            type="text"
+                            className="panel-input"
+                            value={tvUrlNameInput}
+                            onChange={(e) => setTvUrlNameInput(e.target.value)}
+                            placeholder="Label (optional)"
+                            style={{ flex: '1 1 100px', fontSize: '0.78rem', padding: '0.3rem 0.5rem' }}
+                          />
+                          <button type="submit" className="btn-amber btn-sm">
+                            Add
+                          </button>
+                        </form>
+
+                        {(() => {
+                          const removedUrls = tvUrlHistory.filter(
+                            (h) =>
+                              h?.url &&
+                              !tvPlaylist.some((p) => p.kind === 'url' && p.url === h.url)
+                          );
+                          if (removedUrls.length === 0) return null;
+                          return (
+                            <div
+                              style={{
+                                padding: '0.4rem 0.5rem',
+                                borderRadius: '8px',
+                                background: 'rgba(15, 23, 42, 0.7)',
+                                border: '1px solid rgba(251, 191, 36, 0.25)',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  color: '#fbbf24',
+                                  marginBottom: '0.28rem',
+                                }}
+                              >
+                                🕒 Previously Removed URLs ({removedUrls.length})
+                              </div>
+                              <div
+                                className="scroller"
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '0.22rem',
+                                  maxHeight: '125px',
+                                  overflowY: 'auto',
+                                }}
+                              >
+                                {removedUrls.map((saved) => {
+                                  const isStream = Boolean(resolveEmbedStreamUrl(saved.url));
+                                  const totalSec = Math.max(1, Math.round(Number(saved.durationSec) || 12));
+                                  const m = Math.floor(totalSec / 60);
+                                  const s = totalSec % 60;
+                                  const durLabel = m > 0 ? `${m}m ${s}s` : `${s}s`;
+                                  return (
+                                    <div
+                                      key={saved.url}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        padding: '0.2rem 0.38rem',
+                                        borderRadius: '6px',
+                                        background: 'rgba(30, 41, 59, 0.65)',
+                                        border: '1px solid rgba(148, 163, 184, 0.16)',
+                                        fontSize: '0.73rem',
+                                      }}
+                                    >
+                                      <span style={{ flexShrink: 0 }}>{isStream ? '📡' : '🔗'}</span>
+                                      <span
+                                        style={{
+                                          flex: 1,
+                                          minWidth: 0,
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                        title={saved.url}
+                                      >
+                                        {saved.name || saved.url}
+                                      </span>
+                                      <span style={{ fontSize: '0.66rem', opacity: 0.65, flexShrink: 0 }}>
+                                        {durLabel}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary btn-sm"
+                                        onClick={() => handleReaddSavedTvUrl(saved)}
+                                        style={{ padding: '0.1rem 0.4rem', fontSize: '0.68rem', flexShrink: 0 }}
+                                        title="Re-add this URL to the CRT TV playlist"
+                                      >
+                                        + Add
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary btn-sm"
+                                        onClick={() => handleForgetSavedTvUrl(saved.url)}
+                                        style={{
+                                          padding: '0.1rem 0.34rem',
+                                          fontSize: '0.68rem',
+                                          flexShrink: 0,
+                                          color: '#fca5a5',
+                                        }}
+                                        title="Remove from saved URL history"
+                                      >
+                                        🗑
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     )}
 
                     {showCloudLibrary && (
@@ -1661,6 +1844,9 @@ export default function ControlView({
             }
             if (Object.keys(patch).length > 0) {
               tournamentStore.updateTvPlaylistItem(itemId, patch);
+              if (target.kind === 'url' && target.url) {
+                rememberTvUrl({ ...target, ...patch });
+              }
             }
           }}
         />
