@@ -56,11 +56,44 @@ const server = http.createServer((req, res) => {
     }
 
     const ext = path.extname(filePath).toLowerCase();
-    res.setHeader('Content-Type', MIME_TYPES[ext] || 'application/octet-stream');
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
     if (safePath === '/sw.js' || safePath === '/manifest.json' || ext === '.html') {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     } else if (safePath.startsWith('/assets/')) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (ext === '.mp4' || ext === '.webm' || ext === '.mov' || ext === '.m4v' || ext === '.ogv') {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+
+    const stat = fs.statSync(filePath);
+    const totalSize = stat.size;
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    const rangeHeader = req.headers.range;
+    if (rangeHeader && /^bytes=\d*-\d*$/i.test(rangeHeader.trim())) {
+      const [rawStart, rawEnd] = rangeHeader.replace(/^bytes=/i, '').split('-');
+      const start = rawStart ? Math.min(totalSize - 1, Math.max(0, Number(rawStart))) : 0;
+      const end = rawEnd ? Math.min(totalSize - 1, Math.max(start, Number(rawEnd))) : totalSize - 1;
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+        'Content-Length': chunkSize,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+      });
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+      fs.createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
+
+    res.setHeader('Content-Length', totalSize);
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
     }
     fs.createReadStream(filePath).pipe(res);
   }).catch((err) => {

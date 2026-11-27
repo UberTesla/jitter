@@ -748,10 +748,12 @@ export function createInitialState(overrides = {}) {
           ? overrides.ui.tvPlaylist
           : [
               {
-                id: 'builtin-sitcom',
-                kind: 'sitcom',
-                name: 'Retro Sitcom (Built-in)',
-                durationSec: 20,
+                id: 'builtin-default-tv',
+                kind: 'url',
+                name: 'Raymond Thanksgiving (Default)',
+                url: '/raymond-thanksgiving.mp4',
+                muted: true,
+                durationSec: 2640,
                 updatedAt: 0,
               },
             ],
@@ -6681,10 +6683,12 @@ export class TournamentStore {
             ? filtered
             : [
                 {
-                  id: 'builtin-sitcom',
-                  kind: 'sitcom',
-                  name: 'Retro Sitcom (Built-in)',
-                  durationSec: 20,
+                  id: 'builtin-default-tv',
+                  kind: 'url',
+                  name: 'Raymond Thanksgiving (Default)',
+                  url: '/raymond-thanksgiving.mp4',
+                  muted: true,
+                  durationSec: 2640,
                   updatedAt: 0,
                 },
               ];

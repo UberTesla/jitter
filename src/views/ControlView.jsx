@@ -275,7 +275,16 @@ export default function ControlView({
 
   const tvPlaylist = Array.isArray(state.ui?.tvPlaylist) && state.ui.tvPlaylist.length > 0
     ? state.ui.tvPlaylist
-    : [{ id: 'builtin-sitcom', kind: 'sitcom', name: 'Retro Sitcom (Built-in)', durationSec: 20 }];
+    : [
+        {
+          id: 'builtin-default-tv',
+          kind: 'url',
+          name: 'Raymond Thanksgiving (Default)',
+          url: '/raymond-thanksgiving.mp4',
+          muted: true,
+          durationSec: 2640,
+        },
+      ];
   const tvPlaylistIndex = Math.min(
     Math.max(0, Number(state.ui?.tvPlaylistIndex) || 0),
     tvPlaylist.length - 1
