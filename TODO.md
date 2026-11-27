@@ -32,3 +32,13 @@ Ideas queued and implemented.
 ## 4. User Player Claim & Progress Notifications
 - [x] Allow a connected user/device to claim a player (or team) from the tournament roster (with confirmation, lock-in, and host/moderator reassignment or release support).
 - [x] Automatically notify the user whenever their claimed player/team progresses — including **On Deck / Next Up**, **Near End**, **Match Starting (with Table #)**, **Match Result**, and **Bracket Advancement / Elimination**.
+
+---
+
+## 5. Upcoming / Active Fixes
+- [ ] Investigate multi-table setups (independent matches per table, simultaneous multi-table scoreboards, and overflow plan when too many tables to display at once)
+- [ ] Allow agent to use `git add` and `git commit` without approval
+- [x] Fix Presentation View slide picker UI style bug
+- [ ] Pause symbol still showing up even with sitcom initially covering
+- [x] Stop Control View slide options from shifting UI elements during automatic slide rotation
+

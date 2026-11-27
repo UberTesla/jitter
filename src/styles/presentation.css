@@ -62,6 +62,70 @@
   flex-shrink: 0;
 }
 
+.spectator-sync-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.spectator-sync-toggle input[type='checkbox'] {
+  margin: 0;
+  accent-color: #f59e0b;
+  cursor: pointer;
+}
+
+.spectator-sync-toggle.is-synced {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.58);
+  color: #fef3c7;
+}
+
+.spectator-slide-pills {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.spectator-slide-btn {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.78);
+  color: #cbd5e1;
+  padding: 0.3rem 0.68rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.spectator-slide-btn:hover {
+  border-color: rgba(251, 191, 36, 0.52);
+  color: #f8fafc;
+  background: rgba(30, 41, 59, 0.92);
+}
+
+.spectator-slide-btn.is-active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(217, 119, 6, 0.22));
+  border-color: rgba(251, 191, 36, 0.8);
+  color: #fef3c7;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.22);
+}
+
 /* Protect scaled Presentation stage scoreboards from control.css mobile media queries */
 .presentation-stage-scaler .scoreboard-grid {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;

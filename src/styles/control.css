@@ -297,6 +297,7 @@
 .contextual-slide-box {
   padding: 0.72rem 0.85rem;
   margin-bottom: 0.8rem;
+  min-height: 112px;
   border-radius: 10px;
   background: rgba(8, 13, 25, 0.78);
   border: 1px solid var(--border-subtle);

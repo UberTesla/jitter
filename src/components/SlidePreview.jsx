@@ -36,6 +36,14 @@ export default function SlidePreview({
   onSwitchToPresentationMode,
 }) {
   const activeSlide = state.presentation?.activeSlide || 'title';
+  const autoRotateOn = Boolean(state.presentation?.autoRotate);
+  const [optionsSlide, setOptionsSlide] = React.useState(activeSlide);
+  // Keep options panel locked during auto-rotate so automatic slide cycling never shifts Control UI
+  React.useEffect(() => {
+    if (!autoRotateOn) {
+      setOptionsSlide(activeSlide);
+    }
+  }, [activeSlide, autoRotateOn]);
   const isStudio = syncMeta?.syncMode === 'studio';
   const hasUnpublished = Boolean(syncMeta?.hasUnpublishedChanges);
   const programSlide = syncMeta?.programState?.presentation?.activeSlide || activeSlide;
@@ -54,6 +62,7 @@ export default function SlidePreview({
   const champion = state.championId ? playerMap.get(state.championId) : null;
 
   const activeSlideDef = SLIDE_DEFINITIONS.find((s) => s.id === activeSlide);
+  const optionsSlideDef = SLIDE_DEFINITIONS.find((s) => s.id === optionsSlide) || activeSlideDef;
   const programSlideDef = SLIDE_DEFINITIONS.find((s) => s.id === programSlide);
 
   return (
@@ -146,7 +155,10 @@ export default function SlidePreview({
                   className={`slide-switch-btn ${isSelected ? 'is-active' : ''} ${
                     isOnAir ? 'is-on-air' : ''
                   }`}
-                  onClick={() => onSelectSlide(sl.id)}
+                  onClick={() => {
+                    setOptionsSlide(sl.id);
+                    onSelectSlide(sl.id);
+                  }}
                 >
                   <div className="slide-btn-top">
                     <span className="slide-num">SLIDE {sl.number}</span>
@@ -158,15 +170,15 @@ export default function SlidePreview({
             })}
           </div>
 
-          {/* Contextual Slide Banner & Settings (Tailored to Currently Selected Slide!) */}
+          {/* Contextual Slide Banner & Settings (Pinned to manually selected slide so auto-rotate never shifts UI) */}
           <div className="contextual-slide-box">
             <div className="contextual-slide-head">
               <span className="contextual-slide-kicker">
-                SLIDE {activeSlideDef?.number} OPTIONS · {activeSlideDef?.label}
+                SLIDE {optionsSlideDef?.number} OPTIONS · {optionsSlideDef?.label}
               </span>
             </div>
 
-            {activeSlide === 'title' && (
+            {optionsSlide === 'title' && (
               <div className="intermission-field">
                 <label htmlFor="title-subtitle-input">Welcome Subtitle (Optional)</label>
                 <input
@@ -181,7 +193,7 @@ export default function SlidePreview({
               </div>
             )}
 
-            {activeSlide === 'arena' && (
+            {optionsSlide === 'arena' && (
               <div className="title-slide-options-stack">
                 <div className="contextual-inline-row">
                   <label className="toggle-label">
@@ -199,7 +211,7 @@ export default function SlidePreview({
               </div>
             )}
 
-            {activeSlide === 'bracket' && (
+            {optionsSlide === 'bracket' && (
               <div className="title-slide-options-stack">
                 <div className="intermission-field">
                   <label htmlFor="bracket-subtitle-input">Bracket Slide Subtitle (Optional)</label>
@@ -265,7 +277,7 @@ export default function SlidePreview({
               </div>
             )}
 
-            {activeSlide === 'split' && (
+            {optionsSlide === 'split' && (
               <div className="title-slide-options-stack">
                 <div className="intermission-field">
                   <label htmlFor="split-subtitle-input">Split View Subtitle (Optional)</label>
@@ -295,7 +307,7 @@ export default function SlidePreview({
               </div>
             )}
 
-            {activeSlide === 'spotlight' && (
+            {optionsSlide === 'spotlight' && (
               <div className="intermission-field">
                 <label htmlFor="intermission-msg-input">
                   Spotlight Subtitle (Optional — leave blank to hide)
