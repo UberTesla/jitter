@@ -46,5 +46,11 @@ Ideas queued and implemented.
 - [x] Move On Deck banner inside Inbox tab body so hiding it on On Deck tab never shifts the tab bar
 - [x] Automated zero-quota QA / fuzz test engine (kept on `debug` branch off Render)
 
+---
+
+## 6. Security & Hardening
+- [ ] Add per-IP / per-device rate limiting & brute-force lockout (with exponential backoff / `429 Too Many Requests`) on both **Tournament Room Join Keys** (`/__sync/join`, `/__sync/select`, `/__sync/state`) and **Hub Admin Key** (`/__sync/admin/unlock`).
+- [ ] Use constant-time comparison (`crypto.timingSafeEqual`) for Admin Key checks and cap/guard `allowedKeyTypos` sensibly.
+
 add a flag in tv playlist/database that tells the client to download that asset locally.
 
