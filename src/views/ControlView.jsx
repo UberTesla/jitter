@@ -300,6 +300,9 @@ export default function ControlView({
       storage: gcsCount > 0 ? 'gcs' : 'local',
     });
     setMediaRefreshToken((n) => n + 1);
+    if (showCloudLibrary) {
+      loadCloudLibrary();
+    }
     if (failedCount > 0) {
       showToast(`Saved locally only — ${firstError || `${failedCount} failed to sync`}`);
     } else if (gcsCount > 0) {
@@ -863,10 +866,11 @@ export default function ControlView({
                     <div className="crt-controls-row" style={{ marginBottom: '0.45rem' }}>
                       <button
                         type="button"
-                        className="btn-primary btn-sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        className={`btn-secondary btn-sm ${showCloudLibrary ? 'is-toggled-on' : ''}`}
+                        onClick={handleToggleCloudLibrary}
+                        title="Upload, browse, and re-add cloud/server media files"
                       >
-                        ➕ Add Files
+                        ☁ Library
                       </button>
                       <button
                         type="button"
@@ -874,14 +878,6 @@ export default function ControlView({
                         onClick={() => setShowAddUrlRow((v) => !v)}
                       >
                         🔗 Add URL
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-secondary btn-sm ${showCloudLibrary ? 'is-toggled-on' : ''}`}
-                        onClick={handleToggleCloudLibrary}
-                        title="Browse and re-add previously uploaded cloud/server media files"
-                      >
-                        ☁ Library
                       </button>
                       {!tvPlaylist.some((x) => x.kind === 'sitcom') && (
                         <button
@@ -957,16 +953,27 @@ export default function ControlView({
                           <span style={{ fontWeight: 700, color: '#7dd3fc' }}>
                             ☁ {cloudLibraryGcsEnabled ? 'Google Cloud Media Library' : 'Uploaded Media Library'} ({cloudLibraryItems.length})
                           </span>
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            onClick={loadCloudLibrary}
-                            disabled={cloudLibraryLoading}
-                            style={{ padding: '0.1rem 0.38rem', fontSize: '0.68rem' }}
-                            title="Refresh cloud media library"
-                          >
-                            {cloudLibraryLoading ? '…' : '↻ Refresh'}
-                          </button>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <button
+                              type="button"
+                              className="btn-primary btn-sm"
+                              onClick={() => fileInputRef.current?.click()}
+                              style={{ padding: '0.12rem 0.45rem', fontSize: '0.68rem' }}
+                              title="Upload videos, images, or GIFs to library and playlist"
+                            >
+                              ➕ Add Files
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={loadCloudLibrary}
+                              disabled={cloudLibraryLoading}
+                              style={{ padding: '0.1rem 0.38rem', fontSize: '0.68rem' }}
+                              title="Refresh cloud media library"
+                            >
+                              {cloudLibraryLoading ? '…' : '↻ Refresh'}
+                            </button>
+                          </div>
                         </div>
 
                         {cloudLibraryError && (
