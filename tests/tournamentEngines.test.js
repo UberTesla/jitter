@@ -29,6 +29,7 @@ import {
   getStandardSeedOrder,
 } from '../src/engine/bracketGenerator.js';
 import {
+  SLIDE_DEFINITIONS,
   TournamentStore,
   createInitialState,
   selectScoreGrandmaQuote,
@@ -55,6 +56,11 @@ import {
   normalizeFourWordId,
   deriveDeterministicFourWordId,
 } from '../src/engine/tournamentId.js';
+import {
+  detectHorizontalSwipe,
+  getAdjacentSlideId,
+  resolveSwipeSlide,
+} from '../src/engine/slideSwipe.js';
 
 test('11-point game: 2-point serve rotation, deuce 1-point switch, strict win-by-2', () => {
   const rules = { targetPoints: 11, serveRotation: 2 };
@@ -3758,3 +3764,57 @@ test('Multi-table setup queues independent matches per table, scores simultaneou
   assert.equal(afterSlots[0].match.tableNumber, 1);
   assert.equal(afterSlots[1].match.id, m2Id);
 });
+
+test('Presentation View horizontal swipe navigates slides only when Sync Live is unchecked', () => {
+  // Gesture detection thresholds and axis dominance
+  assert.equal(detectHorizontalSwipe(-80, 10, 180), 'next');
+  assert.equal(detectHorizontalSwipe(80, -12, 220), 'prev');
+  assert.equal(detectHorizontalSwipe(-30, 0, 120), null); // too short
+  assert.equal(detectHorizontalSwipe(-70, 70, 180), null); // too vertical/diagonal
+  assert.equal(detectHorizontalSwipe(10, -120, 180), null); // vertical scroll
+  assert.equal(detectHorizontalSwipe(-90, 0, 2000), null); // too slow
+
+  // Wrapping across SLIDE_DEFINITIONS
+  assert.equal(getAdjacentSlideId('title', 'next', SLIDE_DEFINITIONS), 'arena');
+  assert.equal(getAdjacentSlideId('title', 'prev', SLIDE_DEFINITIONS), 'spotlight');
+  assert.equal(getAdjacentSlideId('spotlight', 'next', SLIDE_DEFINITIONS), 'title');
+  assert.equal(getAdjacentSlideId('bracket', 'prev', SLIDE_DEFINITIONS), 'arena');
+
+  // Sync Live checked (enabled: false) -> swipe ignored
+  assert.equal(
+    resolveSwipeSlide({
+      enabled: false,
+      currentSlideId: 'arena',
+      deltaX: -100,
+      deltaY: 5,
+      durationMs: 150,
+      slides: SLIDE_DEFINITIONS,
+    }),
+    null
+  );
+
+  // Sync Live unchecked (enabled: true) -> swipe left advances, swipe right goes back
+  assert.equal(
+    resolveSwipeSlide({
+      enabled: true,
+      currentSlideId: 'arena',
+      deltaX: -100,
+      deltaY: 5,
+      durationMs: 150,
+      slides: SLIDE_DEFINITIONS,
+    }),
+    'bracket'
+  );
+  assert.equal(
+    resolveSwipeSlide({
+      enabled: true,
+      currentSlideId: 'title',
+      deltaX: 95,
+      deltaY: -10,
+      durationMs: 200,
+      slides: SLIDE_DEFINITIONS,
+    }),
+    'spotlight'
+  );
+});
+
