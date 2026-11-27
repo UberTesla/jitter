@@ -541,6 +541,30 @@ export function createLanSyncHandler({
     return false;
   };
 
+  /**
+   * Re-authorizes a returning guest in `store.authorizedGuests` when they present the
+   * tournament's current 4-word join key (e.g. after a Render Free ephemeral-disk redeploy
+   * wipes `store.authorizedGuests` while the guest still holds the valid key in localStorage).
+   * Never re-authorizes a device that was explicitly kicked (`entry.kickedDevices`).
+   */
+  const maybeReauthorizeGuestWithCode = (entry, deviceId = '', providedCode = '') => {
+    if (!entry || !entry.tournamentId || !deviceId || !providedCode) return false;
+    if (isDeviceAdmin(deviceId)) return false;
+    if (entry.hostDeviceId && entry.hostDeviceId === deviceId) return false;
+    if (Array.isArray(entry.kickedDevices) && entry.kickedDevices.includes(deviceId)) {
+      return false;
+    }
+    if (store.authorizedGuests?.[entry.tournamentId]?.[deviceId]) return false;
+    const expectedCode = resolveTournamentJoinCode(entry);
+    const maxTypos = store.hubSettings?.allowedKeyTypos ?? DEFAULT_HUB_SETTINGS.allowedKeyTypos;
+    if (matchTournamentJoinKey(providedCode, expectedCode, { maxTypos }).matched) {
+      authorizeGuest(entry.tournamentId, deviceId);
+      scheduleDiskSave();
+      return true;
+    }
+    return false;
+  };
+
   const getHostsList = () =>
     Object.values(store.hosts || {}).sort((a, b) => (b.claimedAt || 0) - (a.claimedAt || 0));
 
@@ -993,6 +1017,9 @@ export function createLanSyncHandler({
     const tournamentEntry = payload?.state || null;
     const serverTime = Date.now();
     for (const [res, meta] of sseClients.entries()) {
+      if (tournamentEntry && meta.deviceId && meta.joinCode) {
+        maybeReauthorizeGuestWithCode(tournamentEntry, meta.deviceId, meta.joinCode);
+      }
       const canSeeState =
         tournamentEntry && isDeviceAuthorizedForTournament(tournamentEntry, meta.deviceId);
       const viewerSummaries = isDeviceAdmin(meta.deviceId)
@@ -1586,6 +1613,9 @@ export function createLanSyncHandler({
       const requestedTournamentId = urlObj.searchParams.get('tournamentId') || null;
       const providedCode = urlObj.searchParams.get('code') || '';
       const requestedEntry = requestedTournamentId ? store.tournaments[requestedTournamentId] : null;
+      if (requestedEntry && deviceId && providedCode) {
+        maybeReauthorizeGuestWithCode(requestedEntry, deviceId, providedCode);
+      }
       const authorizedForRequested =
         !requestedEntry ||
         isDeviceAuthorizedForTournament(requestedEntry, deviceId, providedCode);
@@ -1609,6 +1639,7 @@ export function createLanSyncHandler({
         ip: clientIp,
         viewMode,
         tournamentId,
+        joinCode: providedCode,
         connectedAt: Date.now(),
         clientInfo: {
           userAgent: String(req.headers['user-agent'] || '').slice(0, 320),
@@ -1670,11 +1701,18 @@ export function createLanSyncHandler({
               }
               meta.clientInfo = { ...(meta.clientInfo || {}), ...incomingInfo };
             }
+            if (body.code !== undefined) {
+              meta.joinCode = String(body.code || '').trim();
+            }
             if (body.tournamentId !== undefined) {
               const reqTid = body.tournamentId || null;
               const reqEntry = reqTid ? store.tournaments[reqTid] : null;
+              const effectiveCode = String(body.code || meta.joinCode || '').trim();
+              if (reqEntry && meta.deviceId && effectiveCode) {
+                maybeReauthorizeGuestWithCode(reqEntry, meta.deviceId, effectiveCode);
+              }
               meta.tournamentId =
-                !reqEntry || isDeviceAuthorizedForTournament(reqEntry, meta.deviceId, body.code || '')
+                !reqEntry || isDeviceAuthorizedForTournament(reqEntry, meta.deviceId, effectiveCode)
                   ? reqTid
                   : null;
             }
@@ -2136,6 +2174,9 @@ export function createLanSyncHandler({
       const targetEntry = requestedTournamentId
         ? store.tournaments[requestedTournamentId] || null
         : getActiveState();
+      if (targetEntry && viewerDeviceId && providedCode) {
+        maybeReauthorizeGuestWithCode(targetEntry, viewerDeviceId, providedCode);
+      }
       const hasExplicitAuthContext = Boolean(viewerDeviceId || requestedTournamentId);
       const isAuthorized =
         !targetEntry ||

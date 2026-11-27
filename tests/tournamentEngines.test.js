@@ -3567,3 +3567,67 @@ test('2-way messaging supports public Live Chat, 1-to-1 DMs (deduped), and 1-to-
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('Returning guest with valid 4-word key auto-reauthorizes after ephemeral server redeploy, while kicked guest stays revoked', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jitter-redeploy-'));
+  let port = 0;
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => port });
+  const server = http.createServer((req, res) => {
+    handler(req, res, () => {
+      res.statusCode = 404;
+      res.end('not found');
+    });
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  port = server.address().port;
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    // Simulate Render Free ephemeral redeploy: brand-new empty server, host re-pushes Secure tournament
+    const tourney = createInitialState();
+    tourney.tournamentId = 't-redeploy';
+    tourney.tournamentName = 'Render Redeploy Cup';
+    tourney.joinCode = 'blue-tiger-mint-lamp';
+    tourney.hostDeviceId = 'dev-desktop-host';
+    tourney.access = { isPublic: true, isSecure: true };
+    tourney.kickedDevices = ['dev-kicked-guest'];
+
+    const pushRes = await fetch(`${base}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deviceId: 'dev-desktop-host',
+        deviceName: 'Desktop Host',
+        state: tourney,
+        activate: true,
+      }),
+    });
+    assert.equal(pushRes.status, 200);
+
+    // 1. Mobile guest reconnects with its saved 4-word key -> server re-authorizes it AND marks summary isAuthorized: true
+    const guestSync = await fetch(
+      `${base}/__sync/state?deviceId=dev-mobile-guest&tournamentId=t-redeploy&code=blue-tiger-mint-lamp`
+    ).then((r) => r.json());
+    assert.equal(guestSync.accessRevoked, false);
+    assert.equal(guestSync.state?.tournamentId, 't-redeploy');
+    assert.equal(guestSync.tournaments[0]?.isAuthorized, true);
+
+    // 2. Subsequent sync without code still recognizes the re-authorized mobile guest
+    const guestFollowup = await fetch(
+      `${base}/__sync/state?deviceId=dev-mobile-guest&tournamentId=t-redeploy`
+    ).then((r) => r.json());
+    assert.equal(guestFollowup.accessRevoked, false);
+    assert.equal(guestFollowup.state?.tournamentId, 't-redeploy');
+    assert.equal(guestFollowup.tournaments[0]?.isAuthorized, true);
+
+    // 3. Explicitly kicked guest is NOT auto-reauthorized even if it sends the old key
+    const kickedSync = await fetch(
+      `${base}/__sync/state?deviceId=dev-kicked-guest&tournamentId=t-redeploy&code=blue-tiger-mint-lamp`
+    ).then((r) => r.json());
+    assert.equal(kickedSync.tournaments[0]?.isAuthorized, false);
+  } finally {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

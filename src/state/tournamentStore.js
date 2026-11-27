@@ -1525,15 +1525,18 @@ export class TournamentStore {
     // Open SSE stream for real-time updates from laptops, phones, tablets & TVs
     if (typeof EventSource === 'undefined') return;
     try {
+      const sseTid = this.isOnHub ? '' : this.programState?.tournamentId || '';
+      const sseCode = sseTid
+        ? this.remoteSync.unlockedGuestKeys?.[sseTid] || readUnlockedGuestKeys()[sseTid] || ''
+        : '';
+      this._sseAuthSignature = `${sseTid}|${sseCode}`;
       const qs = new URLSearchParams({
         tabId: this.tabId,
         deviceId: this.remoteSync.deviceId || '',
         deviceName: this.remoteSync.deviceName || '',
         viewMode: this.activeViewMode || 'control',
-        tournamentId: this.isOnHub ? '' : this.programState?.tournamentId || '',
-        code: this.isOnHub
-          ? ''
-          : this.remoteSync.unlockedGuestKeys?.[this.programState?.tournamentId] || '',
+        tournamentId: sseTid,
+        code: sseCode,
       });
       const es = new EventSource(`${baseUrl}/__sync/events?${qs.toString()}`);
       this.eventSource = es;
@@ -2204,7 +2207,12 @@ export class TournamentStore {
   resumeAfterDisconnect() {
     this.suppressAutoReconnect = false;
     writeDisconnectedNotice(null);
-    if (!this.eventSource) {
+    const activeTid = this.isOnHub ? '' : this.programState?.tournamentId || '';
+    const activeCode = activeTid
+      ? this.remoteSync.unlockedGuestKeys?.[activeTid] || readUnlockedGuestKeys()[activeTid] || ''
+      : '';
+    const nextSig = `${activeTid}|${activeCode}`;
+    if (!this.eventSource || this._sseAuthSignature !== nextSig) {
       this.connectRemoteSync({ force: true });
     } else {
       this.pushClientStatusToRemote();
@@ -2639,6 +2647,16 @@ export class TournamentStore {
     const next = Boolean(onHub);
     if (this.isOnHub === next) return;
     this.isOnHub = next;
+    if (!next && this.eventSource && !this.suppressAutoReconnect) {
+      const activeTid = this.programState?.tournamentId || '';
+      const activeCode = activeTid
+        ? this.remoteSync.unlockedGuestKeys?.[activeTid] || readUnlockedGuestKeys()[activeTid] || ''
+        : '';
+      if (this._sseAuthSignature !== `${activeTid}|${activeCode}`) {
+        this.connectRemoteSync({ force: true });
+        return;
+      }
+    }
     this.pushClientStatusToRemote();
   }
 

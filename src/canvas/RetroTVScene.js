@@ -1571,24 +1571,30 @@ export class RetroTVScene {
     const effectiveScale = isGameComment ? userScale * 1.15 : userScale;
 
     let fontSize = Math.round(20 * effectiveScale);
-    let padX = Math.round(20 * effectiveScale);
-    let padY = Math.round(15 * effectiveScale);
+    let padX = Math.round(18 * effectiveScale);
+    let padY = Math.round(14 * effectiveScale);
     let lineH = Math.round(26 * effectiveScale);
+    let iconSize = Math.round(fontSize * 1.65);
+    let iconGap = Math.max(8, Math.round(fontSize * 0.52));
+    let iconSlotW = iconSize + iconGap;
     const maxBubbleW = isGameComment
       ? LOGICAL_WIDTH - margin * 2
       : Math.min(LOGICAL_WIDTH - margin * 2, Math.round(420 * effectiveScale));
-    let maxTextW = Math.max(160, maxBubbleW - padX * 2);
+    let maxTextW = Math.max(120, maxBubbleW - padX * 2 - iconSlotW);
     let fontStr = `700 ${fontSize}px "Inter", system-ui, -apple-system, sans-serif`;
     ctx.font = fontStr;
 
     let fullLines = wrapTextLines(ctx, bubbleText, maxTextW);
     // Safety clamp only if an extraordinarily long string exceeds canvas height at 2x
-    while (fullLines.length * lineH + padY * 2 > LOGICAL_HEIGHT - 44 && fontSize > 14) {
+    while (Math.max(fullLines.length * lineH, iconSize) + padY * 2 > LOGICAL_HEIGHT - 44 && fontSize > 14) {
       fontSize -= 2;
       lineH = Math.round(fontSize * 1.28);
-      padX = Math.max(14, Math.round(fontSize * 0.92));
-      padY = Math.max(10, Math.round(fontSize * 0.72));
-      maxTextW = Math.max(140, maxBubbleW - padX * 2);
+      padX = Math.max(12, Math.round(fontSize * 0.85));
+      padY = Math.max(10, Math.round(fontSize * 0.68));
+      iconSize = Math.round(fontSize * 1.65);
+      iconGap = Math.max(8, Math.round(fontSize * 0.52));
+      iconSlotW = iconSize + iconGap;
+      maxTextW = Math.max(120, maxBubbleW - padX * 2 - iconSlotW);
       fontStr = `700 ${fontSize}px "Inter", system-ui, -apple-system, sans-serif`;
       ctx.font = fontStr;
       fullLines = wrapTextLines(ctx, bubbleText, maxTextW);
@@ -1601,9 +1607,10 @@ export class RetroTVScene {
       measuredMaxW = Math.max(measuredMaxW, ctx.measureText(line).width);
     }
 
-    const minW = Math.round(150 * effectiveScale);
-    const bw = Math.max(minW, Math.min(maxBubbleW, Math.ceil(measuredMaxW + padX * 2)));
-    const bh = Math.min(LOGICAL_HEIGHT - margin * 2, Math.ceil(fullLines.length * lineH + padY * 2));
+    const minW = Math.round(160 * effectiveScale);
+    const contentH = Math.max(fullLines.length * lineH, iconSize);
+    const bw = Math.max(minW, Math.min(maxBubbleW, Math.ceil(measuredMaxW + padX * 2 + iconSlotW)));
+    const bh = Math.min(LOGICAL_HEIGHT - margin * 2, Math.ceil(contentH + padY * 2));
 
     // Anchor target above Grandma's head (or above the collapsed steaming coffee mug in bottom-right)
     const headAnchorX = anchorOpts.anchorX ?? 239;
@@ -1654,12 +1661,34 @@ export class RetroTVScene {
     ctx.fillStyle = isGameComment ? '#fffbeb' : '#faf8f2';
     ctx.fillRect(tailBaseLeft + 1.5, by + bh - 4, tailBaseRight - tailBaseLeft - 3, 5);
 
-    // Typewriter lines
-    const textStartY = by + padY + Math.round(fontSize * 0.92);
+    // Grandma avatar badge on the left inside the speech bubble
+    ctx.save();
+    const iconCx = bx + padX + iconSize * 0.5;
+    const iconCy = by + bh * 0.5;
+    const iconR = iconSize * 0.5;
+    ctx.fillStyle = isGameComment ? '#fef3c7' : '#ede7d9';
+    ctx.strokeStyle = isGameComment ? '#d97706' : '#94a3b8';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(iconCx, iconCy, iconR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = `${Math.round(iconSize * 0.66)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('👵', iconCx, iconCy + 1);
+    ctx.restore();
+
+    // Typewriter lines (vertically centered alongside the Grandma badge)
+    const textBlockH = fullLines.length * lineH;
+    const textOffsetY = Math.max(0, (contentH - textBlockH) * 0.5);
+    const textStartX = bx + padX + iconSlotW;
+    const textStartY = by + padY + textOffsetY + Math.round(fontSize * 0.88);
     ctx.font = fontStr;
     ctx.fillStyle = '#0f172a';
     for (let i = 0; i < visibleLines.length; i++) {
-      ctx.fillText(visibleLines[i], bx + padX, textStartY + i * lineH);
+      ctx.fillText(visibleLines[i], textStartX, textStartY + i * lineH);
     }
 
     ctx.restore();
