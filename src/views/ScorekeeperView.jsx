@@ -532,20 +532,22 @@ export default function ScorekeeperView({
     <div className="scorekeeper-shell">
       {/* Uniform Top Navigation Bar (Hub + Role Views + Contextual Match Picker + Full Screen on Top-Left) */}
       <header
-        className={`sk-topbar ${
-          isFullscreen ? `is-fullscreen-topbar ${isMenuRevealed ? 'is-revealed' : ''}` : ''
+        className={`sk-topbar ${isFullscreen ? 'is-fullscreen-sk' : ''} ${
+          isFullscreen && isMenuRevealed ? 'is-revealed' : ''
         }`}
         {...barHoverHandlers}
       >
         {!isPopout && (
-          <ViewNavBar
-            activeMode="scorekeeper"
-            rolePerms={rolePerms}
-            pendingRequestsCount={pendingRequestsCount}
-            onNavigateMode={onNavigateMode}
-            onOpenTournamentChooser={onOpenTournamentChooser}
-            isFullscreen={isFullscreen}
-          />
+          <div className={`sk-nav-row ${isFullscreen && !isMenuRevealed ? 'is-collapsed-fs' : ''}`}>
+            <ViewNavBar
+              activeMode="scorekeeper"
+              rolePerms={rolePerms}
+              pendingRequestsCount={pendingRequestsCount}
+              onNavigateMode={onNavigateMode}
+              onOpenTournamentChooser={onOpenTournamentChooser}
+              isFullscreen={isFullscreen}
+            />
+          </div>
         )}
 
         <div

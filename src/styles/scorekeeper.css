@@ -31,6 +31,25 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* In Full Screen, hide ViewNavBar until top-edge hover while keeping Match Picker & Exit Full Screen visible */
+.sk-topbar.is-fullscreen-sk {
+  min-height: 0;
+  gap: 0;
+  padding: 0.35rem 0.9rem;
+}
+
+.sk-topbar.is-fullscreen-sk.is-revealed {
+  gap: 0.45rem;
+}
+
+.sk-nav-row {
+  width: 100%;
+}
+
+.sk-nav-row.is-collapsed-fs {
+  display: none;
+}
+
 .sk-top-left,
 .sk-top-center,
 .sk-top-right {
@@ -755,6 +774,27 @@
 
 /* Portrait phones: stack the 2 score pads cleanly in exact 50/50 vertical tracks (no scroll!) */
 @media (max-width: 780px) and (orientation: portrait) {
+  .sk-top-left {
+    flex-wrap: nowrap;
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .sk-top-left > .btn-secondary {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .sk-match-trigger {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .sk-lock-chip {
+    display: none;
+  }
+
   .sk-arena {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(2, minmax(0, 1fr));

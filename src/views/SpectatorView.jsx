@@ -21,6 +21,7 @@ import ViewNavBar from '../components/ViewNavBar.jsx';
 import BracketView from '../components/BracketView.jsx';
 import MatchTimer from '../components/MatchTimer.jsx';
 import TournamentStatsPanel from '../components/TournamentStatsPanel.jsx';
+import RetroTVCorner from '../components/RetroTVCorner.jsx';
 
 /**
  * Native Mobile-First Spectator Companion (/spectator)
@@ -44,8 +45,10 @@ export default function SpectatorView({
   const [feedback, setFeedback] = useState('');
   const [accessDeniedMsg, setAccessDeniedMsg] = useState('');
   const [bannerTick, setBannerTick] = useState(0);
+  const [grandmaTick, setGrandmaTick] = useState(0);
 
   const isTeams = state.entryMode === 'teams';
+  const grandmaEnabled = state.rules?.grandmaEnabled !== false;
   const canScoreRole = rolePerms
     ? Boolean(rolePerms.canScore)
     : effectiveRole !== 'spectator' && effectiveRole !== 'presenter';
@@ -87,6 +90,26 @@ export default function SpectatorView({
     if (!activeBanner?.text) return '';
     return renderLiveMessageText(activeBanner, tournamentStore.getServerNow());
   }, [activeBanner, bannerTick]);
+
+  // Sync live Grandma speech expiry so the commentary card appears while Grandma is speaking
+  const activeGrandmaSpeech = state.grandma?.activeSpeech || null;
+  useEffect(() => {
+    if (!grandmaEnabled || !activeGrandmaSpeech?.text) return undefined;
+    const now = tournamentStore.getServerNow();
+    const expiresAt = Number(activeGrandmaSpeech.expiresAt) || 0;
+    const remaining = expiresAt - now;
+    if (remaining <= 0) return undefined;
+    const id = setTimeout(() => setGrandmaTick((n) => (n + 1) % 100000), remaining + 120);
+    return () => clearTimeout(id);
+  }, [grandmaEnabled, activeGrandmaSpeech?.id, activeGrandmaSpeech?.expiresAt]);
+
+  const liveGrandmaQuote = useMemo(() => {
+    if (!grandmaEnabled || !activeGrandmaSpeech?.text) return null;
+    const now = tournamentStore.getServerNow();
+    const expiresAt = Number(activeGrandmaSpeech.expiresAt) || 0;
+    if (expiresAt > 0 && expiresAt <= now) return null;
+    return activeGrandmaSpeech;
+  }, [grandmaEnabled, activeGrandmaSpeech, grandmaTick]);
 
   const playerMap = useMemo(() => {
     const map = new Map();
@@ -689,6 +712,17 @@ export default function SpectatorView({
             </section>
           )}
 
+          {/* Live Grandma Commentary Card (great on mobile when CRT corner is collapsed to coffee cup) */}
+          {liveGrandmaQuote && (
+            <div className="spec-grandma-card" role="status" aria-live="polite">
+              <div className="spec-grandma-avatar" aria-hidden="true">👵</div>
+              <div className="spec-grandma-body">
+                <span className="spec-grandma-label">GRANDMA SAYS</span>
+                <p className="spec-grandma-quote">“{liveGrandmaQuote.text}”</p>
+              </div>
+            </div>
+          )}
+
           {/* 3 Native Section Tabs */}
           <nav className="spec-tabs" role="tablist" aria-label="Spectator Sections">
             <button
@@ -970,6 +1004,28 @@ export default function SpectatorView({
           )}
         </div>
       </main>
+
+      {/* Grandma & 4:3 CRT TV Corner (auto-collapses to clickable coffee cup on mobile) */}
+      {grandmaEnabled && (
+        <RetroTVCorner
+          grandmaConfig={state.grandma}
+          tvMuted={state.ui?.tvMuted !== false}
+          hasCustomTvMedia={state.ui?.hasCustomTvMedia}
+          tvMediaSyncKey={state.ui?.tvMediaUpdatedAt ? String(state.ui.tvMediaUpdatedAt) : ''}
+          tvPlaylist={state.ui?.tvPlaylist}
+          tvPlaylistIndex={state.ui?.tvPlaylistIndex ?? 0}
+          tvPlaylistMode={state.ui?.tvPlaylistMode || 'loop'}
+          tvPlaylistPaused={Boolean(state.ui?.tvPlaylistPaused)}
+          visible={state.ui?.showCornerScene !== false}
+          scale={0.78}
+          opacity={state.ui?.cornerOpacity ?? 1.0}
+          bubbleScale={state.ui?.bubbleScale ?? 1.0}
+          variant="corner"
+          inStage={false}
+          viewKey="spectator"
+          allowLocalToggle={true}
+        />
+      )}
     </div>
   );
 }

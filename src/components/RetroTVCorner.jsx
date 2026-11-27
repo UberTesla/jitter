@@ -35,6 +35,7 @@ export default function RetroTVCorner({
   bubbleScale = 1.0,
   variant = 'corner',
   inStage = false,
+  viewKey = null,
   allowLocalToggle = true,
   mediaRefreshToken = 0,
 }) {
@@ -46,11 +47,12 @@ export default function RetroTVCorner({
   const mediaSourceRef = useRef(null);
 
   const resolvedViewKey =
-    inStage
+    viewKey ||
+    (inStage
       ? typeof window !== 'undefined' && window.location.pathname.startsWith('/spectator')
         ? 'spectator'
         : 'present'
-      : 'control';
+      : 'control');
 
   const [mediaSource, setMediaSource] = useState(null); // { url, kind, name, updatedAt, isObjectUrl }
   const [domMediaReady, setDomMediaReady] = useState(false);

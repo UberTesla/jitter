@@ -577,6 +577,66 @@
   color: #fef3c7;
 }
 
+/* ---------- Live Grandma Commentary Card ---------- */
+.spec-grandma-card {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(15, 23, 42, 0.94));
+  border: 1.5px solid rgba(251, 191, 36, 0.55);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.14);
+  animation: specGrandmaPop 0.24s ease-out;
+}
+
+@keyframes specGrandmaPop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.spec-grandma-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.22);
+  border: 1.5px solid rgba(251, 191, 36, 0.65);
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+
+.spec-grandma-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.spec-grandma-label {
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #fbbf24;
+}
+
+.spec-grandma-quote {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #fef3c7;
+  line-height: 1.35;
+}
+
 /* ---------- 3 Native Section Tabs ---------- */
 .spec-tabs {
   display: grid;
