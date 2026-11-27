@@ -6448,7 +6448,7 @@ export class TournamentStore {
           gcsObject: item.gcsObject || '',
           muted: Boolean(item.muted),
           lowData: Boolean(item.lowData),
-          durationSec: Math.max(1, Math.min(3600, Math.round(Number(item.durationSec) || 12))),
+          durationSec: Math.max(1, Math.min(86400, Math.round(Number(item.durationSec) || 12))),
           updatedAt: Number(item.updatedAt) || Date.now(),
         };
         const nextList = [...cur, entry];
@@ -6537,7 +6537,7 @@ export class TournamentStore {
                 ...x,
                 ...(partial.name !== undefined ? { name: String(partial.name).trim() || x.name } : {}),
                 ...(partial.durationSec !== undefined
-                  ? { durationSec: Math.max(1, Math.min(3600, Math.round(Number(partial.durationSec) || 12))) }
+                  ? { durationSec: Math.max(1, Math.min(86400, Math.round(Number(partial.durationSec) || 12))) }
                   : {}),
                 ...(partial.muted !== undefined ? { muted: Boolean(partial.muted) } : {}),
                 ...(partial.lowData !== undefined ? { lowData: Boolean(partial.lowData) } : {}),

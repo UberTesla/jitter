@@ -6,6 +6,7 @@ import {
   saveTvPlaylistItemBlob,
   deleteTvPlaylistItemBlob,
   listCloudTvMediaLibrary,
+  fetchYoutubeVideoMeta,
   parseGifDurationSec,
   resolveEmbedStreamUrl,
 } from '../state/mediaStore.js';
@@ -313,12 +314,18 @@ export default function ControlView({
     const cleanedUrl = tvUrlInput.trim();
     if (!cleanedUrl) return;
     const embedInfo = resolveEmbedStreamUrl(cleanedUrl);
+    const isYoutubeEmbed = embedInfo?.provider === 'youtube';
+    let ytMeta = null;
+    if (isYoutubeEmbed) {
+      ytMeta = await fetchYoutubeVideoMeta(cleanedUrl);
+    }
     const derivedName =
       tvUrlNameInput.trim() ||
+      ytMeta?.title ||
       embedInfo?.defaultName ||
       cleanedUrl.split('/').pop()?.split('?')[0] ||
       'Web Media';
-    let detectedSec = embedInfo ? 60 : null;
+    let detectedSec = ytMeta?.durationSec || (embedInfo ? 60 : null);
     if (!embedInfo && /\.gif(\?|$)/i.test(cleanedUrl)) {
       try {
         const res = await fetch(cleanedUrl);
@@ -330,7 +337,7 @@ export default function ControlView({
         // CORS or network error — fall back to 12s
       }
     }
-    const isYoutubeEmbed = embedInfo?.provider === 'youtube';
+    const finalDurationSec = detectedSec || 12;
     tournamentStore.addTvPlaylistItem({
       id: `tvu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       kind: 'url',
@@ -338,7 +345,7 @@ export default function ControlView({
       url: cleanedUrl,
       muted: isYoutubeEmbed,
       lowData: isYoutubeEmbed,
-      durationSec: detectedSec || 12,
+      durationSec: finalDurationSec,
       updatedAt: Date.now(),
     });
     trackUsageEvent('tv:playlist_add_url', {
@@ -348,11 +355,14 @@ export default function ControlView({
     setTvUrlInput('');
     setTvUrlNameInput('');
     setShowAddUrlRow(false);
+    const mins = Math.floor(finalDurationSec / 60);
+    const secs = finalDurationSec % 60;
+    const durLabel = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
     showToast(
       embedInfo
-        ? `Added ${embedInfo.provider.toUpperCase()} stream "${derivedName}" to CRT TV playlist`
+        ? `Added ${embedInfo.provider.toUpperCase()} "${derivedName}" (${durLabel}) to CRT TV playlist`
         : detectedSec
-        ? `Added "${derivedName}" (${detectedSec}s GIF loop) to CRT TV playlist`
+        ? `Added "${derivedName}" (${durLabel} GIF loop) to CRT TV playlist`
         : `Added "${derivedName}" to CRT TV playlist`
     );
   };
@@ -1234,40 +1244,75 @@ export default function ControlView({
                                 Auto
                               </span>
                             ) : (
-                              <label
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.15rem',
-                                  fontSize: '0.7rem',
-                                  opacity: 0.85,
-                                  flexShrink: 0,
-                                }}
-                                title="Display duration in seconds"
-                              >
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={3600}
-                                  value={item.durationSec ?? 12}
-                                  onChange={(e) =>
-                                    tournamentStore.updateTvPlaylistItem(item.id, {
-                                      durationSec: e.target.value,
-                                    })
-                                  }
-                                  style={{
-                                    width: '42px',
-                                    padding: '0.12rem 0.25rem',
-                                    borderRadius: '4px',
-                                    border: '1px solid rgba(148, 163, 184, 0.3)',
-                                    background: 'rgba(15, 23, 42, 0.85)',
-                                    color: 'inherit',
-                                    fontSize: '0.72rem',
-                                    textAlign: 'center',
-                                  }}
-                                />
-                                <span>s</span>
-                              </label>
+                              (() => {
+                                const totalSec = Math.max(1, Math.round(Number(item.durationSec) || 12));
+                                const durMins = Math.floor(totalSec / 60);
+                                const durSecs = totalSec % 60;
+                                return (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.14rem',
+                                      fontSize: '0.7rem',
+                                      opacity: 0.88,
+                                      flexShrink: 0,
+                                    }}
+                                    title="Display duration (minutes & seconds)"
+                                  >
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={1440}
+                                      aria-label="Duration minutes"
+                                      value={durMins}
+                                      onChange={(e) => {
+                                        const nextM = Math.max(0, Math.min(1440, Math.floor(Number(e.target.value) || 0)));
+                                        const nextTotal = Math.max(1, nextM * 60 + durSecs);
+                                        tournamentStore.updateTvPlaylistItem(item.id, {
+                                          durationSec: nextTotal,
+                                        });
+                                      }}
+                                      style={{
+                                        width: '36px',
+                                        padding: '0.12rem 0.2rem',
+                                        borderRadius: '4px',
+                                        border: '1px solid rgba(148, 163, 184, 0.3)',
+                                        background: 'rgba(15, 23, 42, 0.85)',
+                                        color: 'inherit',
+                                        fontSize: '0.72rem',
+                                        textAlign: 'center',
+                                      }}
+                                    />
+                                    <span>m</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={59}
+                                      aria-label="Duration seconds"
+                                      value={durSecs}
+                                      onChange={(e) => {
+                                        const nextS = Math.max(0, Math.min(59, Math.floor(Number(e.target.value) || 0)));
+                                        const nextTotal = Math.max(1, durMins * 60 + nextS);
+                                        tournamentStore.updateTvPlaylistItem(item.id, {
+                                          durationSec: nextTotal,
+                                        });
+                                      }}
+                                      style={{
+                                        width: '32px',
+                                        padding: '0.12rem 0.2rem',
+                                        borderRadius: '4px',
+                                        border: '1px solid rgba(148, 163, 184, 0.3)',
+                                        background: 'rgba(15, 23, 42, 0.85)',
+                                        color: 'inherit',
+                                        fontSize: '0.72rem',
+                                        textAlign: 'center',
+                                      }}
+                                    />
+                                    <span>s</span>
+                                  </span>
+                                );
+                              })()
                             )}
 
                             {supportsAudio && (

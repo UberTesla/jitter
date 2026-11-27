@@ -434,6 +434,33 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
   };
 }
 
+export async function fetchYoutubeVideoMeta(rawUrl) {
+  if (!rawUrl || typeof fetch === 'undefined') {
+    return { ok: false, durationSec: null, title: null };
+  }
+  const baseUrl = getSyncBaseUrl();
+  if (!baseUrl) {
+    return { ok: false, durationSec: null, title: null };
+  }
+  try {
+    const qs = new URLSearchParams({ url: String(rawUrl).trim() });
+    const res = await fetch(`${baseUrl}/__sync/media/youtube-meta?${qs.toString()}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return { ok: false, durationSec: null, title: null };
+    const data = await res.json();
+    return {
+      ok: Boolean(data?.ok),
+      videoId: data?.videoId || null,
+      title: data?.title || null,
+      durationSec: Number(data?.durationSec) > 0 ? Math.round(Number(data.durationSec)) : null,
+      isLive: Boolean(data?.isLive),
+    };
+  } catch {
+    return { ok: false, durationSec: null, title: null };
+  }
+}
+
 export async function listCloudTvMediaLibrary() {
   if (typeof fetch === 'undefined') {
     return { ok: false, gcsEnabled: false, items: [], error: 'Fetch unavailable' };

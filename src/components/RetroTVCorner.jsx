@@ -391,6 +391,39 @@ export default function RetroTVCorner({
     }
   }, [effectiveMuted, collapsedToMug, isYoutubeLowData, mediaSource?.kind, mediaSource?.provider]);
 
+  // Advance playlist immediately if a YouTube iframe reports ENDED (playerState === 0)
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (mediaSource?.kind !== 'embed' || mediaSource?.provider !== 'youtube') return undefined;
+    if (!hasPlaylist || tvPlaylist.length <= 1 || tvPlaylistPaused || tvPlaylistMode === 'single') {
+      return undefined;
+    }
+    const onMessage = (ev) => {
+      if (!ev || typeof ev.origin !== 'string' || !ev.origin.includes('youtube.com')) return;
+      if (iframeRef.current?.contentWindow && ev.source !== iframeRef.current.contentWindow) return;
+      try {
+        const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        if (msg?.event === 'onStateChange' && msg.info === 0) {
+          advancePlaylistItem();
+        } else if (msg?.event === 'infoDelivery' && msg?.info?.playerState === 0) {
+          advancePlaylistItem();
+        }
+      } catch {
+        // Ignore non-JSON postMessages
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [
+    mediaSource?.kind,
+    mediaSource?.provider,
+    hasPlaylist,
+    tvPlaylist?.length,
+    tvPlaylistPaused,
+    tvPlaylistMode,
+    advancePlaylistItem,
+  ]);
+
   const safeScale = Math.max(0.4, Math.min(1.5, Number(scale) || 1.0));
   const safeOpacity = Math.max(0.15, Math.min(1.0, Number(opacity) || 1.0));
   const scaledWidthPx = Math.round(LOGICAL_WIDTH * safeScale);
@@ -444,6 +477,7 @@ export default function RetroTVCorner({
                     const win = iframeRef.current?.contentWindow;
                     if (!win) return;
                     try {
+                      win.postMessage(JSON.stringify({ event: 'listening' }), '*');
                       if (effectiveMuted || collapsedToMug) {
                         win.postMessage(
                           JSON.stringify({ event: 'command', func: 'mute', args: [] }),

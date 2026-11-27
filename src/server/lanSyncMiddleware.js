@@ -4174,6 +4174,96 @@ export function createLanSyncHandler({
       }
     }
 
+    // 11c. Fetch YouTube video duration & title for CRT TV playlist auto-duration (no API key required)
+    if (pathname === '/__sync/media/youtube-meta' && req.method === 'GET') {
+      const rawUrl = String(urlObj.searchParams.get('url') || '').trim();
+      let videoId = String(urlObj.searchParams.get('v') || '').trim();
+      if (!videoId && rawUrl) {
+        try {
+          const u = new URL(rawUrl);
+          const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+          if (host === 'youtu.be') {
+            videoId = u.pathname.replace(/^\/+/, '').split('/')[0] || '';
+          } else if (host === 'youtube.com' || host === 'm.youtube.com') {
+            if (u.pathname === '/watch') {
+              videoId = u.searchParams.get('v') || '';
+            } else {
+              const m = u.pathname.match(/^\/(?:embed|shorts|live)\/([^/?#]+)/i);
+              if (m) videoId = m[1];
+            }
+          }
+        } catch {
+          // Invalid URL
+        }
+      }
+      if (!videoId || !/^[a-zA-Z0-9_-]{6,20}$/.test(videoId)) {
+        return sendJson(res, 400, { ok: false, error: 'Valid YouTube video URL or ID required' });
+      }
+      try {
+        const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+        const ytRes = await fetch(watchUrl, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(6000) : undefined,
+        });
+        if (!ytRes.ok) {
+          return sendJson(res, 200, { ok: false, videoId, durationSec: null, title: null });
+        }
+        const html = await ytRes.text();
+        let durationSec = null;
+        const lenMatch = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/);
+        if (lenMatch) {
+          const parsed = Number(lenMatch[1]);
+          if (Number.isFinite(parsed) && parsed > 0) {
+            durationSec = Math.min(86400, Math.round(parsed));
+          }
+        }
+        if (!durationSec) {
+          const approxMatch = html.match(/"approxDurationMs"\s*:\s*"(\d+)"/);
+          if (approxMatch) {
+            const parsed = Math.round(Number(approxMatch[1]) / 1000);
+            if (Number.isFinite(parsed) && parsed > 0) {
+              durationSec = Math.min(86400, parsed);
+            }
+          }
+        }
+        const isLive = /"isLiveContent"\s*:\s*true/.test(html) && !durationSec;
+        let title = null;
+        const titleMatch = html.match(/<title>([\s\S]*?)<\/title>/i);
+        if (titleMatch) {
+          const decoded = titleMatch[1]
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/\s*-\s*YouTube\s*$/i, '')
+            .trim();
+          if (decoded && decoded.toLowerCase() !== 'youtube') {
+            title = decoded;
+          }
+        }
+        return sendJson(res, 200, {
+          ok: true,
+          videoId,
+          title,
+          durationSec,
+          isLive,
+        });
+      } catch (err) {
+        return sendJson(res, 200, {
+          ok: false,
+          videoId,
+          durationSec: null,
+          title: null,
+          error: err?.message || 'Could not fetch YouTube metadata',
+        });
+      }
+    }
+
     // 11b. List Reusable Cloud / Server CRT TV Media Library (GCS + in-memory LAN library)
     if (pathname === '/__sync/media/library' && req.method === 'GET') {
       if (!store.tvMediaLibrary) {

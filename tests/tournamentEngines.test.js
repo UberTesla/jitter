@@ -3688,6 +3688,10 @@ test('CRT TV media library endpoint lists uploaded files and parses GCS ListObje
     assert.equal(lib.items[0].id, 'tvm-123-abc');
     assert.equal(lib.items[0].name, 'demo-clip.mp4');
     assert.equal(lib.items[0].kind, 'video');
+
+    // Invalid YouTube URL returns 400 cleanly
+    const badYt = await fetch(`${base}/__sync/media/youtube-meta?url=https://example.com/not-yt`);
+    assert.equal(badYt.status, 400);
   } finally {
     server.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
