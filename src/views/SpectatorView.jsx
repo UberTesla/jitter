@@ -5,6 +5,7 @@ import {
 } from '../state/tournamentStore.js';
 import {
   evaluateMatchState,
+  MATCH_STATUS,
   formatMatchTimer,
   computeMatchElapsedMs,
 } from '../engine/scoringEngine.js';
@@ -101,9 +102,17 @@ export default function SpectatorView({
 
   const stats = useMemo(() => computeTournamentStats(state), [state]);
 
+  const allMatches = useMemo(() => Object.values(state.matches || {}), [state.matches]);
+
   // Identify live/featured matches and upcoming queue
   const { liveMatches, featuredMatch, onDeckQueue, recentResults } = useMemo(() => {
-    const matches = state.matches || [];
+    const matches = allMatches.filter((m) => m && !m.isBye);
+    const sortUpcoming = (a, b) => {
+      if (a.bracket === 'final') return 1;
+      if (b.bracket === 'final') return -1;
+      if (a.round !== b.round) return a.round - b.round;
+      return (a.matchNumber || 0) - (b.matchNumber || 0);
+    };
     const activeMatch =
       matches.find((m) => m.id === state.activeMatchId && !m.completed && m.player1Id && m.player2Id) ||
       null;
@@ -128,19 +137,20 @@ export default function SpectatorView({
     } else {
       // Fallback: first ready uncompleted match
       hero =
-        matches.find((m) => !m.completed && m.player1Id && m.player2Id) || null;
+        matches.filter((m) => !m.completed && m.player1Id && m.player2Id).sort(sortUpcoming)[0] ||
+        null;
     }
 
     // On Deck Queue: ready uncompleted matches not currently started (and not the hero)
     const liveIds = new Set(liveList.map((m) => m.id));
     if (hero) liveIds.add(hero.id);
-    const queue = matches.filter(
-      (m) => !m.completed && !m.started && m.player1Id && m.player2Id && !liveIds.has(m.id)
-    );
+    const queue = matches
+      .filter((m) => !m.completed && !m.started && m.player1Id && m.player2Id && !liveIds.has(m.id))
+      .sort(sortUpcoming);
 
     // Recent completed matches (most recent first)
     const completed = matches
-      .filter((m) => m.completed && !m.isBye && m.player1Id && m.player2Id)
+      .filter((m) => m.completed && m.player1Id && m.player2Id)
       .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
       .slice(0, 12);
 
@@ -150,7 +160,7 @@ export default function SpectatorView({
       onDeckQueue: queue,
       recentResults: completed,
     };
-  }, [state.matches, state.activeMatchId, selectedTableMatchId]);
+  }, [allMatches, state.activeMatchId, selectedTableMatchId]);
 
   // Compute personal status for the claimed player
   const myStatus = useMemo(() => {
@@ -169,8 +179,10 @@ export default function SpectatorView({
       };
     }
 
-    const myLive = (state.matches || []).find(
+    const myLive = allMatches.find(
       (m) =>
+        m &&
+        !m.isBye &&
         !m.completed &&
         (m.started || m.id === state.activeMatchId) &&
         (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId)
@@ -203,8 +215,10 @@ export default function SpectatorView({
       };
     }
 
-    const hasPendingSlot = (state.matches || []).some(
+    const hasPendingSlot = allMatches.some(
       (m) =>
+        m &&
+        !m.isBye &&
         !m.completed &&
         (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId)
     );
@@ -217,8 +231,10 @@ export default function SpectatorView({
       };
     }
 
-    const hasPlayed = (state.matches || []).some(
+    const hasPlayed = allMatches.some(
       (m) =>
+        m &&
+        !m.isBye &&
         m.completed &&
         (m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId)
     );
@@ -237,7 +253,7 @@ export default function SpectatorView({
       title: 'REGISTERED',
       detail: `${myDisplayName} — awaiting tournament start`,
     };
-  }, [claimedEntrantId, claimedPlayerObj, playerMap, state.championId, state.matches, state.activeMatchId, onDeckQueue]);
+  }, [claimedEntrantId, claimedPlayerObj, playerMap, state.championId, allMatches, state.activeMatchId, onDeckQueue]);
 
   // Compute roster rows with live status badges
   const rosterRows = useMemo(() => {
@@ -248,8 +264,8 @@ export default function SpectatorView({
     const liveIds = new Set();
     const onDeckIds = new Set();
     const activeBracketIds = new Set();
-    for (const m of state.matches || []) {
-      if (m.completed) continue;
+    for (const m of allMatches) {
+      if (!m || m.isBye || m.completed) continue;
       if (m.player1Id) activeBracketIds.add(m.player1Id);
       if (m.player2Id) activeBracketIds.add(m.player2Id);
       if (m.started || m.id === state.activeMatchId) {
@@ -293,7 +309,7 @@ export default function SpectatorView({
           isMine: claimedEntrantId === p.id,
         };
       });
-  }, [state.players, state.matches, state.activeMatchId, state.championId, stats.leaderboard, claimedEntrantId]);
+  }, [state.players, allMatches, state.activeMatchId, state.championId, stats.leaderboard, claimedEntrantId]);
 
   const flashFeedback = (msg) => {
     setFeedback(msg);
@@ -333,22 +349,22 @@ export default function SpectatorView({
   const championPlayer = state.championId ? playerMap.get(state.championId) : null;
   const finalMatch = useMemo(() => {
     if (!state.championId) return null;
-    const completed = (state.matches || []).filter(
-      (m) => m.completed && !m.isBye && m.winnerId === state.championId
+    const completed = allMatches.filter(
+      (m) => m && m.completed && !m.isBye && m.winnerId === state.championId
     );
     completed.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
     return completed[0] || null;
-  }, [state.championId, state.matches]);
+  }, [state.championId, allMatches]);
 
   const heroP1 = featuredMatch ? playerMap.get(featuredMatch.player1Id) : null;
   const heroP2 = featuredMatch ? playerMap.get(featuredMatch.player2Id) : null;
 
   const getHeroStatusBadge = () => {
     if (!featuredMatch || !heroEval) return { text: 'READY', tone: 'ready' };
-    if (heroEval.status === 'won') return { text: 'FINAL', tone: 'final' };
+    if (heroEval.status === MATCH_STATUS.WINNER) return { text: 'FINAL', tone: 'final' };
     if (!featuredMatch.started) return { text: 'READY ON TABLE', tone: 'ready' };
     if (heroEval.isSkunkPoint) return { text: '🦨 SKUNK POINT', tone: 'alert' };
-    if (heroEval.status === 'game_point') return { text: '⚡ GAME POINT', tone: 'alert' };
+    if (heroEval.status === MATCH_STATUS.GAME_POINT) return { text: '⚡ GAME POINT', tone: 'alert' };
     if (heroEval.isInDeuceZone) return { text: '🔥 DEUCE', tone: 'deuce' };
     return { text: '● LIVE', tone: 'live' };
   };
@@ -488,7 +504,7 @@ export default function SpectatorView({
                 <button
                   type="button"
                   className="spec-tv-link"
-                  onClick={() => onNavigateMode?.('presentation')}
+                  onClick={() => onNavigateMode?.('present')}
                 >
                   📺 TV Display
                 </button>
@@ -539,10 +555,12 @@ export default function SpectatorView({
                 {/* Side 1 */}
                 <div
                   className={`spec-side-card is-p1 ${
-                    featuredMatch.started && heroEval?.servingSide === 1 && heroEval?.status !== 'won'
+                    featuredMatch.started &&
+                    heroEval?.activeServer === 1 &&
+                    heroEval?.status !== MATCH_STATUS.WINNER
                       ? 'is-serving'
                       : ''
-                  } ${heroEval?.winnerSide === 1 ? 'is-winner' : ''} ${
+                  } ${heroEval?.winnerSlot === 1 ? 'is-winner' : ''} ${
                     claimedEntrantId && featuredMatch.player1Id === claimedEntrantId ? 'is-mine' : ''
                   }`}
                 >
@@ -552,8 +570,8 @@ export default function SpectatorView({
                       <span className="spec-you-tag">YOU</span>
                     )}
                     {featuredMatch.started &&
-                      heroEval?.servingSide === 1 &&
-                      heroEval?.status !== 'won' && (
+                      heroEval?.activeServer === 1 &&
+                      heroEval?.status !== MATCH_STATUS.WINNER && (
                         <span className="spec-serve-badge">● SERVING</span>
                       )}
                   </div>
@@ -563,8 +581,8 @@ export default function SpectatorView({
                       {heroP1.members.map((m, idx) => {
                         const isActiveServer =
                           featuredMatch.started &&
-                          heroEval?.servingSide === 1 &&
-                          heroEval?.status !== 'won' &&
+                          heroEval?.activeServer === 1 &&
+                          heroEval?.status !== MATCH_STATUS.WINNER &&
                           heroEval?.activeServerMemberIndex === idx;
                         return (
                           <span
@@ -586,10 +604,12 @@ export default function SpectatorView({
                 {/* Side 2 */}
                 <div
                   className={`spec-side-card is-p2 ${
-                    featuredMatch.started && heroEval?.servingSide === 2 && heroEval?.status !== 'won'
+                    featuredMatch.started &&
+                    heroEval?.activeServer === 2 &&
+                    heroEval?.status !== MATCH_STATUS.WINNER
                       ? 'is-serving'
                       : ''
-                  } ${heroEval?.winnerSide === 2 ? 'is-winner' : ''} ${
+                  } ${heroEval?.winnerSlot === 2 ? 'is-winner' : ''} ${
                     claimedEntrantId && featuredMatch.player2Id === claimedEntrantId ? 'is-mine' : ''
                   }`}
                 >
@@ -599,8 +619,8 @@ export default function SpectatorView({
                       <span className="spec-you-tag">YOU</span>
                     )}
                     {featuredMatch.started &&
-                      heroEval?.servingSide === 2 &&
-                      heroEval?.status !== 'won' && (
+                      heroEval?.activeServer === 2 &&
+                      heroEval?.status !== MATCH_STATUS.WINNER && (
                         <span className="spec-serve-badge">● SERVING</span>
                       )}
                   </div>
@@ -610,8 +630,8 @@ export default function SpectatorView({
                       {heroP2.members.map((m, idx) => {
                         const isActiveServer =
                           featuredMatch.started &&
-                          heroEval?.servingSide === 2 &&
-                          heroEval?.status !== 'won' &&
+                          heroEval?.activeServer === 2 &&
+                          heroEval?.status !== MATCH_STATUS.WINNER &&
                           heroEval?.activeServerMemberIndex === idx;
                         return (
                           <span
@@ -633,13 +653,13 @@ export default function SpectatorView({
 
               <div className="spec-hero-footer">
                 <span>
-                  Play to {state.rules?.targetScore ?? 11} · Win by {state.rules?.winBy ?? 2} ·
-                  Serve every {state.rules?.serveChangeInterval ?? 2}
+                  Play to {state.rules?.targetPoints ?? 11} · Win by {state.rules?.winBy ?? 2} ·
+                  Serve every {state.rules?.serveRotation ?? 2}
                 </span>
                 <button
                   type="button"
                   className="spec-tv-link"
-                  onClick={() => onNavigateMode?.('presentation')}
+                  onClick={() => onNavigateMode?.('present')}
                 >
                   📺 TV Display
                 </button>
@@ -654,14 +674,14 @@ export default function SpectatorView({
               <p className="spec-waiting-sub">
                 {(state.players || []).length} {isTeams ? 'Teams' : 'Players'} ·{' '}
                 {state.format === 'double' ? 'Double Elimination' : 'Single Elimination'} ·
-                Play to {state.rules?.targetScore ?? 11}
+                Play to {state.rules?.targetPoints ?? 11}
               </p>
               <div className="spec-hero-footer">
                 <span>Waiting for the first match to begin</span>
                 <button
                   type="button"
                   className="spec-tv-link"
-                  onClick={() => onNavigateMode?.('presentation')}
+                  onClick={() => onNavigateMode?.('present')}
                 >
                   📺 TV Display
                 </button>

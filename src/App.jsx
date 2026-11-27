@@ -411,8 +411,11 @@ export default function App() {
     if (perms.role === 'presenter' || (!perms.canAccessSpectator && perms.canAccessPresent)) {
       return 'present';
     }
-    // Spectator ONLY has access to Spectator Mode
-    if (!perms.canScore) return 'spectator';
+    // Spectator has access to Spectator Mode and Presentation View
+    if (!perms.canScore) {
+      if (requestedMode === 'present' && perms.canAccessPresent) return 'present';
+      return 'spectator';
+    }
 
     if (requestedMode === 'spectator') return perms.canAccessSpectator ? 'spectator' : 'present';
     if (requestedMode === 'present') {
