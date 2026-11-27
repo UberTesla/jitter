@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { tournamentStore } from '../state/tournamentStore.js';
+import { tournamentStore, getTableSlots } from '../state/tournamentStore.js';
 import { formatTeamMembers } from '../engine/bracketGenerator.js';
 import { hasGrandmaVariables, resolveGrandmaPhrase } from '../engine/grandmaVariables.js';
 import {
@@ -677,6 +677,116 @@ export default function ControlView({
 
       {/* Main Operator Dashboard */}
       <main className="control-main">
+        {/* Multi-Table Switcher Bar (when tableCount > 1) */}
+        {(state.rules?.tableCount ?? 1) > 1 && (() => {
+          const tableSlots = getTableSlots(state);
+          const pMap = new Map((state.players || []).map((p) => [p.id, p]));
+          return (
+            <div
+              className="scroller"
+              role="tablist"
+              aria-label="Active Tables"
+              style={{
+                display: 'flex',
+                alignItems: 'stretch',
+                gap: '0.45rem',
+                overflowX: 'auto',
+                paddingBottom: '0.2rem',
+              }}
+            >
+              {tableSlots.map((slot) => {
+                const m = slot.match;
+                const isSelected = Boolean(m && activeMatch && m.id === activeMatch.id);
+                const p1Name = m?.player1Id ? pMap.get(m.player1Id)?.name : null;
+                const p2Name = m?.player2Id ? pMap.get(m.player2Id)?.name : null;
+                return (
+                  <button
+                    key={slot.tableNumber}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      cancelPendingRemoval(true);
+                      const res = tournamentStore.selectOrQueueTable(slot.tableNumber);
+                      if (res.ok && res.queued) {
+                        showToast(`Queued next match onto Table ${slot.tableNumber}`);
+                      } else if (!res.ok) {
+                        showToast(res.reason || `Table ${slot.tableNumber} is open`);
+                      }
+                    }}
+                    style={{
+                      flex: tableSlots.length <= 4 ? '1 1 0' : '0 0 auto',
+                      minWidth: '170px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: '0.2rem',
+                      padding: '0.48rem 0.7rem',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: '#f8fafc',
+                      background: isSelected
+                        ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.24), rgba(15, 23, 42, 0.94))'
+                        : 'rgba(15, 23, 42, 0.82)',
+                      border: isSelected
+                        ? '1.5px solid rgba(251, 191, 36, 0.82)'
+                        : slot.isLive
+                        ? '1px solid rgba(34, 197, 94, 0.45)'
+                        : '1px solid rgba(148, 163, 184, 0.24)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.4rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      <span style={{ color: '#fbbf24' }}>TABLE {slot.tableNumber}</span>
+                      <span
+                        style={{
+                          fontSize: '0.64rem',
+                          padding: '0.08rem 0.36rem',
+                          borderRadius: '999px',
+                          background: slot.isLive
+                            ? 'rgba(34, 197, 94, 0.22)'
+                            : slot.isQueued
+                            ? 'rgba(245, 158, 11, 0.2)'
+                            : 'rgba(148, 163, 184, 0.16)',
+                          color: slot.isLive ? '#4ade80' : slot.isQueued ? '#fde68a' : '#94a3b8',
+                        }}
+                      >
+                        {slot.isLive ? '● LIVE' : slot.isQueued ? 'READY' : 'OPEN'}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        width: '100%',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        color: m ? '#f1f5f9' : '#94a3b8',
+                      }}
+                    >
+                      {m
+                        ? `${p1Name || 'TBD'} ${m.score1 ?? 0}–${m.score2 ?? 0} ${p2Name || 'TBD'}`
+                        : '+ Click to queue next match'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* Live Match Scoreboard */}
         <Scoreboard
           match={activeMatch}

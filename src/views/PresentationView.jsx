@@ -5,6 +5,7 @@ import {
   THEME_OPTIONS,
   resolveEffectiveAmbiance,
   normalizeAutoRotateSlides,
+  getLiveTableMatches,
   tournamentStore,
 } from '../state/tournamentStore.js';
 import {
@@ -245,6 +246,29 @@ export default function PresentationView({
   }, [state.players]);
 
   const activeMatch = state.matches?.[state.activeMatchId] || null;
+  const liveTableMatches = React.useMemo(() => getLiveTableMatches(state), [state]);
+  const TABLES_PER_PAGE = 4;
+  const totalTablePages = Math.max(1, Math.ceil(liveTableMatches.length / TABLES_PER_PAGE));
+  const [tablePageIdx, setTablePageIdx] = useState(0);
+  useEffect(() => {
+    setTablePageIdx((prev) => (prev >= totalTablePages ? 0 : prev));
+    if (totalTablePages <= 1) return undefined;
+    const timer = setInterval(() => {
+      setTablePageIdx((prev) => (prev + 1) % totalTablePages);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [totalTablePages]);
+  const clampedTablePage = tablePageIdx % totalTablePages;
+  const visibleTableMatches =
+    liveTableMatches.length > 0
+      ? liveTableMatches.slice(
+          clampedTablePage * TABLES_PER_PAGE,
+          clampedTablePage * TABLES_PER_PAGE + TABLES_PER_PAGE
+        )
+      : activeMatch
+      ? [activeMatch]
+      : [];
+  const splitVisibleMatches = liveTableMatches.slice(0, 2);
   const champion = state.championId ? playerMap.get(state.championId) : null;
   const stats = React.useMemo(() => computeTournamentStats(state), [state]);
   const showMiniBracket = state.ui?.showMiniBracket !== false;
@@ -681,14 +705,51 @@ export default function PresentationView({
                 }`}
             >
               <div className="arena-scoreboard-region">
-                <Scoreboard
-                  match={activeMatch}
-                  players={state.players}
-                  rules={state.rules}
-                  entryMode={state.entryMode || 'singles'}
-                  scoreFont={state.ui?.scoreFont || 'barlow'}
-                  mode="presentation"
-                />
+                {visibleTableMatches.length <= 1 ? (
+                  <Scoreboard
+                    match={visibleTableMatches[0] || activeMatch}
+                    players={state.players}
+                    rules={state.rules}
+                    entryMode={state.entryMode || 'singles'}
+                    scoreFont={state.ui?.scoreFont || 'barlow'}
+                    mode="presentation"
+                  />
+                ) : (
+                  <div className="pres-multitable-wrap">
+                    {totalTablePages > 1 && (
+                      <div className="pres-multitable-pager">
+                        <span>
+                          TABLES {clampedTablePage * TABLES_PER_PAGE + 1}–
+                          {Math.min(
+                            liveTableMatches.length,
+                            (clampedTablePage + 1) * TABLES_PER_PAGE
+                          )}{' '}
+                          OF {liveTableMatches.length}
+                        </span>
+                        <span className="pres-multitable-dots">
+                          Page {clampedTablePage + 1}/{totalTablePages}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      className={`pres-multitable-grid ${
+                        visibleTableMatches.length === 2 ? 'is-two' : 'is-quad'
+                      }`}
+                    >
+                      {visibleTableMatches.map((tm) => (
+                        <Scoreboard
+                          key={tm.id}
+                          match={tm}
+                          players={state.players}
+                          rules={state.rules}
+                          entryMode={state.entryMode || 'singles'}
+                          scoreFont={state.ui?.scoreFont || 'barlow'}
+                          mode="compact"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {onDeckBannerNode}
@@ -738,14 +799,30 @@ export default function PresentationView({
               )}
               <div className="slide-split-layout">
                 <div className="split-primary-col">
-                  <Scoreboard
-                    match={activeMatch}
-                    players={state.players}
-                    rules={state.rules}
-                    entryMode={state.entryMode || 'singles'}
-                    scoreFont={state.ui?.scoreFont || 'barlow'}
-                    mode="compact"
-                  />
+                  {splitVisibleMatches.length <= 1 ? (
+                    <Scoreboard
+                      match={splitVisibleMatches[0] || activeMatch}
+                      players={state.players}
+                      rules={state.rules}
+                      entryMode={state.entryMode || 'singles'}
+                      scoreFont={state.ui?.scoreFont || 'barlow'}
+                      mode="compact"
+                    />
+                  ) : (
+                    <div className="pres-multitable-grid is-split-stack">
+                      {splitVisibleMatches.map((tm) => (
+                        <Scoreboard
+                          key={tm.id}
+                          match={tm}
+                          players={state.players}
+                          rules={state.rules}
+                          entryMode={state.entryMode || 'singles'}
+                          scoreFont={state.ui?.scoreFont || 'barlow'}
+                          mode="compact"
+                        />
+                      ))}
+                    </div>
+                  )}
 
                   {showMiniBracket && (
                     <div className="split-minibracket-wrap">

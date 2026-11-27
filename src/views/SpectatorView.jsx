@@ -140,10 +140,17 @@ export default function SpectatorView({
       matches.find((m) => m.id === state.activeMatchId && !m.completed && m.player1Id && m.player2Id) ||
       null;
 
-    // Matches currently in play (started & not completed)
-    const startedLive = matches.filter(
-      (m) => !m.completed && m.started && m.player1Id && m.player2Id
-    );
+    // Matches currently in play (started & not completed) or explicitly queued on a table in multi-table mode
+    const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
+    const startedLive = matches
+      .filter(
+        (m) =>
+          !m.completed &&
+          m.player1Id &&
+          m.player2Id &&
+          (m.started || (tableCount > 1 && Number(m.tableNumber) >= 1 && Number(m.tableNumber) <= tableCount))
+      )
+      .sort((a, b) => (a.tableNumber || 1) - (b.tableNumber || 1));
     const liveList = [...startedLive];
     if (activeMatch && !liveList.some((m) => m.id === activeMatch.id)) {
       liveList.unshift(activeMatch);

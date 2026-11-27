@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { tournamentStore } from '../state/tournamentStore.js';
+import { tournamentStore, getTableSlots } from '../state/tournamentStore.js';
 import { evaluateMatchState, MATCH_STATUS } from '../engine/scoringEngine.js';
 import { ROLE_LEVEL } from '../engine/roles.js';
 import { formatTeamMembers, findNextReadyMatchId } from '../engine/bracketGenerator.js';
@@ -74,7 +74,14 @@ export default function ScorekeeperView({
   }, []);
 
   const isTeams = state.entryMode === 'teams';
-  const activeMatch = state.matches?.[state.activeMatchId] || null;
+  const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
+  const [lockedTableNum, setLockedTableNum] = useState(null);
+  const tableSlots = useMemo(() => getTableSlots(state), [state]);
+  const lockedSlotMatch =
+    tableCount > 1 && lockedTableNum && lockedTableNum >= 1 && lockedTableNum <= tableCount
+      ? tableSlots[lockedTableNum - 1]?.match || null
+      : null;
+  const activeMatch = lockedSlotMatch || state.matches?.[state.activeMatchId] || null;
   const evalState = evaluateMatchState(activeMatch, state.rules);
 
   const playerMap = useMemo(() => {
@@ -266,7 +273,7 @@ export default function ScorekeeperView({
     score2: activeMatch?.score2 || 0,
     onCommit: (slot, count, playerName) => {
       for (let i = 0; i < count; i += 1) {
-        tournamentStore.subtractPoint(slot);
+        tournamentStore.subtractPoint(slot, { matchId: activeMatch?.id });
       }
       flashFeedback(`Removed ${count} ${count === 1 ? 'point' : 'points'} from ${playerName}`);
     },
@@ -285,7 +292,7 @@ export default function ScorekeeperView({
       return;
     }
     cancelPendingRemoval(true);
-    const res = tournamentStore.addPoint(slot, { requireStarted: true });
+    const res = tournamentStore.addPoint(slot, { matchId: activeMatch?.id, requireStarted: true });
     if (res && res.requiresStart) {
       flashFeedback('Tap ▶ BEGIN MATCH to start scoring');
       return;
@@ -302,7 +309,7 @@ export default function ScorekeeperView({
 
   const handleConfirmDebounceOverride = (slot) => {
     setDebounceRequest(null);
-    tournamentStore.addPoint(slot, { bypassDebounce: true, requireStarted: true });
+    tournamentStore.addPoint(slot, { matchId: activeMatch?.id, bypassDebounce: true, requireStarted: true });
     flashFeedback(`+1 point added for ${resolveSlotName(slot)} (override)`);
   };
 
@@ -335,7 +342,7 @@ export default function ScorekeeperView({
       } else if (e.key === 's' || e.key === 'S') {
         if (!canScoreRole) return;
         e.preventDefault();
-        tournamentStore.switchFirstServer();
+        tournamentStore.switchFirstServer({ matchId: activeMatch?.id });
       } else if (e.key === 'x' || e.key === 'X') {
         if (!canScoreRole) return;
         e.preventDefault();
@@ -515,11 +522,23 @@ export default function ScorekeeperView({
     ((activeMatch.score1 || 0) > 0 || (activeMatch.score2 || 0) > 0)
   );
 
-  const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
   const activeTableNum = Math.max(
     1,
-    Math.min(tableCount, Math.floor(Number(activeMatch?.tableNumber) || 1))
+    Math.min(tableCount, Math.floor(Number(lockedTableNum || activeMatch?.tableNumber) || 1))
   );
+
+  const handleSelectScorekeeperTable = (nextTableNum) => {
+    const clamped = Math.max(1, Math.min(tableCount, Math.floor(Number(nextTableNum) || 1)));
+    const res = tournamentStore.selectOrQueueTable(clamped, { setAsActive: false });
+    setLockedTableNum(clamped);
+    if (res.ok && res.queued) {
+      flashFeedback(`🏓 Queued next match on Table ${clamped}`);
+    } else if (res.ok) {
+      flashFeedback(`🏓 Switched to Table ${clamped}`);
+    } else {
+      flashFeedback(res.reason || `Table ${clamped} is open`);
+    }
+  };
 
   const activeP1 = activeMatch?.player1Id ? playerMap.get(activeMatch.player1Id) : null;
   const activeP2 = activeMatch?.player2Id ? playerMap.get(activeMatch.player2Id) : null;
@@ -574,6 +593,25 @@ export default function ScorekeeperView({
               </button>
             )}
             {isPopout && <span className="sk-badge-title">🎯 SCOREKEEPER</span>}
+            {tableCount > 1 && (
+              <select
+                className="table-select-pill"
+                value={activeTableNum}
+                onChange={(e) => handleSelectScorekeeperTable(Number(e.target.value))}
+                aria-label="Switch active table"
+                title="Switch which table this Scorekeeper device is scoring"
+              >
+                {Array.from({ length: tableCount }, (_, idx) => {
+                  const slot = tableSlots[idx];
+                  const tag = slot?.isLive ? ' ●' : slot?.isQueued ? ' ○' : '';
+                  return (
+                    <option key={idx + 1} value={idx + 1}>
+                      Table {idx + 1}{tag}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
             <button
               type="button"
               className={`sk-match-trigger ${isMatchInProgress || !canScoreRole ? 'is-locked' : ''}`}
@@ -657,16 +695,18 @@ export default function ScorekeeperView({
               <select
                 className="table-select-pill"
                 value={activeTableNum}
-                onChange={(e) =>
-                  tournamentStore.setMatchTable(activeMatch.id, Number(e.target.value))
-                }
-                aria-label="Select table for this match"
+                onChange={(e) => handleSelectScorekeeperTable(Number(e.target.value))}
+                aria-label="Switch active table"
               >
-                {Array.from({ length: tableCount }, (_, idx) => (
-                  <option key={idx + 1} value={idx + 1}>
-                    Table {idx + 1}
-                  </option>
-                ))}
+                {Array.from({ length: tableCount }, (_, idx) => {
+                  const slot = tableSlots[idx];
+                  const tag = slot?.isLive ? ' (Live)' : slot?.isQueued ? ' (Ready)' : ' (Open)';
+                  return (
+                    <option key={idx + 1} value={idx + 1}>
+                      Table {idx + 1}{tag}
+                    </option>
+                  );
+                })}
               </select>
             )}
             {needsScoreboardUpdate && (
@@ -753,7 +793,7 @@ export default function ScorekeeperView({
           <button
             type="button"
             className="btn-secondary"
-            onClick={() => tournamentStore.switchFirstServer()}
+            onClick={() => tournamentStore.switchFirstServer({ matchId: activeMatch?.id })}
             disabled={!canScoreRole || !activeMatch || activeMatch.completed}
           >
             ⇄ 1st Server <kbd>S</kbd>
@@ -807,7 +847,7 @@ export default function ScorekeeperView({
           onClick={() => {
             cancelPendingRemoval(true);
             const label = activeMatch?.label;
-            tournamentStore.completeActiveMatch();
+            tournamentStore.completeActiveMatch(activeMatch?.id);
             flashFeedback(`Completed ${label} — next match loaded!`);
           }}
         >

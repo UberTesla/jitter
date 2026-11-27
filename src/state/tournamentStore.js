@@ -1208,6 +1208,116 @@ export function pickNextAvailableTableNumber(matches, tableCount = 1, excludeMat
 }
 
 /**
+ * Finds the next ready, unstarted, uncompleted match that is not already assigned to another table.
+ */
+export function findNextUnassignedMatchForTable(matches, tableCount = 1, excludeIds = []) {
+  const excluded = new Set(Array.isArray(excludeIds) ? excludeIds.filter(Boolean) : [excludeIds].filter(Boolean));
+  const bracketOrder = { winners: 0, losers: 1, finals: 2 };
+  const candidates = Object.values(matches || {})
+    .filter((m) => {
+      if (!m || m.isBye || m.completed || m.started) return false;
+      if (!m.player1Id || !m.player2Id) return false;
+      if (excluded.has(m.id)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const ba = bracketOrder[a.bracket] ?? 9;
+      const bb = bracketOrder[b.bracket] ?? 9;
+      if (ba !== bb) return ba - bb;
+      if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0);
+      return (a.matchNumber || 0) - (b.matchNumber || 0);
+    });
+  return candidates[0] || null;
+}
+
+/**
+ * Returns one slot descriptor per configured table (`1..tableCount`):
+ * `{ tableNumber, match, isLive, isQueued }`.
+ */
+export function getTableSlots(state) {
+  const count = Math.max(1, Math.floor(Number(state?.rules?.tableCount ?? 1) || 1));
+  const matchesObj = state?.matches || {};
+  const slots = Array.from({ length: count }, (_, idx) => ({
+    tableNumber: idx + 1,
+    match: null,
+    isLive: false,
+    isQueued: false,
+  }));
+  const usedMatchIds = new Set();
+
+  // 1. Place all live (started, uncompleted) matches onto their assigned table
+  const liveMatches = Object.values(matchesObj)
+    .filter((m) => m && !m.isBye && !m.completed && m.started && m.player1Id && m.player2Id)
+    .sort((a, b) => (a.tableNumber || 1) - (b.tableNumber || 1) || (a.startedAt || 0) - (b.startedAt || 0));
+
+  for (const m of liveMatches) {
+    const t = Math.max(1, Math.min(count, Math.floor(Number(m.tableNumber) || 1)));
+    const slot = slots[t - 1];
+    if (slot && !slot.match) {
+      slot.match = m;
+      slot.isLive = true;
+      usedMatchIds.add(m.id);
+    }
+  }
+
+  // 2. Place explicitly table-assigned unstarted matches onto open tables
+  const queuedMatches = Object.values(matchesObj)
+    .filter(
+      (m) =>
+        m &&
+        !m.isBye &&
+        !m.completed &&
+        !m.started &&
+        m.player1Id &&
+        m.player2Id &&
+        !usedMatchIds.has(m.id) &&
+        Number(m.tableNumber) >= 1 &&
+        Number(m.tableNumber) <= count
+    )
+    .sort((a, b) => (a.tableNumber || 1) - (b.tableNumber || 1));
+
+  for (const m of queuedMatches) {
+    const t = Math.max(1, Math.min(count, Math.floor(Number(m.tableNumber) || 1)));
+    const slot = slots[t - 1];
+    if (slot && !slot.match) {
+      slot.match = m;
+      slot.isQueued = true;
+      usedMatchIds.add(m.id);
+    }
+  }
+
+  // 3. Ensure activeMatchId (if ready & uncompleted) is shown on its table if that table is open
+  const active = state?.activeMatchId ? matchesObj[state.activeMatchId] : null;
+  if (active && !active.isBye && !active.completed && active.player1Id && active.player2Id && !usedMatchIds.has(active.id)) {
+    const t = Math.max(1, Math.min(count, Math.floor(Number(active.tableNumber) || 1)));
+    const slot = slots[t - 1];
+    if (slot && !slot.match) {
+      slot.match = active;
+      slot.isLive = Boolean(active.started);
+      slot.isQueued = !active.started;
+      usedMatchIds.add(active.id);
+    }
+  }
+
+  return slots;
+}
+
+/**
+ * Returns the list of matches to display simultaneously across tables on Presentation & Spectator views.
+ * - When 1+ matches are actively started/queued across multiple tables, returns them ordered by tableNumber.
+ * - Falls back to `[activeMatch]` so 1-table and pre-start views work seamlessly.
+ */
+export function getLiveTableMatches(state) {
+  const slots = getTableSlots(state);
+  const live = slots.filter((s) => s.match && s.isLive).map((s) => s.match);
+  if (live.length > 0) return live;
+  const queued = slots.filter((s) => s.match).map((s) => s.match);
+  if (queued.length > 0) return queued;
+  const active = state?.activeMatchId ? state?.matches?.[state.activeMatchId] : null;
+  return active ? [active] : [];
+}
+
+/**
  * Pure helper evaluating whether a scored point should trigger a Game Point or
  * random Contextual Grandma quote. Exported for unit testing.
  */
@@ -5533,12 +5643,75 @@ export class TournamentStore {
     });
   }
 
+  /**
+   * Switches to a specific table (1..tableCount):
+   * - If that table already has a live or queued match, returns that match.
+   * - If that table is open, automatically queues the next ready unassigned match onto that table
+   *   so Table 2+ never shows Table 1's players!
+   */
+  selectOrQueueTable(tableNumber, { setAsActive = true } = {}) {
+    const base = this.isStudioActive() ? this.state : this.programState;
+    const tableCount = Math.max(1, Math.floor(Number(base.rules?.tableCount ?? 1) || 1));
+    const clampedTable = Math.max(1, Math.min(tableCount, Math.floor(Number(tableNumber) || 1)));
+    const slots = getTableSlots(base);
+    const slot = slots[clampedTable - 1];
+
+    if (slot?.match) {
+      if (setAsActive && base.activeMatchId !== slot.match.id) {
+        this.commit((s) => ({ ...s, activeMatchId: slot.match.id }));
+      }
+      return {
+        ok: true,
+        tableNumber: clampedTable,
+        matchId: slot.match.id,
+        queued: false,
+        isLive: slot.isLive,
+      };
+    }
+
+    const occupiedIds = slots.map((s) => s.match?.id).filter(Boolean);
+    const nextMatch = findNextUnassignedMatchForTable(base.matches, tableCount, occupiedIds);
+    if (!nextMatch) {
+      return {
+        ok: false,
+        open: true,
+        tableNumber: clampedTable,
+        matchId: null,
+        reason: `No other ready matches to queue on Table ${clampedTable} yet`,
+      };
+    }
+
+    this.commit(
+      (s) => {
+        const m = s.matches?.[nextMatch.id];
+        if (!m || m.isBye || m.completed) return s;
+        return {
+          ...s,
+          ...(setAsActive ? { activeMatchId: m.id } : {}),
+          matches: {
+            ...s.matches,
+            [m.id]: { ...m, tableNumber: clampedTable },
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+
+    return {
+      ok: true,
+      tableNumber: clampedTable,
+      matchId: nextMatch.id,
+      queued: true,
+      isLive: false,
+    };
+  }
+
   addPoint(
     playerSlot,
-    { bypassDebounce = false, requireStarted = false, now = Date.now(), randomFn = Math.random } = {}
+    { matchId = null, bypassDebounce = false, requireStarted = false, now = Date.now(), randomFn = Math.random } = {}
   ) {
     const activeState = this.isStudioActive() ? this.state : this.programState;
-    const effectiveMatchId = this.localPreviewMatchId || activeState.activeMatchId;
+    const effectiveMatchId = matchId || this.localPreviewMatchId || activeState.activeMatchId;
     const currentMatch = activeState.matches?.[effectiveMatchId];
     if (
       requireStarted &&
@@ -5573,8 +5746,10 @@ export class TournamentStore {
     }
 
     let changed = false;
-    const targetMatchId = this.localPreviewMatchId || activeState.activeMatchId;
-    this.localPreviewMatchId = null;
+    const targetMatchId = matchId || this.localPreviewMatchId || activeState.activeMatchId;
+    if (!matchId) {
+      this.localPreviewMatchId = null;
+    }
 
     this.commitScoreAction((s) => {
       const match = s.matches[targetMatchId];
@@ -5635,9 +5810,10 @@ export class TournamentStore {
     return { accepted: changed, remainingMs: 0 };
   }
 
-  subtractPoint(playerSlot) {
+  subtractPoint(playerSlot, { matchId = null } = {}) {
     return this.commitScoreAction((s) => {
-      const match = s.matches[s.activeMatchId];
+      const targetId = matchId || s.activeMatchId;
+      const match = s.matches[targetId];
       if (!match || match.isBye) return s;
       const updated = adjustMatchScore(match, playerSlot, -1, s.rules);
       if (updated === match) return s;
@@ -5657,9 +5833,10 @@ export class TournamentStore {
     });
   }
 
-  undoPoint() {
+  undoPoint({ matchId = null } = {}) {
     return this.commitScoreAction((s) => {
-      const match = s.matches[s.activeMatchId];
+      const targetId = matchId || s.activeMatchId;
+      const match = s.matches[targetId];
       if (!match || match.isBye) return s;
       const updated = undoLastPoint(match);
       if (updated === match) return s;
@@ -5679,10 +5856,10 @@ export class TournamentStore {
     });
   }
 
-  switchFirstServer() {
+  switchFirstServer({ matchId = null } = {}) {
     // If locally previewing an unstarted match, toggle initial server locally until Begin Match is clicked
-    const previewId = this.localPreviewMatchId;
-    if (previewId) {
+    const previewId = matchId || this.localPreviewMatchId;
+    if (!matchId && previewId) {
       const m = this.state.matches?.[previewId];
       if (!m || m.isBye || m.completed) return this.state;
       const updated = toggleInitialServer(m);
@@ -5696,7 +5873,8 @@ export class TournamentStore {
     }
 
     return this.commitScoreAction((s) => {
-      const match = s.matches[s.activeMatchId];
+      const targetId = matchId || s.activeMatchId;
+      const match = s.matches[targetId];
       if (!match || match.isBye) return s;
       const updated = toggleInitialServer(match);
       if (updated === match) return s;
@@ -5753,9 +5931,10 @@ export class TournamentStore {
     });
   }
 
-  completeActiveMatch() {
+  completeActiveMatch(matchId = null) {
     return this.commitScoreAction((s) => {
-      const prevMatchId = s.activeMatchId;
+      const prevMatchId = matchId || s.activeMatchId;
+      const finishedTable = Math.max(1, Math.floor(Number(s.matches?.[prevMatchId]?.tableNumber) || 1));
       const result = completeMatchAndAdvance(
         s.matches,
         prevMatchId,
@@ -5765,7 +5944,29 @@ export class TournamentStore {
       );
       if (!result.completed) return s;
 
-      const finishedMatch = result.matches[prevMatchId];
+      const tableCount = Math.max(1, Math.floor(Number(s.rules?.tableCount ?? 1) || 1));
+      let nextMatches = result.matches;
+      let nextActiveMatchId = result.nextActiveMatchId;
+      if (tableCount > 1) {
+        // Queue the next unassigned ready match directly onto the table that just finished
+        // without disturbing any other table's live match!
+        const occupiedIds = Object.values(nextMatches || {})
+          .filter((m) => m && !m.isBye && !m.completed && m.started)
+          .map((m) => m.id);
+        const nextForFinishedTable = findNextUnassignedMatchForTable(nextMatches, tableCount, occupiedIds);
+        if (nextForFinishedTable) {
+          nextMatches = {
+            ...nextMatches,
+            [nextForFinishedTable.id]: {
+              ...nextForFinishedTable,
+              tableNumber: finishedTable,
+            },
+          };
+          nextActiveMatchId = nextForFinishedTable.id;
+        }
+      }
+
+      const finishedMatch = nextMatches[prevMatchId];
       const now = Date.now();
       const completedEvent = {
         id: now + Math.floor(Math.random() * 10000),
@@ -5786,8 +5987,8 @@ export class TournamentStore {
 
       return {
         ...s,
-        matches: result.matches,
-        activeMatchId: result.nextActiveMatchId,
+        matches: nextMatches,
+        activeMatchId: nextActiveMatchId,
         championId: result.championId || s.championId,
         lastCompletedEvent: completedEvent,
         presentation: nextPresentation,

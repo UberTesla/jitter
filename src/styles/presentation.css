@@ -131,6 +131,62 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
 }
 
+.pres-multitable-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.pres-multitable-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.28rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.pres-multitable-dots {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.pres-multitable-grid {
+  width: 100%;
+  display: grid;
+  gap: 0.85rem;
+  align-items: stretch;
+}
+
+.pres-multitable-grid.is-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pres-multitable-grid.is-quad {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.pres-multitable-grid.is-quad .scoreboard-card {
+  padding: 0.65rem 0.8rem;
+}
+
+.pres-multitable-grid.is-quad .score-digit {
+  font-size: clamp(2.1rem, 3.2vw, 3rem);
+}
+
+.pres-multitable-grid.is-split-stack {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+}
+
 .presentation-stage-scaler .scoreboard-vs {
   flex-direction: column !important;
   padding: 0 0.25rem !important;

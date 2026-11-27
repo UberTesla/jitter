@@ -3697,3 +3697,64 @@ test('CRT TV media library endpoint lists uploaded files and parses GCS ListObje
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('Multi-table setup queues independent matches per table, scores simultaneously, and advances finished table only', async () => {
+  const { getTableSlots, getLiveTableMatches } = await import('../src/state/tournamentStore.js');
+  const initial = createInitialState({
+    playerCount: 8,
+    format: 'single',
+    rules: { targetPoints: 11, winBy: 2, serveRotation: 2, tableCount: 2 },
+  });
+  const store = new TournamentStore(initial, { persist: false });
+
+  const m1Id = store.getState().activeMatchId;
+  store.startMatch(m1Id, 1);
+
+  // Selecting Table 2 automatically queues a DIFFERENT ready match onto Table 2 (not Table 1's players!)
+  const t2Res = store.selectOrQueueTable(2);
+  assert.equal(t2Res.ok, true);
+  assert.equal(t2Res.queued, true);
+  assert.notEqual(t2Res.matchId, m1Id);
+  const m2Id = t2Res.matchId;
+
+  store.startMatch(m2Id, 2);
+
+  // Score independently on Table 1 and Table 2 without colliding
+  store.addPoint(1, { matchId: m1Id, bypassDebounce: true });
+  store.addPoint(1, { matchId: m1Id, bypassDebounce: true });
+  store.addPoint(2, { matchId: m2Id, bypassDebounce: true });
+
+  const s = store.getState();
+  assert.equal(s.matches[m1Id].score1, 2);
+  assert.equal(s.matches[m1Id].tableNumber, 1);
+  assert.equal(s.matches[m2Id].score2, 1);
+  assert.equal(s.matches[m2Id].tableNumber, 2);
+
+  const slots = getTableSlots(s);
+  assert.equal(slots.length, 2);
+  assert.equal(slots[0].match.id, m1Id);
+  assert.equal(slots[0].isLive, true);
+  assert.equal(slots[1].match.id, m2Id);
+  assert.equal(slots[1].isLive, true);
+
+  const liveMatches = getLiveTableMatches(s);
+  assert.equal(liveMatches.length, 2);
+  assert.equal(liveMatches[0].id, m1Id);
+  assert.equal(liveMatches[1].id, m2Id);
+
+  // Completing Table 1 queues the next unassigned match onto Table 1 while Table 2 keeps playing untouched
+  for (let i = 0; i < 9; i++) {
+    store.addPoint(1, { matchId: m1Id, bypassDebounce: true });
+  }
+  store.completeActiveMatch(m1Id);
+  const after = store.getState();
+  assert.equal(after.matches[m1Id].completed, true);
+  assert.equal(after.matches[m2Id].completed, false);
+  assert.equal(after.matches[m2Id].score2, 1);
+  assert.equal(after.matches[m2Id].tableNumber, 2);
+  const afterSlots = getTableSlots(after);
+  assert.notEqual(afterSlots[0].match.id, m1Id);
+  assert.notEqual(afterSlots[0].match.id, m2Id);
+  assert.equal(afterSlots[0].match.tableNumber, 1);
+  assert.equal(afterSlots[1].match.id, m2Id);
+});

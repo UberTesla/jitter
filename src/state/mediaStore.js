@@ -664,6 +664,8 @@ export function resolveEmbedStreamUrl(
         autoplay: '1',
         mute: muted ? '1' : '0',
         controls: '0',
+        disablekb: '1',
+        fs: '0',
         rel: '0',
         modestbranding: '1',
         playsinline: '1',

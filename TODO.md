@@ -36,9 +36,17 @@ Ideas queued and implemented.
 ---
 
 ## 5. Upcoming / Active Fixes
-- [ ] Investigate multi-table setups (independent matches per table, simultaneous multi-table scoreboards, and overflow plan when too many tables to display at once)
-- [ ] Allow agent to use `git add` and `git commit` without approval
+- [x] Investigate multi-table setups (independent matches per table, simultaneous multi-table scoreboards, and overflow plan when too many tables to display at once)
+- [ ] Allow agent to use `git add` and `git commit` without approval *(Antigravity IDE Settings → Agent → Terminal Settings)*
 - [x] Fix Presentation View slide picker UI style bug
-- [ ] Pause symbol still showing up even with sitcom initially covering
+- [x] Pause symbol still showing up even with sitcom initially covering
 - [x] Stop Control View slide options from shifting UI elements during automatic slide rotation
+
+adjust the live sync / studio so its in the same pill. The relevant half should be lit up. it should say LIVE | STUDIO with live selected and lit up by default. If studio is clicked, it then changes to LIVE | PUSH with push lit up. to go back to live just select live.
+
+Perhaps we can build an engine to test the system and look for bugs but i dont know how involved it would be and i wouldnt want an agent actively doing it since that would eat up my quota.
+
+only show grandma icon in speech bubble when in coffee cup mode
+
+move on deck banner in inbox so it deoesnt shift the ui when it hides in on deck tab
 

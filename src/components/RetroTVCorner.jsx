@@ -45,6 +45,7 @@ export default function RetroTVCorner({
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
   const youtubeRevealTimerRef = useRef(null);
+  const youtubeSawMessageRef = useRef(false);
   const objectUrlRef = useRef(null);
   const mediaSourceRef = useRef(null);
 
@@ -449,6 +450,7 @@ export default function RetroTVCorner({
       if (iframeRef.current?.contentWindow && ev.source !== iframeRef.current.contentWindow) return;
       try {
         const msg = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        youtubeSawMessageRef.current = true;
         if (msg?.event === 'infoDelivery' && msg?.info) {
           const reportedDur = Number(msg.info.duration);
           const reportedTitle = String(msg.info.videoData?.title || '').trim();
@@ -487,8 +489,8 @@ export default function RetroTVCorner({
           msg?.event === 'infoDelivery' && typeof msg?.info?.currentTime === 'number'
             ? msg.info.currentTime
             : null;
-        if (currentTime !== null && currentTime >= 1.2 && playerState !== 2 && playerState !== 0) {
-          // Playback has progressed past YouTube's initial play/pause bezel & title overlay
+        if (currentTime !== null && currentTime >= 3.2 && playerState !== 2 && playerState !== 0) {
+          // Past YouTube's 3-second autohide fade so play/pause bezel & title chrome are 100% gone
           disableYoutubeCaptions();
           if (youtubeRevealTimerRef.current) {
             clearTimeout(youtubeRevealTimerRef.current);
@@ -496,15 +498,14 @@ export default function RetroTVCorner({
           }
           setDomMediaReady(true);
         } else if (playerState === 1) {
-          // Video is actively playing — strip captions and wait 1200ms for YouTube's play/pause
-          // bezel + title overlay to completely fade out before revealing the CRT glass cutout.
+          // Video is actively playing — strip captions and wait 3100ms for YouTube's autohide
+          // timer to completely clear the play/pause bezel and title overlay before revealing.
           disableYoutubeCaptions();
-          if (!domMediaReady) {
-            if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
+          if (!domMediaReady && !youtubeRevealTimerRef.current) {
             youtubeRevealTimerRef.current = setTimeout(() => {
               youtubeRevealTimerRef.current = null;
               setDomMediaReady(true);
-            }, 1200);
+            }, 3100);
           }
         } else if (playerState === 3 || playerState === 2 || playerState === -1) {
           // Buffering, paused, or unstarted — keep YouTube's play/pause/spinner hidden behind CRT canvas
@@ -591,6 +592,7 @@ export default function RetroTVCorner({
                     setDomMediaReady(true);
                     return;
                   }
+                  youtubeSawMessageRef.current = false;
                   const sendListening = () => {
                     const win = iframeRef.current?.contentWindow;
                     if (!win) return;
@@ -599,12 +601,6 @@ export default function RetroTVCorner({
                         JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
                         '*'
                       );
-                      if (effectiveMuted || collapsedToMug) {
-                        sendYoutubeCommand('mute');
-                      }
-                      if (youtubeQuality && youtubeQuality !== 'auto') {
-                        sendYoutubeCommand('setPlaybackQuality', [youtubeQuality]);
-                      }
                       disableYoutubeCaptions();
                     } catch {
                       // Ignore cross-origin postMessage errors
@@ -612,12 +608,14 @@ export default function RetroTVCorner({
                   };
                   sendListening();
                   setTimeout(sendListening, 450);
-                  // Safety fallback only if a browser/extension blocks YouTube postMessage events
+                  // Safety fallback ONLY if YouTube postMessage is completely blocked by an extension
                   if (youtubeRevealTimerRef.current) clearTimeout(youtubeRevealTimerRef.current);
                   youtubeRevealTimerRef.current = setTimeout(() => {
                     youtubeRevealTimerRef.current = null;
-                    setDomMediaReady(true);
-                  }, 6000);
+                    if (!youtubeSawMessageRef.current) {
+                      setDomMediaReady(true);
+                    }
+                  }, 5500);
                 }}
               />
             ) : mediaSource.kind === 'video' ? (
