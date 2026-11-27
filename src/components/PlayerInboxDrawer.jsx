@@ -903,8 +903,9 @@ export default function PlayerInboxDrawer({
 
             <div className="inbox-drawer-body">
               <div className="inbox-drawer-sidebar scroller">
-            {/* Banner 1 (All Categories): Smart On Deck Banner directly under header/mini scoreboard */}
-            {(upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
+            {/* Banner 1 (All Categories except On Deck tab where queue & status are already shown) */}
+            {activeTab !== 'ondeck' &&
+              (upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
               <button
                 type="button"
                 onClick={() => setActiveTab('ondeck')}
