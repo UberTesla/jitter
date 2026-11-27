@@ -33,6 +33,8 @@ import {
   buildGcsObjectName,
   buildGcsPublicUrl,
   getGcsConfig,
+  parseGcsListXml,
+  signGcsListV4Url,
   signGcsV4Url,
 } from './gcsMediaSigner.js';
 
@@ -4170,6 +4172,64 @@ export function createLanSyncHandler({
       } catch (err) {
         return sendJson(res, 400, { error: err?.message || 'Could not sign GCS upload URL' });
       }
+    }
+
+    // 11b. List Reusable Cloud / Server CRT TV Media Library (GCS + in-memory LAN library)
+    if (pathname === '/__sync/media/library' && req.method === 'GET') {
+      if (!store.tvMediaLibrary) {
+        store.tvMediaLibrary = new Map();
+      }
+      const gcs = getGcsConfig();
+      const byKey = new Map();
+      let gcsError = null;
+
+      if (gcs) {
+        try {
+          const listUrl = signGcsListV4Url({
+            bucket: gcs.bucket,
+            prefix: gcs.prefix,
+            maxKeys: 100,
+            clientEmail: gcs.clientEmail,
+            privateKey: gcs.privateKey,
+            expiresSec: 300,
+          });
+          const gcsRes = await fetch(listUrl, { method: 'GET' });
+          if (gcsRes.ok) {
+            const xmlText = await gcsRes.text();
+            for (const item of parseGcsListXml(xmlText, gcs.prefix)) {
+              byKey.set(item.gcsObject || item.id, item);
+            }
+          } else {
+            gcsError = `GCS list failed (${gcsRes.status})`;
+          }
+        } catch (err) {
+          gcsError = err?.message || 'Could not list GCS media bucket';
+        }
+      }
+
+      for (const [id, rec] of store.tvMediaLibrary.entries()) {
+        if (!rec || byKey.has(id)) continue;
+        byKey.set(id, {
+          id,
+          name: rec.name || 'TV Media',
+          kind: rec.kind || 'image',
+          type: rec.type || 'application/octet-stream',
+          size: rec.buffer?.length || 0,
+          gcsObject: '',
+          storage: 'lan',
+          updatedAt: rec.updatedAt || 0,
+        });
+      }
+
+      const items = Array.from(byKey.values()).sort(
+        (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+      );
+      return sendJson(res, 200, {
+        ok: true,
+        gcsEnabled: Boolean(gcs),
+        ...(gcsError ? { gcsError } : {}),
+        items,
+      });
     }
 
     // 11. Custom CRT TV Media Sync Across Devices (with HTTP 206 Byte-Range streaming for MP4/WebM)

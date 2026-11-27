@@ -3631,3 +3631,65 @@ test('Returning guest with valid 4-word key auto-reauthorizes after ephemeral se
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('CRT TV media library endpoint lists uploaded files and parses GCS ListObjectsV2 XML', async () => {
+  const { parseGcsListXml } = await import('../src/server/gcsMediaSigner.js');
+  const sampleXml = `<?xml version="1.0" encoding="UTF-8"?>
+    <ListBucketResult>
+      <Contents>
+        <Key>jitter-tv/tvm-1700000000000-ab12-rally-clip.mp4</Key>
+        <LastModified>2026-11-26T22:00:00.000Z</LastModified>
+        <Size>1234567</Size>
+      </Contents>
+      <Contents>
+        <Key>jitter-tv/tvm-1700000001000-cd34-retro-logo.gif</Key>
+        <LastModified>2026-11-26T23:00:00.000Z</LastModified>
+        <Size>45000</Size>
+      </Contents>
+    </ListBucketResult>`;
+  const parsed = parseGcsListXml(sampleXml, 'jitter-tv/');
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].id, 'tvm-1700000001000-cd34');
+  assert.equal(parsed[0].name, 'retro-logo.gif');
+  assert.equal(parsed[0].kind, 'image');
+  assert.equal(parsed[1].id, 'tvm-1700000000000-ab12');
+  assert.equal(parsed[1].name, 'rally-clip.mp4');
+  assert.equal(parsed[1].kind, 'video');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jitter-medialib-'));
+  let port = 0;
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => port });
+  const server = http.createServer((req, res) => {
+    handler(req, res, () => {
+      res.statusCode = 404;
+      res.end('not found');
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  port = server.address().port;
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    const uploadRes = await fetch(`${base}/__sync/media?id=tvm-123-abc`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'video/mp4',
+        'X-Media-Name': encodeURIComponent('demo-clip.mp4'),
+        'X-Media-Type': 'video/mp4',
+        'X-Media-Kind': 'video',
+      },
+      body: Buffer.from('fake-mp4-bytes'),
+    });
+    assert.equal(uploadRes.status, 200);
+
+    const lib = await fetch(`${base}/__sync/media/library`).then((r) => r.json());
+    assert.equal(lib.ok, true);
+    assert.equal(lib.items.length, 1);
+    assert.equal(lib.items[0].id, 'tvm-123-abc');
+    assert.equal(lib.items[0].name, 'demo-clip.mp4');
+    assert.equal(lib.items[0].kind, 'video');
+  } finally {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

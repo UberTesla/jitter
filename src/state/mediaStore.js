@@ -434,6 +434,36 @@ export async function saveTvPlaylistItemBlob(file, { mediaId = '', senderId = ''
   };
 }
 
+export async function listCloudTvMediaLibrary() {
+  if (typeof fetch === 'undefined') {
+    return { ok: false, gcsEnabled: false, items: [], error: 'Fetch unavailable' };
+  }
+  const baseUrl = getSyncBaseUrl();
+  if (!baseUrl) {
+    return { ok: false, gcsEnabled: false, items: [], error: 'Sync server unavailable' };
+  }
+  try {
+    const res = await fetch(`${baseUrl}/__sync/media/library`, { cache: 'no-store' });
+    if (!res.ok) {
+      return { ok: false, gcsEnabled: false, items: [], error: `Library load failed (${res.status})` };
+    }
+    const data = await res.json();
+    return {
+      ok: true,
+      gcsEnabled: Boolean(data?.gcsEnabled),
+      gcsError: data?.gcsError || null,
+      items: Array.isArray(data?.items) ? data.items : [],
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      gcsEnabled: false,
+      items: [],
+      error: err?.message || 'Could not reach sync server',
+    };
+  }
+}
+
 export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '', gcsObject = '' } = {}) {
   if (!mediaId) return;
   await writeLocalMediaRecordByKey(`playlist:${mediaId}`, null);

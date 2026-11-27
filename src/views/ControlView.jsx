@@ -5,6 +5,7 @@ import { hasGrandmaVariables, resolveGrandmaPhrase } from '../engine/grandmaVari
 import {
   saveTvPlaylistItemBlob,
   deleteTvPlaylistItemBlob,
+  listCloudTvMediaLibrary,
   parseGifDurationSec,
   resolveEmbedStreamUrl,
 } from '../state/mediaStore.js';
@@ -47,6 +48,11 @@ export default function ControlView({
   const [liveQuoteInput, setLiveQuoteInput] = useState('');
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
   const [showAddUrlRow, setShowAddUrlRow] = useState(false);
+  const [showCloudLibrary, setShowCloudLibrary] = useState(false);
+  const [cloudLibraryItems, setCloudLibraryItems] = useState([]);
+  const [cloudLibraryLoading, setCloudLibraryLoading] = useState(false);
+  const [cloudLibraryError, setCloudLibraryError] = useState('');
+  const [cloudLibraryGcsEnabled, setCloudLibraryGcsEnabled] = useState(false);
   const [tvUrlInput, setTvUrlInput] = useState('');
   const [tvUrlNameInput, setTvUrlNameInput] = useState('');
   const [tvUploadLog, setTvUploadLog] = useState([]);
@@ -351,16 +357,88 @@ export default function ControlView({
     );
   };
 
-  const handleRemoveTvPlaylistItem = async (item) => {
-    if (item.kind === 'video' || item.kind === 'image') {
-      await deleteTvPlaylistItemBlob(item.id, {
-        senderId: tournamentStore.getTabId(),
-        gcsObject: item.gcsObject || '',
-      });
+  const loadCloudLibrary = async () => {
+    setCloudLibraryLoading(true);
+    setCloudLibraryError('');
+    const res = await listCloudTvMediaLibrary();
+    setCloudLibraryLoading(false);
+    if (!res.ok) {
+      setCloudLibraryError(res.error || 'Could not load cloud media library');
+      return;
     }
+    setCloudLibraryGcsEnabled(Boolean(res.gcsEnabled));
+    setCloudLibraryItems(res.items || []);
+    if (res.gcsError) {
+      setCloudLibraryError(res.gcsError);
+    }
+  };
+
+  const handleToggleCloudLibrary = () => {
+    setShowCloudLibrary((prev) => {
+      const next = !prev;
+      if (next) {
+        loadCloudLibrary();
+      }
+      return next;
+    });
+  };
+
+  const handleAddCloudLibraryItem = (item) => {
+    if (!item || !item.id) return;
+    if (tvPlaylist.some((x) => x.id === item.id || (item.gcsObject && x.gcsObject === item.gcsObject))) {
+      showToast(`"${item.name}" is already in the CRT TV playlist`);
+      return;
+    }
+    tournamentStore.addTvPlaylistItem({
+      id: item.id,
+      kind: item.kind || 'image',
+      name: item.name || 'TV Media',
+      type: item.type || '',
+      gcsObject: item.gcsObject || '',
+      durationSec: 12,
+      updatedAt: item.updatedAt || Date.now(),
+    });
+    trackUsageEvent('tv:playlist_add_from_library', { category: 'control' });
+    setMediaRefreshToken((n) => n + 1);
+    showToast(`Added "${item.name}" from Cloud Library to playlist`);
+  };
+
+  const handleDeleteCloudLibraryItem = async (item) => {
+    if (!item || !item.id) return;
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Permanently delete "${item.name}" from cloud storage?`)
+    ) {
+      return;
+    }
+    await deleteTvPlaylistItemBlob(item.id, {
+      senderId: tournamentStore.getTabId(),
+      gcsObject: item.gcsObject || '',
+    });
+    if (tvPlaylist.some((x) => x.id === item.id || (item.gcsObject && x.gcsObject === item.gcsObject))) {
+      const matching = tvPlaylist.find(
+        (x) => x.id === item.id || (item.gcsObject && x.gcsObject === item.gcsObject)
+      );
+      if (matching) {
+        tournamentStore.removeTvPlaylistItem(matching.id);
+      }
+    }
+    setCloudLibraryItems((prev) =>
+      prev.filter((x) => x.id !== item.id && (!item.gcsObject || x.gcsObject !== item.gcsObject))
+    );
+    trackUsageEvent('tv:library_delete_permanent', { category: 'control' });
+    setMediaRefreshToken((n) => n + 1);
+    showToast(`Permanently deleted "${item.name}"`);
+  };
+
+  const handleRemoveTvPlaylistItem = (item) => {
+    // Only remove from the active playlist queue; keep uploaded files in Cloud/Server Library so they can be re-added!
     tournamentStore.removeTvPlaylistItem(item.id);
     trackUsageEvent('tv:playlist_remove', { category: 'control' });
     setMediaRefreshToken((n) => n + 1);
+    if (item.kind === 'video' || item.kind === 'image') {
+      showToast(`Removed "${item.name}" from queue (still saved in ☁ Library)`);
+    }
   };
 
   const handleAddBuiltInSitcom = () => {
@@ -787,6 +865,14 @@ export default function ControlView({
                       >
                         🔗 Add URL
                       </button>
+                      <button
+                        type="button"
+                        className={`btn-secondary btn-sm ${showCloudLibrary ? 'is-toggled-on' : ''}`}
+                        onClick={handleToggleCloudLibrary}
+                        title="Browse and re-add previously uploaded cloud/server media files"
+                      >
+                        ☁ Library
+                      </button>
                       {!tvPlaylist.some((x) => x.kind === 'sitcom') && (
                         <button
                           type="button"
@@ -836,6 +922,146 @@ export default function ControlView({
                           Add
                         </button>
                       </form>
+                    )}
+
+                    {showCloudLibrary && (
+                      <div
+                        style={{
+                          marginBottom: '0.5rem',
+                          padding: '0.45rem 0.55rem',
+                          borderRadius: '8px',
+                          background: 'rgba(15, 23, 42, 0.72)',
+                          border: '1px solid rgba(56, 189, 248, 0.32)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.4rem',
+                            marginBottom: '0.35rem',
+                            fontSize: '0.74rem',
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, color: '#7dd3fc' }}>
+                            ☁ {cloudLibraryGcsEnabled ? 'Google Cloud Media Library' : 'Uploaded Media Library'} ({cloudLibraryItems.length})
+                          </span>
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={loadCloudLibrary}
+                            disabled={cloudLibraryLoading}
+                            style={{ padding: '0.1rem 0.38rem', fontSize: '0.68rem' }}
+                            title="Refresh cloud media library"
+                          >
+                            {cloudLibraryLoading ? '…' : '↻ Refresh'}
+                          </button>
+                        </div>
+
+                        {cloudLibraryError && (
+                          <div style={{ fontSize: '0.72rem', color: '#fca5a5', marginBottom: '0.3rem' }}>
+                            {cloudLibraryError}
+                          </div>
+                        )}
+
+                        {cloudLibraryLoading && cloudLibraryItems.length === 0 ? (
+                          <div style={{ fontSize: '0.74rem', opacity: 0.7 }}>Loading library…</div>
+                        ) : cloudLibraryItems.length === 0 ? (
+                          <div style={{ fontSize: '0.74rem', opacity: 0.7 }}>
+                            No uploaded files in storage yet. Use “➕ Add Files” to upload videos, GIFs, or images.
+                          </div>
+                        ) : (
+                          <div
+                            className="scroller"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.24rem',
+                              maxHeight: '145px',
+                              overflowY: 'auto',
+                            }}
+                          >
+                            {cloudLibraryItems.map((libItem) => {
+                              const alreadyQueued = tvPlaylist.some(
+                                (x) =>
+                                  x.id === libItem.id ||
+                                  (libItem.gcsObject && x.gcsObject === libItem.gcsObject)
+                              );
+                              const sizeLabel =
+                                libItem.size >= 1024 * 1024
+                                  ? `${(libItem.size / (1024 * 1024)).toFixed(1)} MB`
+                                  : libItem.size > 0
+                                  ? `${Math.max(1, Math.round(libItem.size / 1024))} KB`
+                                  : '';
+                              return (
+                                <div
+                                  key={libItem.gcsObject || libItem.id}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.35rem',
+                                    padding: '0.22rem 0.4rem',
+                                    borderRadius: '6px',
+                                    background: 'rgba(30, 41, 59, 0.65)',
+                                    border: '1px solid rgba(148, 163, 184, 0.16)',
+                                    fontSize: '0.74rem',
+                                  }}
+                                >
+                                  <span style={{ flexShrink: 0 }}>
+                                    {libItem.kind === 'video' ? '🎬' : '🖼️'}
+                                  </span>
+                                  <span
+                                    style={{
+                                      flex: 1,
+                                      minWidth: 0,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                    title={libItem.gcsObject || libItem.name}
+                                  >
+                                    {libItem.name}
+                                  </span>
+                                  {sizeLabel && (
+                                    <span style={{ fontSize: '0.66rem', opacity: 0.65, flexShrink: 0 }}>
+                                      {sizeLabel}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="btn-secondary btn-sm"
+                                    disabled={alreadyQueued}
+                                    onClick={() => handleAddCloudLibraryItem(libItem)}
+                                    title={alreadyQueued ? 'Already in playlist' : 'Add to CRT TV playlist'}
+                                    style={{
+                                      padding: '0.1rem 0.4rem',
+                                      fontSize: '0.68rem',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {alreadyQueued ? 'In Queue' : '+ Add'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary btn-sm"
+                                    onClick={() => handleDeleteCloudLibraryItem(libItem)}
+                                    title="Permanently delete from cloud storage"
+                                    style={{
+                                      padding: '0.1rem 0.34rem',
+                                      fontSize: '0.68rem',
+                                      flexShrink: 0,
+                                      color: '#fca5a5',
+                                    }}
+                                  >
+                                    🗑
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {/* Playback Controls Row */}
