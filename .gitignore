@@ -6,6 +6,7 @@ dist/
 
 # Local runtime sync state & uploaded media
 .jitter-sync-data.json
+qa-report.md
 .jitter-sync-media.bin
 .jitter-sync-media.json
 .jitter-usage-stats.json
