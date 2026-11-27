@@ -903,8 +903,56 @@ export default function PlayerInboxDrawer({
 
             <div className="inbox-drawer-body">
               <div className="inbox-drawer-sidebar scroller">
-            {/* Mini Announcement Banner (dismissible; includes active sticky announcements for newly joined users) */}
-            {latestAnnouncement && (
+            {/* 4-Tab Switcher pinned directly under header so banners appearing/hiding never shift tabs */}
+            <div
+              className="segmented-control compact"
+              style={{ marginTop: 0, marginBottom: 0 }}
+            >
+              <button
+                type="button"
+                className={activeTab === 'live' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('live');
+                  setChatError('');
+                }}
+              >
+                🗣️ Chat{unreadLive > 0 ? ` (${unreadLive})` : ''}
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'messages' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('messages');
+                  setChatError('');
+                }}
+              >
+                💬 Direct{unreadThreadsTotal > 0 ? ` (${unreadThreadsTotal})` : ''}
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'ondeck' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('ondeck');
+                  setChatError('');
+                  trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
+                }}
+              >
+                ⏳ On Deck
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'alerts' ? 'is-selected' : ''}
+                onClick={() => {
+                  setActiveTab('alerts');
+                  setChatError('');
+                }}
+              >
+                📬 Alerts{unreadInbox > 0 ? ` (${unreadInbox})` : ''}
+              </button>
+            </div>
+
+            {/* Mini Announcement Banner (below tab bar; hidden on Alerts tab where full list is shown) */}
+            {activeTab !== 'alerts' && latestAnnouncement && (
               <div
                 style={{
                   display: 'flex',
@@ -978,8 +1026,8 @@ export default function PlayerInboxDrawer({
               </div>
             )}
 
-            {/* Mini Alert Banner directly under the Announcement Banner (dismissible; personal/system alerts) */}
-            {latestAlert && (
+            {/* Mini Alert Banner directly under Announcement Banner (hidden on Alerts tab) */}
+            {activeTab !== 'alerts' && latestAlert && (
               <div
                 style={{
                   display: 'flex',
@@ -1052,57 +1100,7 @@ export default function PlayerInboxDrawer({
               </div>
             )}
 
-            {/* 4-Tab Switcher: Live Chat | Direct & Groups | On Deck / Roster | Alerts & Player */}
-            <div
-              className="segmented-control compact"
-              style={{ marginTop: '0.35rem', marginBottom: 0 }}
-            >
-              <button
-                type="button"
-                className={activeTab === 'live' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('live');
-                  setChatError('');
-                }}
-              >
-                🗣️ Chat{unreadLive > 0 ? ` (${unreadLive})` : ''}
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'messages' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('messages');
-                  setChatError('');
-                }}
-              >
-                💬 Direct{unreadThreadsTotal > 0 ? ` (${unreadThreadsTotal})` : ''}
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'ondeck' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('ondeck');
-                  setChatError('');
-                  trackUsageEvent('chat:tab_ondeck', { category: 'chat' });
-                }}
-              >
-                ⏳ On Deck
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'alerts' ? 'is-selected' : ''}
-                onClick={() => {
-                  setActiveTab('alerts');
-                  setChatError('');
-                }}
-              >
-                📬 Alerts{unreadInbox > 0 ? ` (${unreadInbox})` : ''}
-              </button>
-            </div>
-              </div>
-
-              <div className="inbox-drawer-main">
-            {/* Smart On Deck Banner inside tab body (below tabs so hiding on On Deck tab never shifts the tab bar) */}
+            {/* Smart On Deck Banner directly under Announcements/Alerts (hidden on On Deck tab) */}
             {activeTab !== 'ondeck' &&
               (upNextMatches.length > 0 || myPlayerStatus?.tone === 'playing') && (
               <button
@@ -1116,7 +1114,6 @@ export default function PlayerInboxDrawer({
                   width: '100%',
                   textAlign: 'left',
                   padding: '0.24rem 0.5rem',
-                  marginBottom: '0.35rem',
                   borderRadius: '7px',
                   flexShrink: 0,
                   background:
@@ -1196,6 +1193,9 @@ export default function PlayerInboxDrawer({
                 </span>
               </button>
             )}
+              </div>
+
+              <div className="inbox-drawer-main">
             {chatError && (
               <p className="inbox-feedback" style={{ margin: '0 0 0.35rem', color: '#f87171' }}>
                 {chatError}
