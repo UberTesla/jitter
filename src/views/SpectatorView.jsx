@@ -599,9 +599,6 @@ export default function SpectatorView({
                 >
                   <div className="spec-side-top">
                     <span className="spec-seed">#{heroP1?.seed || 1}</span>
-                    {claimedEntrantId && featuredMatch.player1Id === claimedEntrantId && (
-                      <span className="spec-you-tag">YOU</span>
-                    )}
                     {featuredMatch.started &&
                       heroEval?.activeServer === 1 &&
                       heroEval?.status !== MATCH_STATUS.WINNER && (
@@ -648,9 +645,6 @@ export default function SpectatorView({
                 >
                   <div className="spec-side-top">
                     <span className="spec-seed">#{heroP2?.seed || 2}</span>
-                    {claimedEntrantId && featuredMatch.player2Id === claimedEntrantId && (
-                      <span className="spec-you-tag">YOU</span>
-                    )}
                     {featuredMatch.started &&
                       heroEval?.activeServer === 2 &&
                       heroEval?.status !== MATCH_STATUS.WINNER && (
