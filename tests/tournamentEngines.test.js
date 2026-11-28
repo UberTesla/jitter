@@ -4062,3 +4062,81 @@ test('Per-match Scorekeeper claiming enforces 1 claim per match, 1 active claim 
   assert.equal(store.getState().matches[m1].completed, true);
   assert.equal(store.getState().matches[m1].scorekeeperDeviceId, null);
 });
+
+test('Server /__sync/grandma throttles competing banter floods and enforces configured min/max interval settings', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingpong-grandma-cadence-'));
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => 0 });
+  const server = http.createServer((req, res) => {
+    handler(req, res, () => {
+      res.statusCode = 404;
+      res.end('Not found');
+    });
+  });
+
+  try {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const initial = createInitialState({
+      tournamentName: 'Grandma Cadence Cup',
+      grandma: { stayDurationSec: 5, minIntervalSec: 30, maxIntervalSec: 45 },
+      access: { isPublic: true, isSecure: false },
+    });
+    // Ensure initial nextBanterAt is ready now
+    initial.grandma.nextBanterAt = Date.now() - 1000;
+    await fetch(`${baseUrl}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-host', state: initial, activate: true }),
+    });
+
+    // First banter is accepted and its nextGapMs is clamped to >= 30s (even if client sent 2s!)
+    const r1 = await (
+      await fetch(`${baseUrl}/__sync/grandma`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: 'tab-1',
+          tournamentId: initial.tournamentId,
+          activeSpeech: {
+            id: 1001,
+            text: 'First banter quote',
+            category: 'banter',
+            isLive: false,
+            durationMs: 4000,
+            nextGapMs: 2000,
+          },
+        }),
+      })
+    ).json();
+    assert.equal(r1.ok, true);
+    assert.notEqual(r1.throttled, true);
+    assert.ok(r1.activeSpeech.nextGapMs >= 30000, 'Server must clamp banter gap to >= minIntervalSec');
+
+    // Second competing banter immediately after from another tab is throttled!
+    const r2 = await (
+      await fetch(`${baseUrl}/__sync/grandma`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: 'tab-2',
+          tournamentId: initial.tournamentId,
+          activeSpeech: {
+            id: 1002,
+            text: 'Competing banter flood',
+            category: 'banter',
+            isLive: false,
+            durationMs: 4000,
+            nextGapMs: 2000,
+          },
+        }),
+      })
+    ).json();
+    assert.equal(r2.throttled, true);
+    assert.equal(r2.activeSpeech.text, 'First banter quote');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

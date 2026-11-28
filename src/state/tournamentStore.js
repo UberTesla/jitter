@@ -2777,7 +2777,27 @@ export class TournamentStore {
         tournamentId: this.programState?.tournamentId || null,
         activeSpeech: speech,
       }),
-    }).catch(() => {});
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || !data.throttled) return;
+        if (data.serverTime) this.updateServerClockOffset(data.serverTime);
+        const serverNext = Number(data.nextBanterAt || 0);
+        const localNext = serverNext > 0 ? serverNext - (this.serverClockOffsetMs || 0) : 0;
+        if (data.activeSpeech?.id && data.activeSpeech.id !== this.programState?.grandma?.activeSpeech?.id) {
+          this.handleExternalGrandmaSpeech(data.activeSpeech, { liveArrival: false });
+        } else if (localNext > Date.now()) {
+          this.programState = {
+            ...this.programState,
+            grandma: { ...this.programState.grandma, nextBanterAt: localNext },
+          };
+          this.state = {
+            ...this.state,
+            grandma: { ...this.state.grandma, nextBanterAt: localNext },
+          };
+        }
+      })
+      .catch(() => {});
   }
 
   setHubPresence(onHub) {
@@ -4659,6 +4679,9 @@ export class TournamentStore {
 
   tickGrandmaEngine(now = Date.now(), leaderOffsetMs = 0) {
     if (!this.hasActiveTournament || this.isOnHub) return null;
+    if (this.programState?.rules?.grandmaEnabled === false || this.state?.rules?.grandmaEnabled === false) {
+      return null;
+    }
     const g = this.programState?.grandma;
     if (!g) return null;
 
@@ -7168,9 +7191,17 @@ export class TournamentStore {
       );
 
       const now = Date.now();
+      const activeExp = Math.max(now, Number(s.grandma.activeSpeech?.expiresAt || 0));
+      const intervalChanged =
+        minInt !== Number(s.grandma.minIntervalSec) || maxInt !== Number(s.grandma.maxIntervalSec);
       const currentNext = Number(s.grandma.nextBanterAt || 0);
-      const nextBanterAt =
-        currentNext > now + maxInt * 1000 ? now + Math.round(minInt * 1000) : currentNext || now + 2200;
+      const nextBanterAt = intervalChanged
+        ? activeExp + Math.round(minInt * 1000)
+        : currentNext > activeExp + maxInt * 1000
+        ? activeExp + Math.round(minInt * 1000)
+        : currentNext < activeExp + minInt * 1000 && currentNext > now
+        ? activeExp + Math.round(minInt * 1000)
+        : currentNext || activeExp + Math.round(minInt * 1000);
 
       return {
         ...s,
@@ -7187,7 +7218,7 @@ export class TournamentStore {
           nextBanterAt,
         },
       };
-    });
+    }, { forcePublish: true });
   }
 
   // ---- Presentation Slides ----

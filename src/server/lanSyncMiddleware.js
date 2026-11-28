@@ -3976,17 +3976,56 @@ export function createLanSyncHandler({
           return sendJson(res, 400, { error: 'Invalid speech payload' });
         }
         const serverNow = Date.now();
+        const targetTournamentId = body?.tournamentId || store.activeTournamentId || null;
+        const target =
+          (targetTournamentId && store.tournaments[targetTournamentId]) || getActiveState();
+        const isBanter = (speech.category || 'banter') === 'banter' && !speech.isLive;
+
+        // Enforce server-authoritative Grandma enable flag & cadence for idle banter so
+        // multiple connected devices/tabs can NEVER flood Grandma non-stop or ignore settings!
+        if (target && isBanter) {
+          if (target.rules?.grandmaEnabled === false) {
+            return sendJson(res, 200, { ok: true, throttled: true, reason: 'Grandma disabled' });
+          }
+          const existingExp = Number(target.grandma?.activeSpeech?.expiresAt || 0);
+          const existingNext = Number(target.grandma?.nextBanterAt || 0);
+          if (serverNow < existingExp || serverNow < existingNext - 500) {
+            return sendJson(res, 200, {
+              ok: true,
+              throttled: true,
+              activeSpeech: target.grandma?.activeSpeech || null,
+              nextBanterAt: Math.max(existingExp, existingNext),
+              serverTime: serverNow,
+            });
+          }
+        }
+
         const rawStart = Number(speech.startedAt ?? speech.timestamp ?? serverNow);
         const rawExp = Number(speech.expiresAt ?? rawStart + 6000);
         const rawNext = Number(speech.nextBanterAt ?? rawExp + 7000);
+        const cfgStayMs = Math.max(
+          2000,
+          Math.min(20000, Math.round((Number(target?.grandma?.stayDurationSec) || 5.5) * 1000))
+        );
+        const cfgMinMs = Math.max(
+          1000,
+          Math.min(60000, Math.round((Number(target?.grandma?.minIntervalSec) || 6) * 1000))
+        );
+        const cfgMaxMs = Math.max(
+          cfgMinMs,
+          Math.min(120000, Math.round((Number(target?.grandma?.maxIntervalSec) || 13) * 1000))
+        );
         const durationMs = Math.max(
           1500,
-          Math.min(60000, Number(speech.durationMs) || rawExp - rawStart || 6000)
+          Math.min(60000, Number(speech.durationMs) || rawExp - rawStart || cfgStayMs)
         );
-        const nextGapMs = Math.max(
+        const requestedGapMs = Math.max(
           1000,
-          Math.min(120000, Number(speech.nextGapMs) || rawNext - rawExp || 7000)
+          Math.min(120000, Number(speech.nextGapMs) || rawNext - rawExp || cfgMinMs)
         );
+        const nextGapMs = target?.grandma
+          ? Math.max(cfgMinMs, Math.min(cfgMaxMs, requestedGapMs))
+          : requestedGapMs;
         const rebasedSpeech = {
           ...speech,
           startedAt: serverNow,
@@ -3996,9 +4035,6 @@ export function createLanSyncHandler({
           nextGapMs,
           timestamp: serverNow,
         };
-        const targetTournamentId = body?.tournamentId || store.activeTournamentId || null;
-        const target =
-          (targetTournamentId && store.tournaments[targetTournamentId]) || getActiveState();
         if (target) {
           target.grandma = {
             ...(target.grandma || {}),
@@ -4014,7 +4050,7 @@ export function createLanSyncHandler({
           serverTime: serverNow,
           activeSpeech: rebasedSpeech,
         });
-        return sendJson(res, 200, { ok: true, serverTime: serverNow });
+        return sendJson(res, 200, { ok: true, serverTime: serverNow, activeSpeech: rebasedSpeech });
       } catch (err) {
         return sendJson(res, 400, { error: err.message || 'Bad request' });
       }
