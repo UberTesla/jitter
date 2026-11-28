@@ -904,8 +904,22 @@ export default function PlayerInboxDrawer({
                     }}
                   >
                     {showTableBadge && (
-                      <span
+                      <button
+                        type="button"
+                        disabled={count <= 1}
+                        onClick={() => {
+                          if (count <= 1) return;
+                          setMiniTableIdx((prev) => (prev + 1) % count);
+                          setMiniRotateTick((n) => n + 1);
+                        }}
+                        title={
+                          count > 1
+                            ? `Table ${tableNum} (${activeIdx + 1}/${count}) — tap to cycle tables`
+                            : `Table ${tableNum}`
+                        }
                         style={{
+                          appearance: 'none',
+                          border: 'none',
                           fontSize: '0.62rem',
                           fontWeight: 800,
                           padding: '0.08rem 0.3rem',
@@ -916,10 +930,11 @@ export default function PlayerInboxDrawer({
                           color: isLive ? '#86efac' : '#fde68a',
                           flexShrink: 0,
                           whiteSpace: 'nowrap',
+                          cursor: count > 1 ? 'pointer' : 'default',
                         }}
                       >
                         T{tableNum}
-                      </span>
+                      </button>
                     )}
 
                     <div
@@ -984,45 +999,24 @@ export default function PlayerInboxDrawer({
                     </div>
 
                     {count > 1 && (
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.18rem',
-                          flexShrink: 0,
-                        }}
+                      <button
+                        type="button"
+                        onClick={() => setMiniTableHeld((h) => !h)}
+                        aria-pressed={miniTableHeld}
+                        aria-label={
+                          miniTableHeld
+                            ? 'Resume 5-second table rotation'
+                            : `Hold on Table ${tableNum}`
+                        }
+                        title={
+                          miniTableHeld
+                            ? `Held on Table ${tableNum} (click to resume 5s rotation)`
+                            : `Hold on Table ${tableNum}`
+                        }
+                        style={miniBtnStyle(miniTableHeld)}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setMiniTableHeld((h) => !h)}
-                          aria-pressed={miniTableHeld}
-                          aria-label={
-                            miniTableHeld
-                              ? 'Resume 5-second table rotation'
-                              : `Hold on Table ${tableNum}`
-                          }
-                          title={
-                            miniTableHeld
-                              ? `Held on Table ${tableNum} (click to resume 5s rotation)`
-                              : `Hold on Table ${tableNum}`
-                          }
-                          style={miniBtnStyle(miniTableHeld)}
-                        >
-                          {miniTableHeld ? '▶' : '⏸'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMiniTableIdx((prev) => (prev + 1) % count);
-                            setMiniRotateTick((n) => n + 1);
-                          }}
-                          aria-label="Next live table"
-                          title={`Next live table (${activeIdx + 1}/${count})`}
-                          style={miniBtnStyle(false)}
-                        >
-                          ›
-                        </button>
-                      </div>
+                        {miniTableHeld ? '▶' : '⏸'}
+                      </button>
                     )}
                   </div>
                 );
