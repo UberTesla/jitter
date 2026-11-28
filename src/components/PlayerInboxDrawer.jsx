@@ -243,6 +243,48 @@ export default function PlayerInboxDrawer({
   }, [state]);
   const upNextMatches = tourneyStats?.upNext || [];
 
+  const miniScoreboardMatches = useMemo(() => {
+    const liveList = getLiveTableMatches(state);
+    if (liveList.length > 0) return liveList;
+    const fallbackAm = state?.activeMatchId ? state.matches?.[state.activeMatchId] : null;
+    return fallbackAm && !fallbackAm.isBye ? [fallbackAm] : [];
+  }, [state]);
+  const [miniTableIdx, setMiniTableIdx] = useState(0);
+  const [miniTableHeld, setMiniTableHeld] = useState(false);
+  const [miniRotateTick, setMiniRotateTick] = useState(0);
+  const miniInitClaimRef = useRef(false);
+
+  // Start on the claimed player's live table when the drawer opens
+  useEffect(() => {
+    if (!open) {
+      miniInitClaimRef.current = false;
+      return;
+    }
+    if (miniInitClaimRef.current || !claimedEntrantId || miniScoreboardMatches.length <= 1) return;
+    const myIdx = miniScoreboardMatches.findIndex(
+      (m) => m.player1Id === claimedEntrantId || m.player2Id === claimedEntrantId
+    );
+    if (myIdx >= 0) {
+      setMiniTableIdx(myIdx);
+      miniInitClaimRef.current = true;
+    }
+  }, [open, claimedEntrantId, miniScoreboardMatches]);
+
+  // Auto-rotate mini scoreboard across live tables every 5s unless held
+  useEffect(() => {
+    const count = miniScoreboardMatches.length;
+    if (count <= 1) {
+      setMiniTableIdx(0);
+      return undefined;
+    }
+    setMiniTableIdx((prev) => prev % count);
+    if (!open || miniTableHeld) return undefined;
+    const timer = setInterval(() => {
+      setMiniTableIdx((prev) => (prev + 1) % count);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [open, miniTableHeld, miniScoreboardMatches.length, miniRotateTick]);
+
   const myPlayerStatus = useMemo(() => {
     if (!claimedPlayerObj || !state?.matches) return null;
     const pid = claimedEntrantId;
@@ -784,19 +826,21 @@ export default function PlayerInboxDrawer({
                 💬 {chatHeaderName}
               </h2>
 
-              {/* Compact Live Mini Scoreboard next to user's name (supports 1 or multiple live tables) */}
+              {/* Compact Live Mini Scoreboard next to user's name (auto-rotates every 5s across live tables) */}
               {(() => {
-                const liveList = getLiveTableMatches(state);
-                const fallbackAm = state?.activeMatchId ? state.matches?.[state.activeMatchId] : null;
-                const displayMatches =
-                  liveList.length > 0
-                    ? liveList
-                    : fallbackAm && !fallbackAm.isBye
-                    ? [fallbackAm]
-                    : [];
-                if (displayMatches.length === 0) return null;
+                const count = miniScoreboardMatches.length;
+                if (count === 0) return null;
+                const activeIdx = miniTableIdx % count;
+                const am = miniScoreboardMatches[activeIdx] || miniScoreboardMatches[0];
+                if (!am || am.isBye) return null;
                 const showTableBadge =
-                  displayMatches.length > 1 || (Number(state?.rules?.tableCount) || 1) > 1;
+                  count > 1 || (Number(state?.rules?.tableCount) || 1) > 1;
+                const p1 = getPlayerLabel(am.player1Id, am.source1Label);
+                const p2 = getPlayerLabel(am.player2Id, am.source2Label);
+                const isLive = Boolean(am.started && !am.completed);
+                const evalM = evaluateMatchState(am, state?.rules);
+                const serverSlot = !am.completed ? evalM.activeServer : null;
+                const tableNum = am.tableNumber || activeIdx + 1;
                 const serveDot = (
                   <span
                     aria-label="Serving"
@@ -811,134 +855,175 @@ export default function PlayerInboxDrawer({
                     }}
                   />
                 );
-                const renderMiniMatch = (am, idx, compact) => {
-                  const p1 = getPlayerLabel(am.player1Id, am.source1Label);
-                  const p2 = getPlayerLabel(am.player2Id, am.source2Label);
-                  const isLive = Boolean(am.started && !am.completed);
-                  const evalM = evaluateMatchState(am, state?.rules);
-                  const serverSlot = !am.completed ? evalM.activeServer : null;
-                  const tableNum = am.tableNumber || idx + 1;
-                  return (
-                    <div
-                      key={am.id}
-                      aria-label={showTableBadge ? `Table ${tableNum} Scoreboard` : 'Live Match Scoreboard'}
-                      title={`${showTableBadge ? `Table ${tableNum} · ` : ''}${am.roundLabel} (${am.label}): ${p1} ${am.score1 ?? 0}–${am.score2 ?? 0} ${p2}`}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: showTableBadge ? 'auto 1fr auto 1fr' : '1fr auto 1fr',
-                        alignItems: 'center',
-                        gap: compact ? '0.25rem' : '0.35rem',
-                        padding: compact ? '0.18rem 0.42rem' : '0.22rem 0.5rem',
-                        borderRadius: '7px',
-                        background: 'rgba(15, 23, 42, 0.78)',
-                        border: `1px solid ${
-                          isLive ? 'rgba(52, 211, 153, 0.45)' : 'rgba(148, 163, 184, 0.28)'
-                        }`,
-                        fontSize: compact ? '0.69rem' : '0.73rem',
-                        minWidth: compact ? '168px' : 0,
-                        flex: compact ? '1 0 168px' : 1,
-                      }}
-                    >
-                      {showTableBadge && (
-                        <span
-                          style={{
-                            fontSize: '0.62rem',
-                            fontWeight: 800,
-                            padding: '0.06rem 0.28rem',
-                            borderRadius: '4px',
-                            background: isLive
-                              ? 'rgba(34, 197, 94, 0.2)'
-                              : 'rgba(245, 158, 11, 0.18)',
-                            color: isLive ? '#86efac' : '#fde68a',
-                            flexShrink: 0,
-                          }}
-                        >
-                          T{tableNum}
-                        </span>
-                      )}
-                      <div
+                const miniBtnStyle = (active) => ({
+                  appearance: 'none',
+                  border: `1px solid ${
+                    active ? 'rgba(251, 191, 36, 0.65)' : 'rgba(148, 163, 184, 0.28)'
+                  }`,
+                  background: active ? 'rgba(245, 158, 11, 0.22)' : 'rgba(30, 41, 59, 0.72)',
+                  color: active ? '#fde68a' : '#cbd5e1',
+                  borderRadius: '4px',
+                  width: '19px',
+                  height: '19px',
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.64rem',
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                });
+                return (
+                  <div
+                    aria-label={showTableBadge ? `Table ${tableNum} Scoreboard` : 'Live Match Scoreboard'}
+                    title={`${showTableBadge ? `Table ${tableNum} (${activeIdx + 1}/${count}) · ` : ''}${am.roundLabel} (${am.label}): ${p1} ${am.score1 ?? 0}–${am.score2 ?? 0} ${p2}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        count > 1
+                          ? 'auto 1fr auto 1fr auto'
+                          : showTableBadge
+                          ? 'auto 1fr auto 1fr'
+                          : '1fr auto 1fr',
+                      alignItems: 'center',
+                      gap: '0.32rem',
+                      padding: '0.2rem 0.45rem',
+                      borderRadius: '7px',
+                      background: 'rgba(15, 23, 42, 0.78)',
+                      border: `1px solid ${
+                        miniTableHeld && count > 1
+                          ? 'rgba(251, 191, 36, 0.55)'
+                          : isLive
+                          ? 'rgba(52, 211, 153, 0.45)'
+                          : 'rgba(148, 163, 184, 0.28)'
+                      }`,
+                      fontSize: '0.73rem',
+                      minWidth: 0,
+                      flex: 1,
+                    }}
+                  >
+                    {showTableBadge && (
+                      <span
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'flex-end',
-                          gap: '0.24rem',
-                          minWidth: 0,
+                          fontSize: '0.62rem',
+                          fontWeight: 800,
+                          padding: '0.08rem 0.3rem',
+                          borderRadius: '4px',
+                          background: isLive
+                            ? 'rgba(34, 197, 94, 0.2)'
+                            : 'rgba(245, 158, 11, 0.18)',
+                          color: isLive ? '#86efac' : '#fde68a',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap',
                         }}
                       >
-                        {serverSlot === 1 && serveDot}
-                        <span
-                          style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            fontWeight: serverSlot === 1 ? 700 : 500,
-                          }}
-                        >
-                          {p1}
-                        </span>
-                      </div>
+                        T{tableNum}
+                      </span>
+                    )}
 
-                      <strong
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: '0.26rem',
+                        minWidth: 0,
+                      }}
+                    >
+                      {serverSlot === 1 && serveDot}
+                      <span
                         style={{
-                          color: '#fbbf24',
-                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                          fontSize: compact ? '0.84rem' : '0.94rem',
-                          fontWeight: 800,
-                          letterSpacing: '0.03em',
-                          lineHeight: 1,
-                          fontVariantNumeric: 'tabular-nums',
-                          textAlign: 'center',
-                          padding: '0 0.12rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: serverSlot === 1 ? 700 : 500,
+                        }}
+                      >
+                        {p1}
+                      </span>
+                    </div>
+
+                    <strong
+                      style={{
+                        color: '#fbbf24',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                        fontSize: '0.92rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.03em',
+                        lineHeight: 1,
+                        fontVariantNumeric: 'tabular-nums',
+                        textAlign: 'center',
+                        padding: '0 0.12rem',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {am.score1 ?? 0}–{am.score2 ?? 0}
+                    </strong>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-start',
+                        gap: '0.26rem',
+                        minWidth: 0,
+                      }}
+                    >
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: serverSlot === 2 ? 700 : 500,
+                        }}
+                      >
+                        {p2}
+                      </span>
+                      {serverSlot === 2 && serveDot}
+                    </div>
+
+                    {count > 1 && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.18rem',
                           flexShrink: 0,
                         }}
                       >
-                        {am.score1 ?? 0}–{am.score2 ?? 0}
-                      </strong>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'flex-start',
-                          gap: '0.24rem',
-                          minWidth: 0,
-                        }}
-                      >
-                        <span
-                          style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            fontWeight: serverSlot === 2 ? 700 : 500,
-                          }}
+                        <button
+                          type="button"
+                          onClick={() => setMiniTableHeld((h) => !h)}
+                          aria-pressed={miniTableHeld}
+                          aria-label={
+                            miniTableHeld
+                              ? 'Resume 5-second table rotation'
+                              : `Hold on Table ${tableNum}`
+                          }
+                          title={
+                            miniTableHeld
+                              ? `Held on Table ${tableNum} (click to resume 5s rotation)`
+                              : `Hold on Table ${tableNum}`
+                          }
+                          style={miniBtnStyle(miniTableHeld)}
                         >
-                          {p2}
-                        </span>
-                        {serverSlot === 2 && serveDot}
+                          {miniTableHeld ? '▶' : '⏸'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMiniTableIdx((prev) => (prev + 1) % count);
+                            setMiniRotateTick((n) => n + 1);
+                          }}
+                          aria-label="Next live table"
+                          title={`Next live table (${activeIdx + 1}/${count})`}
+                          style={miniBtnStyle(false)}
+                        >
+                          ›
+                        </button>
                       </div>
-                    </div>
-                  );
-                };
-
-                if (displayMatches.length === 1) {
-                  return renderMiniMatch(displayMatches[0], 0, false);
-                }
-
-                return (
-                  <div
-                    className="scroller"
-                    aria-label="Live Tables Scoreboard"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.32rem',
-                      overflowX: 'auto',
-                      minWidth: 0,
-                      flex: 1,
-                      paddingBottom: '1px',
-                    }}
-                  >
-                    {displayMatches.map((am, idx) => renderMiniMatch(am, idx, true))}
+                    )}
                   </div>
                 );
               })()}
