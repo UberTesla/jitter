@@ -501,9 +501,13 @@ export default function App() {
   // Enforce role-based access (guests are strictly confined to Spectator Mode)
   const effectiveViewMode = clampModeForPermissions(viewMode, rolePerms);
 
+  const myDeviceId = syncMeta.remoteSync?.deviceId || '';
+  const hasClaimedPlayer = Boolean(myDeviceId && liveState?.playerClaims?.[myDeviceId]);
+
   const showJoinAlertPrompt =
     !showHub &&
     effectiveViewMode !== 'present' &&
+    hasClaimedPlayer &&
     !alertPromptDismissed &&
     notifyCaps.canUseDesktop &&
     notifyCaps.permission === 'default';
