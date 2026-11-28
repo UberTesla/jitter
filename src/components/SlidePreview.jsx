@@ -6,6 +6,8 @@ import {
   resolveTickerMode,
   THEME_OPTIONS,
   resolveEffectiveAmbiance,
+  normalizeAutoRotateSlides,
+  tournamentStore,
 } from '../state/tournamentStore.js';
 import { evaluateMatchState } from '../engine/scoringEngine.js';
 import { computeTournamentStats } from '../engine/bracketGenerator.js';
@@ -35,15 +37,35 @@ export default function SlidePreview({
   onOpenPresentationWindow,
   onSwitchToPresentationMode,
 }) {
-  const activeSlide = state.presentation?.activeSlide || 'title';
+  const baseSlide = state.presentation?.activeSlide || 'title';
   const autoRotateOn = Boolean(state.presentation?.autoRotate);
-  const [optionsSlide, setOptionsSlide] = React.useState(activeSlide);
+  const rotateList = React.useMemo(
+    () => normalizeAutoRotateSlides(state.presentation?.autoRotateSlides),
+    [state.presentation?.autoRotateSlides]
+  );
+  const rotateSec = Math.max(5, Number(state.presentation?.autoRotateSec) || 18);
+  const [rotateIdx, setRotateIdx] = React.useState(() =>
+    Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000))
+  );
+  React.useEffect(() => {
+    if (!autoRotateOn || rotateList.length < 2) return undefined;
+    const syncSlot = () => {
+      const next = Math.floor(tournamentStore.getServerNow() / (rotateSec * 1000));
+      setRotateIdx((prev) => (prev === next ? prev : next));
+    };
+    syncSlot();
+    const id = setInterval(syncSlot, 250);
+    return () => clearInterval(id);
+  }, [autoRotateOn, rotateList, rotateSec]);
+  const activeSlide =
+    autoRotateOn && rotateList.length > 0 ? rotateList[rotateIdx % rotateList.length] : baseSlide;
+  const [optionsSlide, setOptionsSlide] = React.useState(baseSlide);
   // Keep options panel locked during auto-rotate so automatic slide cycling never shifts Control UI
   React.useEffect(() => {
     if (!autoRotateOn) {
-      setOptionsSlide(activeSlide);
+      setOptionsSlide(baseSlide);
     }
-  }, [activeSlide, autoRotateOn]);
+  }, [baseSlide, autoRotateOn]);
   const isStudio = syncMeta?.syncMode === 'studio';
   const hasUnpublished = Boolean(syncMeta?.hasUnpublishedChanges);
   const programSlide = syncMeta?.programState?.presentation?.activeSlide || activeSlide;

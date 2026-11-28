@@ -315,47 +315,8 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Optional slide auto-rotation timer (pauses in Studio Mode, Scorekeeper, Spectator, System, and Users)
-  useEffect(() => {
-    const { autoRotate, autoRotateSec } = state.presentation || {};
-    if (!autoRotate) return undefined;
-    if (syncMeta.syncMode === 'studio') return undefined;
-    if (
-      viewMode === 'scorekeeper' ||
-      viewMode === 'spectator' ||
-      viewMode === 'system' ||
-      viewMode === 'users' ||
-      viewMode === 'admin'
-    ) {
-      return undefined;
-    }
-
-    const isPopupPresentation = viewMode === 'present' && Boolean(window.opener);
-    if (isPopupPresentation) return undefined;
-
-    const intervalMs = Math.max(5, Number(autoRotateSec) || 18) * 1000;
-    const timer = setInterval(() => {
-      // Do not interrupt open setup/phrase modals or active text/select editing in Control View
-      if (viewMode === 'control') {
-        const hasOpenModal = Boolean(document.querySelector('dialog[open]'));
-        const activeTag = document.activeElement?.tagName?.toLowerCase();
-        const isEditingInput =
-          activeTag === 'input' ||
-          activeTag === 'textarea' ||
-          activeTag === 'select' ||
-          Boolean(document.activeElement?.isContentEditable);
-        if (hasOpenModal || isEditingInput) return;
-      }
-
-      const current = tournamentStore.getState();
-      const currentSlide = current.presentation?.activeSlide || 'title';
-      const idx = SLIDE_DEFINITIONS.findIndex((s) => s.id === currentSlide);
-      const nextSlide = SLIDE_DEFINITIONS[(idx + 1) % SLIDE_DEFINITIONS.length];
-      tournamentStore.setActiveSlide(nextSlide.id);
-    }, intervalMs);
-
-    return () => clearInterval(timer);
-  }, [state.presentation?.autoRotate, state.presentation?.autoRotateSec, viewMode, syncMeta.syncMode]);
+  // Note: Presentation auto-rotation is driven deterministically from the synced server clock
+  // inside PresentationView & SlidePreview (so multiple open tabs never double-rotate or spam STATE_SYNC).
 
   const liveState = syncMeta.programState || state;
   const myTabId = tournamentStore.getTabId();

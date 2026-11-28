@@ -2743,7 +2743,7 @@ export class TournamentStore {
       };
     }
 
-    const offset = this.serverClockOffsetMs || 0;
+    const offset = speech.clockSource === 'server' ? this.serverClockOffsetMs || 0 : 0;
     let localStart = rawStart - offset;
     let localExp = rawExp - offset;
     let localNext = rawNext - offset;
@@ -2756,6 +2756,7 @@ export class TournamentStore {
     }
     return {
       ...speech,
+      clockSource: 'local',
       startedAt: localStart,
       expiresAt: localExp,
       nextBanterAt: localNext,
@@ -5143,17 +5144,22 @@ export class TournamentStore {
     }
     // Rebase incoming Grandma speech timestamps to this device's local clock (zero skew delay on Fire Stick/TVs)
     if (incoming?.grandma?.activeSpeech?.id) {
-      const prevSpeechId = prevProgram?.grandma?.activeSpeech?.id;
-      const isNewSpeech = incoming.grandma.activeSpeech.id !== prevSpeechId;
-      const rebasedSpeech = this.rebaseGrandmaSpeechToLocalClock(incoming.grandma.activeSpeech, {
-        liveArrival: isNewSpeech,
-      });
+      const prevSpeech = prevProgram?.grandma?.activeSpeech || null;
+      const isSameSpeech = prevSpeech && incoming.grandma.activeSpeech.id === prevSpeech.id;
+      const rebasedSpeech = isSameSpeech
+        ? prevSpeech
+        : this.rebaseGrandmaSpeechToLocalClock(incoming.grandma.activeSpeech, {
+            liveArrival: true,
+          });
       incoming = {
         ...incoming,
         grandma: {
           ...incoming.grandma,
           activeSpeech: rebasedSpeech,
-          nextBanterAt: rebasedSpeech.nextBanterAt,
+          nextBanterAt: Math.max(
+            Number(rebasedSpeech?.nextBanterAt || 0),
+            isSameSpeech ? Number(prevProgram?.grandma?.nextBanterAt || 0) : 0
+          ),
         },
       };
     }

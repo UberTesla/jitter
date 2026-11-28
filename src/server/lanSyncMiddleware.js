@@ -4028,6 +4028,7 @@ export function createLanSyncHandler({
           : requestedGapMs;
         const rebasedSpeech = {
           ...speech,
+          clockSource: 'server',
           startedAt: serverNow,
           expiresAt: serverNow + durationMs,
           nextBanterAt: serverNow + durationMs + nextGapMs,
