@@ -436,7 +436,8 @@ export const DEFAULT_BANTER_QUOTES = [
   'You think you\'re smart ... you\'re dumber than a fart!',
   'Get off the TV, Raymond\'s on!',
   'Hey, get out of my \"Cher\".',
-  'Move your butt, I gotta watch Raymond!'
+  'Move your butt, I gotta watch Raymond!',
+  'Stick your head in a coffee pot ... pull it out red hot!'
   //  'Raymond would have knocked over the coffee table by now.',
   //  'Back in \'68, your grandfather played with a wooden paddle and won!',
   //  'Watch your elbows, sweetheart — keep your wrist loose!',
