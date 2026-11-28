@@ -275,6 +275,9 @@ export function computeMatchElapsedMs(match, nowMs = Date.now()) {
     }
     return baseOffset;
   }
+  if (match.paused) {
+    return baseOffset;
+  }
   if (match.startedAt) {
     const endTs = match.winnerReachedAt ? Number(match.winnerReachedAt) : nowMs;
     return baseOffset + Math.max(0, endTs - Number(match.startedAt));

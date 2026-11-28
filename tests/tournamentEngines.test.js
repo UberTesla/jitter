@@ -3977,3 +3977,41 @@ test('TV playlist items persist the cacheLocal flag via addTvPlaylistItem and up
   item = store.getState().ui.tvPlaylist.find((x) => x.id === 'tv-local-1');
   assert.equal(item?.cacheLocal, false);
 });
+
+test('assignMatchToTable refuses to replace a live match until paused or cancelled, then allows swapping cleanly', () => {
+  const initial = createInitialState({
+    playerCount: 8,
+    format: 'single',
+    rules: { tableCount: 2 },
+  });
+  const store = new TournamentStore(initial, { persist: false });
+  const readyIds = Object.values(store.getState().matches)
+    .filter((m) => !m.isBye && m.player1Id && m.player2Id)
+    .map((m) => m.id);
+  const [m1, m2] = readyIds;
+
+  // Start m1 live on Table 1
+  store.startMatch(m1, 1);
+  store.addPoint(1, { matchId: m1, bypassDebounce: true });
+
+  // Attempting to swap m1 while live must be refused
+  const blocked = store.assignMatchToTable(1, m2);
+  assert.equal(blocked.ok, false);
+  const blockedClear = store.clearTableMatch(1);
+  assert.equal(blockedClear.ok, false);
+
+  // Pausing m1 freezes it and allows changing Table 1 to m2 (or clearing)
+  store.pauseMatch(m1);
+  assert.equal(store.getState().matches[m1].paused, true);
+
+  const swapped = store.assignMatchToTable(1, m2);
+  assert.equal(swapped.ok, true);
+  assert.equal(store.getState().matches[m2].tableNumber, 1);
+  assert.equal(store.getState().matches[m1].tableNumber, null);
+
+  // Resuming m1 on Table 2 restores it cleanly with its preserved score
+  store.resumeMatch(m1, 2);
+  assert.equal(store.getState().matches[m1].paused, false);
+  assert.equal(store.getState().matches[m1].tableNumber, 2);
+  assert.equal(store.getState().matches[m1].score1, 1);
+});

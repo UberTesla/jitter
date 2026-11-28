@@ -12,8 +12,9 @@ import { tournamentStore } from '../state/tournamentStore.js';
  */
 export default function MatchTimer({ match, inline = false, className = '' }) {
   const isWinnerStopped = Boolean(match && !match.completed && match.winnerReachedAt);
+  const isPaused = Boolean(match && match.paused && !match.completed);
   const isRunning = Boolean(
-    match && match.started && match.startedAt && !match.completed && !isWinnerStopped
+    match && match.started && match.startedAt && !match.completed && !isWinnerStopped && !isPaused
   );
   const isCompleted = Boolean(match && (match.completed || isWinnerStopped));
   const [, setTick] = useState(0);
@@ -24,7 +25,7 @@ export default function MatchTimer({ match, inline = false, className = '' }) {
       setTick((n) => (n + 1) % 1000000);
     }, 250);
     return () => clearInterval(id);
-  }, [isRunning, match?.id, match?.startedAt, match?.winnerReachedAt]);
+  }, [isRunning, match?.id, match?.startedAt, match?.winnerReachedAt, match?.paused]);
 
   const elapsedMs = computeMatchElapsedMs(match, tournamentStore.getServerNow());
   const formatted = formatMatchTimer(elapsedMs);
@@ -32,6 +33,8 @@ export default function MatchTimer({ match, inline = false, className = '' }) {
 
   const titleText = isRunning
     ? 'Live match elapsed time'
+    : isPaused
+    ? 'Match paused — timer frozen until resumed'
     : isWinnerStopped
     ? 'Timer stopped at winning point (keeps tracking in background if a point is removed)'
     : isCompleted

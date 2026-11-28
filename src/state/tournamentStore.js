@@ -1245,13 +1245,23 @@ export function getTableSlots(state) {
     tableNumber: idx + 1,
     match: null,
     isLive: false,
+    isPaused: false,
     isQueued: false,
   }));
   const usedMatchIds = new Set();
 
-  // 1. Place all live (started, uncompleted) matches onto their assigned table
+  // 1. Place all live (or paused while assigned to a table) started uncompleted matches
   const liveMatches = Object.values(matchesObj)
-    .filter((m) => m && !m.isBye && !m.completed && m.started && m.player1Id && m.player2Id)
+    .filter(
+      (m) =>
+        m &&
+        !m.isBye &&
+        !m.completed &&
+        m.started &&
+        m.player1Id &&
+        m.player2Id &&
+        (!m.paused || (Number(m.tableNumber) >= 1 && Number(m.tableNumber) <= count))
+    )
     .sort((a, b) => (a.tableNumber || 1) - (b.tableNumber || 1) || (a.startedAt || 0) - (b.startedAt || 0));
 
   for (const m of liveMatches) {
@@ -1259,7 +1269,8 @@ export function getTableSlots(state) {
     const slot = slots[t - 1];
     if (slot && !slot.match) {
       slot.match = m;
-      slot.isLive = true;
+      slot.isLive = !m.paused;
+      slot.isPaused = Boolean(m.paused);
       usedMatchIds.add(m.id);
     }
   }
@@ -1290,14 +1301,23 @@ export function getTableSlots(state) {
     }
   }
 
-  // 3. Ensure activeMatchId (if ready & uncompleted) is shown on its table if that table is open
+  // 3. Ensure activeMatchId (if ready, uncompleted, and not explicitly cleared) is shown on its table if open
   const active = state?.activeMatchId ? matchesObj[state.activeMatchId] : null;
-  if (active && !active.isBye && !active.completed && active.player1Id && active.player2Id && !usedMatchIds.has(active.id)) {
+  if (
+    active &&
+    !active.isBye &&
+    !active.completed &&
+    active.player1Id &&
+    active.player2Id &&
+    !usedMatchIds.has(active.id) &&
+    (count === 1 || active.tableNumber !== null)
+  ) {
     const t = Math.max(1, Math.min(count, Math.floor(Number(active.tableNumber) || 1)));
     const slot = slots[t - 1];
     if (slot && !slot.match) {
       slot.match = active;
-      slot.isLive = Boolean(active.started);
+      slot.isLive = Boolean(active.started && !active.paused);
+      slot.isPaused = Boolean(active.started && active.paused);
       slot.isQueued = !active.started;
       usedMatchIds.add(active.id);
     }
@@ -5586,6 +5606,7 @@ export class TournamentStore {
               initialServer: resolvedServer,
               tableNumber: resolvedTable,
               started: true,
+              paused: false,
               startedAt: m.startedAt || this.getServerNow(),
             },
           },
@@ -5609,6 +5630,7 @@ export class TournamentStore {
             [targetId]: {
               ...m,
               started: false,
+              paused: false,
               startedAt: null,
               winnerReachedAt: null,
               timerOffsetMs: 0,
@@ -5618,6 +5640,154 @@ export class TournamentStore {
       },
       { forcePublish: true }
     );
+  }
+
+  pauseMatch(matchId = null) {
+    const targetId = matchId || this.state.activeMatchId;
+    return this.commit(
+      (s) => {
+        const m = s.matches?.[targetId];
+        if (!m || m.isBye || m.completed || !m.started || m.paused) return s;
+        const now = this.getServerNow();
+        const elapsed = m.startedAt
+          ? Math.max(0, Number(m.timerOffsetMs) || 0) + Math.max(0, now - Number(m.startedAt))
+          : Math.max(0, Number(m.timerOffsetMs) || 0);
+        return {
+          ...s,
+          matches: {
+            ...s.matches,
+            [targetId]: {
+              ...m,
+              paused: true,
+              pausedAt: now,
+              startedAt: null,
+              timerOffsetMs: elapsed,
+            },
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  resumeMatch(matchId = null, tableNumber = null) {
+    const targetId = matchId || this.state.activeMatchId;
+    return this.commit(
+      (s) => {
+        const m = s.matches?.[targetId];
+        if (!m || m.isBye || m.completed || !m.started || !m.paused) return s;
+        const tableCount = Math.max(1, Math.floor(Number(s.rules?.tableCount ?? 1) || 1));
+        const resolvedTable =
+          tableNumber && Number.isFinite(Number(tableNumber))
+            ? Math.max(1, Math.min(tableCount, Math.floor(Number(tableNumber))))
+            : m.tableNumber || pickNextAvailableTableNumber(s.matches, tableCount, targetId);
+        return {
+          ...s,
+          matches: {
+            ...s.matches,
+            [targetId]: {
+              ...m,
+              paused: false,
+              pausedAt: null,
+              tableNumber: resolvedTable,
+              startedAt: this.getServerNow(),
+            },
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+  }
+
+  /**
+   * Explicitly assigns a ready or paused match onto `tableNumber`.
+   * Refuses if `tableNumber` currently has an active (live, unpaused) match in session!
+   */
+  assignMatchToTable(tableNumber, matchId) {
+    const base = this.isStudioActive() ? this.state : this.programState;
+    const tableCount = Math.max(1, Math.floor(Number(base.rules?.tableCount ?? 1) || 1));
+    const clampedTable = Math.max(1, Math.min(tableCount, Math.floor(Number(tableNumber) || 1)));
+    const target = base.matches?.[matchId];
+    if (!target || target.isBye || target.completed || !target.player1Id || !target.player2Id) {
+      return { ok: false, reason: 'Selected match is not ready' };
+    }
+    if (target.started && !target.paused) {
+      return { ok: false, reason: 'That match is already live on another table' };
+    }
+    const slots = getTableSlots(base);
+    const currentSlot = slots[clampedTable - 1];
+    if (
+      currentSlot?.match &&
+      currentSlot.match.id !== matchId &&
+      currentSlot.match.started &&
+      !currentSlot.match.paused
+    ) {
+      return {
+        ok: false,
+        reason: `Pause or cancel the live match on Table ${clampedTable} before changing it`,
+      };
+    }
+
+    this.commit(
+      (s) => {
+        const nextMatches = { ...s.matches };
+        // Clear any previous ready or paused match sitting on this table
+        for (const [id, m] of Object.entries(nextMatches)) {
+          if (
+            m &&
+            id !== matchId &&
+            !m.completed &&
+            m.tableNumber === clampedTable &&
+            (!m.started || m.paused)
+          ) {
+            nextMatches[id] = { ...m, tableNumber: null };
+          }
+        }
+        nextMatches[matchId] = { ...nextMatches[matchId], tableNumber: clampedTable };
+        return {
+          ...s,
+          ...(tableCount === 1 ? { activeMatchId: matchId } : {}),
+          matches: nextMatches,
+        };
+      },
+      { forcePublish: true }
+    );
+    return { ok: true, tableNumber: clampedTable, matchId };
+  }
+
+  /**
+   * Clears a ready or paused match off `tableNumber` so the table returns to OPEN.
+   * Refuses if the table currently has an active (live, unpaused) match.
+   */
+  clearTableMatch(tableNumber) {
+    const base = this.isStudioActive() ? this.state : this.programState;
+    const tableCount = Math.max(1, Math.floor(Number(base.rules?.tableCount ?? 1) || 1));
+    const clampedTable = Math.max(1, Math.min(tableCount, Math.floor(Number(tableNumber) || 1)));
+    const slots = getTableSlots(base);
+    const currentSlot = slots[clampedTable - 1];
+    if (!currentSlot?.match) return { ok: true };
+    if (currentSlot.match.started && !currentSlot.match.paused) {
+      return {
+        ok: false,
+        reason: `Pause or cancel the live match on Table ${clampedTable} first`,
+      };
+    }
+    const clearId = currentSlot.match.id;
+    this.commit(
+      (s) => {
+        const m = s.matches?.[clearId];
+        if (!m) return s;
+        return {
+          ...s,
+          matches: {
+            ...s.matches,
+            [clearId]: { ...m, tableNumber: null },
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+    return { ok: true, tableNumber: clampedTable };
   }
 
   getServerNow() {

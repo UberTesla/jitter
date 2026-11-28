@@ -23,7 +23,10 @@ export default function Scoreboard({
   onSwitchFirstServer,
   onStartMatch,
   onCancelMatchStart,
+  onPauseMatch,
+  onResumeMatch,
   onChangeMatchTable,
+  onOpenMatchPicker,
   onCompleteMatch,
   onEditCompletedMatch,
   onReopenMatch,
@@ -51,11 +54,15 @@ export default function Scoreboard({
   const isStarted = Boolean(
     match && (match.started || match.completed || (match.score1 || 0) > 0 || (match.score2 || 0) > 0)
   );
+  const isPaused = Boolean(match && match.paused && !match.completed);
+  const isLiveInSession = Boolean(isStarted && !isPaused && !match?.completed);
   const canStartMatch = Boolean(match && p1 && p2 && !match.completed && !isStarted);
 
   const statusTone =
     evalState.status === MATCH_STATUS.WINNER
       ? 'status-winner'
+      : isPaused
+      ? 'status-waiting'
       : evalState.status === MATCH_STATUS.DEUCE
       ? 'status-deuce'
       : evalState.status === MATCH_STATUS.GAME_POINT
@@ -107,7 +114,30 @@ export default function Scoreboard({
             {match ? `${match.roundLabel} · ${match.label}` : 'No Match Selected'}
           </span>
           {tableCount > 1 && match && (
-            isControl && onChangeMatchTable ? (
+            isControl && onOpenMatchPicker ? (
+              <>
+                <span className="table-badge-pill">TABLE {currentTableNum}</span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  disabled={isLiveInSession}
+                  onClick={() => onOpenMatchPicker(currentTableNum)}
+                  title={
+                    isLiveInSession
+                      ? 'Pause or cancel this live match before changing it'
+                      : `Change the match assigned to Table ${currentTableNum}`
+                  }
+                  style={{
+                    padding: '0.18rem 0.55rem',
+                    fontSize: '0.72rem',
+                    opacity: isLiveInSession ? 0.5 : 1,
+                    cursor: isLiveInSession ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Change Match
+                </button>
+              </>
+            ) : isControl && onChangeMatchTable ? (
               <select
                 className="table-select-pill"
                 value={currentTableNum}
@@ -124,6 +154,27 @@ export default function Scoreboard({
               <span className="table-badge-pill">TABLE {currentTableNum}</span>
             )
           )}
+          {tableCount === 1 && match && isControl && onOpenMatchPicker && (
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              disabled={isLiveInSession}
+              onClick={() => onOpenMatchPicker(1)}
+              title={
+                isLiveInSession
+                  ? 'Pause or cancel this live match before changing it'
+                  : 'Change the active match'
+              }
+              style={{
+                padding: '0.18rem 0.55rem',
+                fontSize: '0.72rem',
+                opacity: isLiveInSession ? 0.5 : 1,
+                cursor: isLiveInSession ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Change Match
+            </button>
+          )}
           {isTeams && <span className="doubles-pill">DOUBLES / TEAMS</span>}
         </div>
 
@@ -133,6 +184,8 @@ export default function Scoreboard({
             <span className="status-label">
               {evalState.status === MATCH_STATUS.WINNER && winnerName
                 ? `${evalState.isSkunkWin ? '🦨 SKUNK WIN' : 'WINNER'} — ${winnerName}`
+                : isPaused
+                ? '⏸ PAUSED'
                 : evalState.status === MATCH_STATUS.GAME_POINT && gamePointName
                 ? `${evalState.isSkunkPoint ? '🦨 SKUNK POINT' : 'GAME POINT'} — ${gamePointName}`
                 : canStartMatch
@@ -198,7 +251,7 @@ export default function Scoreboard({
                 type="button"
                 className="btn-score-plus btn-p1"
                 onClick={() => onAddPoint?.(1)}
-                disabled={!p1 || !p2 || !isStarted || match?.completed || evalState.winnerSlot !== null}
+                disabled={!p1 || !p2 || !isStarted || isPaused || match?.completed || evalState.winnerSlot !== null}
               >
                 +1 Point <kbd>1</kbd>
               </button>
@@ -280,7 +333,7 @@ export default function Scoreboard({
                 type="button"
                 className="btn-score-plus btn-p2"
                 onClick={() => onAddPoint?.(2)}
-                disabled={!p1 || !p2 || !isStarted || match?.completed || evalState.winnerSlot !== null}
+                disabled={!p1 || !p2 || !isStarted || isPaused || match?.completed || evalState.winnerSlot !== null}
               >
                 +1 Point <kbd>2</kbd>
               </button>
@@ -332,6 +385,26 @@ export default function Scoreboard({
                 : 'P1'}
               )
             </button>
+            {match && isStarted && !match.completed && !isPaused && onPauseMatch && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => onPauseMatch()}
+                title="Pause this live match (freezes timer and allows changing the table match)"
+              >
+                ⏸ Pause
+              </button>
+            )}
+            {match && isStarted && !match.completed && isPaused && onResumeMatch && (
+              <button
+                type="button"
+                className="btn-amber"
+                onClick={() => onResumeMatch()}
+                title="Resume this paused match"
+              >
+                ▶ Resume Match
+              </button>
+            )}
             {match &&
               isStarted &&
               !match.completed &&

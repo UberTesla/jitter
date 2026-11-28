@@ -83,21 +83,21 @@ export default function ControlView({
   const [tvUrlHistory, setTvUrlHistory] = useState(() => readTvUrlHistory());
   const [tvUploadLog, setTvUploadLog] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
-  const [selectedTableNum, setSelectedTableNum] = useState(null);
+  const [selectedTableNum, setSelectedTableNum] = useState(1);
   const [multiTableMode, setMultiTableMode] = useState(false);
+  const [tablePickerFor, setTablePickerFor] = useState(null); // tableNumber or null
   const fileInputRef = useRef(null);
   const toastTimerRef = useRef(null);
 
   const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
   const tableSlots = getTableSlots(state);
+  const effectiveSelectedTable = Math.max(1, Math.min(tableCount, selectedTableNum || 1));
   const selectedSlot =
-    tableCount > 1 && selectedTableNum
-      ? tableSlots.find((s) => s.tableNumber === selectedTableNum) || null
-      : null;
+    tableSlots.find((s) => s.tableNumber === effectiveSelectedTable) || tableSlots[0] || null;
   const activeMatch =
-    (selectedSlot?.match ? selectedSlot.match : null) ||
-    state.matches?.[state.activeMatchId] ||
-    null;
+    tableCount > 1
+      ? selectedSlot?.match || null
+      : selectedSlot?.match || state.matches?.[state.activeMatchId] || null;
   const grandmaEnabled = state.rules?.grandmaEnabled !== false;
   const cornerScale = state.ui?.cornerScale ?? 1.0;
   const cornerOpacity = state.ui?.cornerOpacity ?? 1.0;
@@ -745,12 +745,7 @@ export default function ControlView({
               >
                 {tableSlots.map((slot) => {
                   const m = slot.match;
-                  const isSelected =
-                    !multiTableMode &&
-                    Boolean(
-                      (selectedTableNum && selectedTableNum === slot.tableNumber) ||
-                        (!selectedTableNum && m && activeMatch && m.id === activeMatch.id)
-                    );
+                  const isSelected = !multiTableMode && effectiveSelectedTable === slot.tableNumber;
                   const p1Name = m?.player1Id ? pMap.get(m.player1Id)?.name : null;
                   const p2Name = m?.player2Id ? pMap.get(m.player2Id)?.name : null;
                   return (
@@ -761,16 +756,8 @@ export default function ControlView({
                       aria-selected={isSelected}
                       onClick={() => {
                         cancelPendingRemoval(true);
-                        const res = tournamentStore.selectOrQueueTable(slot.tableNumber, {
-                          setAsActive: false,
-                        });
                         setSelectedTableNum(slot.tableNumber);
                         if (multiTableMode) setMultiTableMode(false);
-                        if (res.ok && res.queued) {
-                          showToast(`Queued next match onto Table ${slot.tableNumber}`);
-                        } else if (!res.ok) {
-                          showToast(res.reason || `Table ${slot.tableNumber} is open`);
-                        }
                       }}
                       style={{
                         flex: tableSlots.length <= 4 ? '1 1 0' : '0 0 auto',
@@ -791,6 +778,8 @@ export default function ControlView({
                           ? '1.5px solid rgba(251, 191, 36, 0.82)'
                           : slot.isLive
                           ? '1px solid rgba(34, 197, 94, 0.45)'
+                          : slot.isPaused
+                          ? '1px solid rgba(251, 191, 36, 0.45)'
                           : '1px solid rgba(148, 163, 184, 0.24)',
                       }}
                     >
@@ -814,13 +803,27 @@ export default function ControlView({
                             borderRadius: '999px',
                             background: slot.isLive
                               ? 'rgba(34, 197, 94, 0.22)'
+                              : slot.isPaused
+                              ? 'rgba(245, 158, 11, 0.24)'
                               : slot.isQueued
-                              ? 'rgba(245, 158, 11, 0.2)'
+                              ? 'rgba(56, 189, 248, 0.2)'
                               : 'rgba(148, 163, 184, 0.16)',
-                            color: slot.isLive ? '#4ade80' : slot.isQueued ? '#fde68a' : '#94a3b8',
+                            color: slot.isLive
+                              ? '#4ade80'
+                              : slot.isPaused
+                              ? '#fbbf24'
+                              : slot.isQueued
+                              ? '#7dd3fc'
+                              : '#94a3b8',
                           }}
                         >
-                          {slot.isLive ? '● LIVE' : slot.isQueued ? 'READY' : 'OPEN'}
+                          {slot.isLive
+                            ? '● LIVE'
+                            : slot.isPaused
+                            ? '⏸ PAUSED'
+                            : slot.isQueued
+                            ? 'READY'
+                            : 'OPEN'}
                         </span>
                       </div>
                       <div
@@ -836,7 +839,7 @@ export default function ControlView({
                       >
                         {m
                           ? `${p1Name || 'TBD'} ${m.score1 ?? 0}–${m.score2 ?? 0} ${p2Name || 'TBD'}`
-                          : '+ Click to queue next match'}
+                          : 'No match assigned'}
                       </div>
                     </button>
                   );
@@ -883,10 +886,22 @@ export default function ControlView({
                     </span>
                     <span
                       className={`control-multitable-status ${
-                        slot.isLive ? 'is-live' : slot.isQueued ? 'is-ready' : 'is-open'
+                        slot.isLive
+                          ? 'is-live'
+                          : slot.isPaused
+                          ? 'is-paused'
+                          : slot.isQueued
+                          ? 'is-ready'
+                          : 'is-open'
                       }`}
                     >
-                      {slot.isLive ? '● LIVE' : slot.isQueued ? 'READY' : 'OPEN'}
+                      {slot.isLive
+                        ? '● LIVE'
+                        : slot.isPaused
+                        ? '⏸ PAUSED'
+                        : slot.isQueued
+                        ? 'READY'
+                        : 'OPEN'}
                     </span>
                     <button
                       type="button"
@@ -920,14 +935,19 @@ export default function ControlView({
                         tournamentStore.startMatch(m.id, slot.tableNumber);
                         showToast(`Table ${slot.tableNumber}: Match ${m.label} started!`);
                       }}
+                      onPauseMatch={() => {
+                        tournamentStore.pauseMatch(m.id);
+                        showToast(`Table ${slot.tableNumber}: Match ${m.label} paused`);
+                      }}
+                      onResumeMatch={() => {
+                        tournamentStore.resumeMatch(m.id, slot.tableNumber);
+                        showToast(`Table ${slot.tableNumber}: Match ${m.label} resumed`);
+                      }}
                       onCancelMatchStart={() => {
                         tournamentStore.cancelMatchStart(m.id);
                         showToast(`Table ${slot.tableNumber}: Cancelled start for ${m.label}`);
                       }}
-                      onChangeMatchTable={(tableNum) => {
-                        tournamentStore.setMatchTable(m.id, tableNum);
-                        showToast(`Assigned ${m.label} to Table ${tableNum}`);
-                      }}
+                      onOpenMatchPicker={(tNum) => setTablePickerFor(tNum)}
                       onCompleteMatch={() => {
                         tournamentStore.completeActiveMatch(m.id);
                         showToast(`Table ${slot.tableNumber}: Match ${m.label} completed!`);
@@ -949,18 +969,9 @@ export default function ControlView({
                       <button
                         type="button"
                         className="btn-amber btn-sm"
-                        onClick={() => {
-                          const res = tournamentStore.selectOrQueueTable(slot.tableNumber, {
-                            setAsActive: false,
-                          });
-                          if (res.ok && res.queued) {
-                            showToast(`Queued next match onto Table ${slot.tableNumber}`);
-                          } else if (!res.ok) {
-                            showToast(res.reason || `No ready matches for Table ${slot.tableNumber}`);
-                          }
-                        }}
+                        onClick={() => setTablePickerFor(slot.tableNumber)}
                       >
-                        + Queue Next Ready Match
+                        🏓 Choose Match
                       </button>
                     </div>
                   )}
@@ -968,7 +979,7 @@ export default function ControlView({
               );
             })}
           </div>
-        ) : (
+        ) : activeMatch ? (
           <Scoreboard
             match={activeMatch}
             players={state.players}
@@ -987,20 +998,25 @@ export default function ControlView({
             }
             onStartMatch={() => {
               cancelPendingRemoval(true);
-              tournamentStore.startMatch(activeMatch?.id || null, selectedTableNum);
+              tournamentStore.startMatch(activeMatch?.id || null, effectiveSelectedTable);
               if (activeMatch) showToast(`Match ${activeMatch.label} started!`);
+            }}
+            onPauseMatch={() => {
+              cancelPendingRemoval(true);
+              tournamentStore.pauseMatch(activeMatch?.id || null);
+              if (activeMatch) showToast(`Match ${activeMatch.label} paused`);
+            }}
+            onResumeMatch={() => {
+              cancelPendingRemoval(true);
+              tournamentStore.resumeMatch(activeMatch?.id || null, effectiveSelectedTable);
+              if (activeMatch) showToast(`Match ${activeMatch.label} resumed`);
             }}
             onCancelMatchStart={() => {
               cancelPendingRemoval(true);
               tournamentStore.cancelMatchStart(activeMatch?.id || null);
               if (activeMatch) showToast(`Cancelled start for ${activeMatch.label} — back to Ready`);
             }}
-            onChangeMatchTable={(tableNum) => {
-              if (!activeMatch) return;
-              tournamentStore.setMatchTable(activeMatch.id, tableNum);
-              setSelectedTableNum(tableNum);
-              showToast(`Assigned ${activeMatch.label} to Table ${tableNum}`);
-            }}
+            onOpenMatchPicker={(tNum) => setTablePickerFor(tNum)}
             onCompleteMatch={() => {
               cancelPendingRemoval(true);
               const prevMatch = activeMatch;
@@ -1017,7 +1033,158 @@ export default function ControlView({
               }
             }}
           />
+        ) : (
+          <section className="scoreboard-card mode-control control-open-table-stage" aria-label="Open Table">
+            <div className="control-multitable-open-card">
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#fbbf24', letterSpacing: '0.06em' }}>
+                TABLE {effectiveSelectedTable} · OPEN
+              </div>
+              <p style={{ margin: 0 }}>No match is currently assigned to Table {effectiveSelectedTable}.</p>
+              <button
+                type="button"
+                className="btn-amber"
+                onClick={() => setTablePickerFor(effectiveSelectedTable)}
+              >
+                🏓 Choose Match
+              </button>
+            </div>
+          </section>
         )}
+
+        {/* Explicit Table Match Picker Modal (Choose Match / Change Match) */}
+        {tablePickerFor !== null && (() => {
+          const targetSlot = tableSlots.find((s) => s.tableNumber === tablePickerFor) || null;
+          const currentOnTable = targetSlot?.match || null;
+          const pMap = new Map((state.players || []).map((p) => [p.id, p]));
+          const bracketOrder = { winners: 0, losers: 1, finals: 2 };
+          const eligibleMatches = Object.values(state.matches || {})
+            .filter((m) => {
+              if (!m || m.isBye || m.completed) return false;
+              if (!m.player1Id || !m.player2Id) return false;
+              // Exclude matches actively running live (unpaused) on any table
+              if (m.started && !m.paused) return false;
+              return true;
+            })
+            .sort((a, b) => {
+              if (a.id === currentOnTable?.id) return -1;
+              if (b.id === currentOnTable?.id) return 1;
+              if (Boolean(a.paused) !== Boolean(b.paused)) return a.paused ? -1 : 1;
+              const ba = bracketOrder[a.bracket] ?? 9;
+              const bb = bracketOrder[b.bracket] ?? 9;
+              if (ba !== bb) return ba - bb;
+              if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0);
+              return (a.matchNumber || 0) - (b.matchNumber || 0);
+            });
+
+          return (
+            <div
+              className="control-match-picker-backdrop"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Choose match for Table ${tablePickerFor}`}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setTablePickerFor(null);
+              }}
+            >
+              <div className="control-match-picker-card">
+                <div className="control-match-picker-head">
+                  <h3>
+                    🏓 {currentOnTable ? `Change Match — Table ${tablePickerFor}` : `Choose Match — Table ${tablePickerFor}`}
+                  </h3>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => setTablePickerFor(null)}
+                    aria-label="Close match picker"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {eligibleMatches.length === 0 ? (
+                  <p style={{ margin: '0.6rem 0', fontSize: '0.86rem', color: 'var(--text-muted)' }}>
+                    No other ready or paused matches are available yet.
+                  </p>
+                ) : (
+                  <div className="control-match-picker-list scroller">
+                    {eligibleMatches.map((m) => {
+                      const p1 = pMap.get(m.player1Id)?.name || 'TBD';
+                      const p2 = pMap.get(m.player2Id)?.name || 'TBD';
+                      const isCurrent = m.id === currentOnTable?.id;
+                      const otherTable =
+                        !isCurrent && Number(m.tableNumber) >= 1 && m.tableNumber !== tablePickerFor
+                          ? m.tableNumber
+                          : null;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className={`control-match-picker-row ${isCurrent ? 'is-current' : ''}`}
+                          onClick={() => {
+                            const res = tournamentStore.assignMatchToTable(tablePickerFor, m.id);
+                            if (res.ok) {
+                              setSelectedTableNum(tablePickerFor);
+                              setTablePickerFor(null);
+                              showToast(`Assigned ${m.label} (${p1} vs ${p2}) to Table ${tablePickerFor}`);
+                            } else {
+                              showToast(res.reason || 'Could not assign match');
+                            }
+                          }}
+                        >
+                          <div className="cmp-row-top">
+                            <span className="cmp-label">
+                              {m.roundLabel} · {m.label}
+                            </span>
+                            <div className="cmp-tags">
+                              {m.paused && (
+                                <span className="cmp-tag is-paused">
+                                  ⏸ PAUSED ({m.score1 ?? 0}–{m.score2 ?? 0})
+                                </span>
+                              )}
+                              {isCurrent && <span className="cmp-tag is-current">ON TABLE {tablePickerFor}</span>}
+                              {otherTable && <span className="cmp-tag">Queued T{otherTable}</span>}
+                            </div>
+                          </div>
+                          <div className="cmp-players">
+                            {p1} <span>vs</span> {p2}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="control-match-picker-foot">
+                  {currentOnTable && (!currentOnTable.started || currentOnTable.paused) && (
+                    <button
+                      type="button"
+                      className="btn-danger-outline btn-sm"
+                      onClick={() => {
+                        const res = tournamentStore.clearTableMatch(tablePickerFor);
+                        if (res.ok) {
+                          setTablePickerFor(null);
+                          showToast(`Cleared Table ${tablePickerFor} — now Open`);
+                        } else {
+                          showToast(res.reason || 'Could not clear table');
+                        }
+                      }}
+                    >
+                      Clear Table (Leave Open)
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => setTablePickerFor(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Middle Row: Collapsible Broadcast Deck (with contextual slide banner) + Grandma & CRT Panels */}
         <div
