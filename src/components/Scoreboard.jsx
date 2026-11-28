@@ -114,30 +114,7 @@ export default function Scoreboard({
             {match ? `${match.roundLabel} · ${match.label}` : 'No Match Selected'}
           </span>
           {tableCount > 1 && match && (
-            isControl && onOpenMatchPicker ? (
-              <>
-                <span className="table-badge-pill">TABLE {currentTableNum}</span>
-                <button
-                  type="button"
-                  className="btn-secondary btn-sm"
-                  disabled={isLiveInSession}
-                  onClick={() => onOpenMatchPicker(currentTableNum)}
-                  title={
-                    isLiveInSession
-                      ? 'Pause or cancel this live match before changing it'
-                      : `Change the match assigned to Table ${currentTableNum}`
-                  }
-                  style={{
-                    padding: '0.18rem 0.55rem',
-                    fontSize: '0.72rem',
-                    opacity: isLiveInSession ? 0.5 : 1,
-                    cursor: isLiveInSession ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  Change Match
-                </button>
-              </>
-            ) : isControl && onChangeMatchTable ? (
+            isControl && !onOpenMatchPicker && onChangeMatchTable ? (
               <select
                 className="table-select-pill"
                 value={currentTableNum}
@@ -153,27 +130,6 @@ export default function Scoreboard({
             ) : (
               <span className="table-badge-pill">TABLE {currentTableNum}</span>
             )
-          )}
-          {tableCount === 1 && match && isControl && onOpenMatchPicker && (
-            <button
-              type="button"
-              className="btn-secondary btn-sm"
-              disabled={isLiveInSession}
-              onClick={() => onOpenMatchPicker(1)}
-              title={
-                isLiveInSession
-                  ? 'Pause or cancel this live match before changing it'
-                  : 'Change the active match'
-              }
-              style={{
-                padding: '0.18rem 0.55rem',
-                fontSize: '0.72rem',
-                opacity: isLiveInSession ? 0.5 : 1,
-                cursor: isLiveInSession ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Change Match
-            </button>
           )}
           {isTeams && <span className="doubles-pill">DOUBLES / TEAMS</span>}
         </div>
@@ -378,13 +334,34 @@ export default function Scoreboard({
               ⇄ Switch 1st Server (
               {isTeams
                 ? match?.initialServer === 2
-                  ? 'T2'
-                  : 'T1'
+                  ? 'Team 2'
+                  : 'Team 1'
                 : match?.initialServer === 2
                 ? 'P2'
                 : 'P1'}
               )
             </button>
+            {match && onOpenMatchPicker && (
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={isLiveInSession}
+                onClick={() => onOpenMatchPicker(currentTableNum)}
+                title={
+                  isLiveInSession
+                    ? 'Pause or cancel this live match before changing it'
+                    : tableCount > 1
+                    ? `Change the match assigned to Table ${currentTableNum}`
+                    : 'Change the active match'
+                }
+                style={{
+                  opacity: isLiveInSession ? 0.5 : 1,
+                  cursor: isLiveInSession ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Change Match
+              </button>
+            )}
             {match && isStarted && !match.completed && !isPaused && onPauseMatch && (
               <button
                 type="button"
