@@ -76,6 +76,7 @@ export default function ScorekeeperView({
   const isTeams = state.entryMode === 'teams';
   const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
   const [lockedTableNum, setLockedTableNum] = useState(null);
+  const [pendingTableSwitch, setPendingTableSwitch] = useState(null);
   const tableSlots = useMemo(() => getTableSlots(state), [state]);
   const lockedSlotMatch =
     tableCount > 1 && lockedTableNum && lockedTableNum >= 1 && lockedTableNum <= tableCount
@@ -527,8 +528,7 @@ export default function ScorekeeperView({
     Math.min(tableCount, Math.floor(Number(lockedTableNum || activeMatch?.tableNumber) || 1))
   );
 
-  const handleSelectScorekeeperTable = (nextTableNum) => {
-    const clamped = Math.max(1, Math.min(tableCount, Math.floor(Number(nextTableNum) || 1)));
+  const commitScorekeeperTableSwitch = (clamped) => {
     const res = tournamentStore.selectOrQueueTable(clamped, { setAsActive: false });
     setLockedTableNum(clamped);
     if (res.ok && res.queued) {
@@ -538,6 +538,38 @@ export default function ScorekeeperView({
     } else {
       flashFeedback(res.reason || `Table ${clamped} is open`);
     }
+  };
+
+  const handleSelectScorekeeperTable = (nextTableNum) => {
+    const clamped = Math.max(1, Math.min(tableCount, Math.floor(Number(nextTableNum) || 1)));
+    if (clamped === activeTableNum) return;
+
+    const isScoringLiveMatch = Boolean(
+      activeMatch &&
+        !activeMatch.completed &&
+        !activeMatch.paused &&
+        (activeMatch.started ||
+          (activeMatch.score1 || 0) > 0 ||
+          (activeMatch.score2 || 0) > 0)
+    );
+    if (isScoringLiveMatch) {
+      const p1Name = activeMatch.player1Id
+        ? playerMap.get(activeMatch.player1Id)?.name || activeMatch.source1Label
+        : activeMatch.source1Label || 'Player 1';
+      const p2Name = activeMatch.player2Id
+        ? playerMap.get(activeMatch.player2Id)?.name || activeMatch.source2Label
+        : activeMatch.source2Label || 'Player 2';
+      setPendingTableSwitch({
+        fromTable: activeTableNum,
+        toTable: clamped,
+        matchLabel: activeMatch.label || 'Current Match',
+        playersText: `${p1Name} vs ${p2Name}`,
+        scoreText: `${activeMatch.score1 ?? 0}–${activeMatch.score2 ?? 0}`,
+      });
+      return;
+    }
+
+    commitScorekeeperTableSwitch(clamped);
   };
 
   const activeP1 = activeMatch?.player1Id ? playerMap.get(activeMatch.player1Id) : null;
@@ -1047,6 +1079,104 @@ export default function ScorekeeperView({
           </div>
         </div>
       </dialog>
+
+      {pendingTableSwitch && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="sk-table-switch-warn-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPendingTableSwitch(null);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 120,
+            background: 'rgba(2, 6, 23, 0.82)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(460px, 100%)',
+              borderRadius: '16px',
+              padding: '1.25rem 1.35rem',
+              background: 'linear-gradient(180deg, #1e1312 0%, #0f172a 100%)',
+              border: '2px solid rgba(245, 158, 11, 0.82)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65), 0 0 28px rgba(245, 158, 11, 0.22)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.85rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.55rem', lineHeight: 1 }} aria-hidden="true">
+                ⚠️
+              </span>
+              <h2
+                id="sk-table-switch-warn-title"
+                style={{
+                  margin: 0,
+                  fontSize: '1.08rem',
+                  fontWeight: 800,
+                  color: '#fde68a',
+                }}
+              >
+                Live Game In Progress on Table {pendingTableSwitch.fromTable}
+              </h2>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.5, color: '#e2e8f0' }}>
+              You are currently scoring{' '}
+              <strong>
+                {pendingTableSwitch.matchLabel} ({pendingTableSwitch.playersText},{' '}
+                {pendingTableSwitch.scoreText})
+              </strong>{' '}
+              on <strong>Table {pendingTableSwitch.fromTable}</strong>.
+            </p>
+
+            <p style={{ margin: 0, fontSize: '0.84rem', lineHeight: 1.45, color: '#cbd5e1' }}>
+              Scorekeepers should normally stay on one table until the game finishes so points
+              aren&apos;t accidentally recorded on the wrong match. Are you sure you want to leave{' '}
+              <strong>Table {pendingTableSwitch.fromTable}</strong> and switch to{' '}
+              <strong>Table {pendingTableSwitch.toTable}</strong>?
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end',
+                gap: '0.55rem',
+                marginTop: '0.25rem',
+              }}
+            >
+              <button
+                type="button"
+                className="btn-amber"
+                onClick={() => setPendingTableSwitch(null)}
+              >
+                Stay on Table {pendingTableSwitch.fromTable}
+              </button>
+              <button
+                type="button"
+                className="btn-danger-outline"
+                onClick={() => {
+                  const target = pendingTableSwitch.toTable;
+                  setPendingTableSwitch(null);
+                  commitScorekeeperTableSwitch(target);
+                }}
+              >
+                Switch to Table {pendingTableSwitch.toTable} Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DebounceOverrideDialog
         request={debounceRequest}
