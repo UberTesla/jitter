@@ -9,6 +9,7 @@ import GrandmaPhraseInput from '../components/GrandmaPhraseInput.jsx';
 import MatchTimer from '../components/MatchTimer.jsx';
 import PointRemovalTooltip, { usePendingPointRemoval } from '../components/PointRemovalTooltip.jsx';
 import ViewNavBar from '../components/ViewNavBar.jsx';
+import IdentityGateModal, { hasUserIdentity } from '../components/IdentityGateModal.jsx';
 import { useFullscreenMenu } from '../hooks/useFullscreenMenu.js';
 
 /**
@@ -77,6 +78,7 @@ export default function ScorekeeperView({
   const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
   const [lockedTableNum, setLockedTableNum] = useState(null);
   const [pendingTableSwitch, setPendingTableSwitch] = useState(null);
+  const [identityGateOpen, setIdentityGateOpen] = useState(false);
   const tableSlots = useMemo(() => getTableSlots(state), [state]);
   const lockedSlotMatch =
     tableCount > 1 && lockedTableNum && lockedTableNum >= 1 && lockedTableNum <= tableCount
@@ -948,6 +950,10 @@ export default function ScorekeeperView({
             className="btn-amber sk-begin-match-btn"
             disabled={hasPendingScorekeeperRequest}
             onClick={async () => {
+              if (!hasUserIdentity(state)) {
+                setIdentityGateOpen(true);
+                return;
+              }
               const res = await tournamentStore.requestScorekeeperAccess();
               if (res.ok && res.approved) {
                 flashFeedback('🎯 You are now a Scorekeeper!');
@@ -1347,6 +1353,24 @@ export default function ScorekeeperView({
           {tabId}
         </span>
       )}
+      <IdentityGateModal
+        open={identityGateOpen}
+        state={state}
+        actionLabel="Send Request"
+        allowClaim={true}
+        onIdentified={async () => {
+          setIdentityGateOpen(false);
+          const res = await tournamentStore.requestScorekeeperAccess();
+          if (res.ok && res.approved) {
+            flashFeedback('🎯 You are now a Scorekeeper!');
+          } else if (res.ok && res.pending) {
+            flashFeedback('🙋 Request sent — waiting for approval in Users tab');
+          } else {
+            flashFeedback(res.error || 'Could not request Scorekeeper access');
+          }
+        }}
+        onCancel={() => setIdentityGateOpen(false)}
+      />
     </div>
   );
 }

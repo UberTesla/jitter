@@ -3633,6 +3633,11 @@ export class TournamentStore {
     const baseUrl = this.getSyncBaseUrl();
     if (baseUrl && typeof fetch !== 'undefined' && this.remoteSync.connected) {
       try {
+        const claimedObj = this.remoteSync.deviceId
+          ? resolveClaimedPlayer(target, target.playerClaims?.[this.remoteSync.deviceId])
+          : null;
+        const resolvedReqName =
+          claimedObj?.name || this.remoteSync.deviceName;
         const res = await fetch(`${baseUrl}/__sync/tournament/request-scorekeeper`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3640,7 +3645,7 @@ export class TournamentStore {
             sender: this.tabId,
             tournamentId: target.tournamentId,
             deviceId: this.remoteSync.deviceId,
-            deviceName: this.remoteSync.deviceName,
+            deviceName: resolvedReqName,
             joinCode: this.remoteSync.unlockedGuestKeys?.[target.tournamentId] || '',
           }),
         });

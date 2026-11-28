@@ -23,6 +23,7 @@ import BracketView from '../components/BracketView.jsx';
 import MatchTimer from '../components/MatchTimer.jsx';
 import TournamentStatsPanel from '../components/TournamentStatsPanel.jsx';
 import RetroTVCorner from '../components/RetroTVCorner.jsx';
+import IdentityGateModal, { hasUserIdentity } from '../components/IdentityGateModal.jsx';
 
 /**
  * Native Mobile-First Spectator Companion (/spectator)
@@ -45,6 +46,7 @@ export default function SpectatorView({
   const [bracketFilter, setBracketFilter] = useState('both');
   const [feedback, setFeedback] = useState('');
   const [accessDeniedMsg, setAccessDeniedMsg] = useState('');
+  const [identityGateOpen, setIdentityGateOpen] = useState(false);
   const [bannerTick, setBannerTick] = useState(0);
   const [grandmaTick, setGrandmaTick] = useState(0);
 
@@ -338,7 +340,7 @@ export default function SpectatorView({
     }, 3000);
   };
 
-  const handleRequestScorekeeper = async () => {
+  const submitScorekeeperRequest = async () => {
     setAccessDeniedMsg('');
     const res = await tournamentStore.requestScorekeeperAccess();
     if (res.ok && res.approved) {
@@ -349,6 +351,14 @@ export default function SpectatorView({
     } else {
       flashFeedback(res.error || 'Could not request Scorekeeper access');
     }
+  };
+
+  const handleRequestScorekeeper = async () => {
+    if (!hasUserIdentity(state)) {
+      setIdentityGateOpen(true);
+      return;
+    }
+    await submitScorekeeperRequest();
   };
 
   const handleSelectTab = (tabId) => {
@@ -1019,6 +1029,17 @@ export default function SpectatorView({
           allowLocalToggle={true}
         />
       )}
+      <IdentityGateModal
+        open={identityGateOpen}
+        state={state}
+        actionLabel="Send Request"
+        allowClaim={true}
+        onIdentified={async () => {
+          setIdentityGateOpen(false);
+          await submitScorekeeperRequest();
+        }}
+        onCancel={() => setIdentityGateOpen(false)}
+      />
     </div>
   );
 }

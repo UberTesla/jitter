@@ -7,6 +7,7 @@ import {
 import { normalizeFourWordId } from '../engine/tournamentId.js';
 import { clampPlayerCount, MIN_PLAYERS, MAX_PLAYERS } from '../engine/bracketGenerator.js';
 import { resolveShareOrigin } from '../components/ShareTournamentModal.jsx';
+import IdentityGateModal, { hasUserIdentity } from '../components/IdentityGateModal.jsx';
 import { formatBuildTooltip, formatVersionBadge } from '../engine/appVersion.js';
 
 function formatRelativeTime(ts) {
@@ -50,6 +51,7 @@ export default function HubView({
 
   const [serverUrlDraft, setServerUrlDraft] = useState(remoteSync?.customServerUrl || '');
   const [deviceNameDraft, setDeviceNameDraft] = useState(remoteSync?.deviceName || '');
+  const [pendingJoinRequestTournament, setPendingJoinRequestTournament] = useState(null);
   const [adminKeyInput, setAdminKeyInput] = useState('');
   const [joinKeyInput, setJoinKeyInput] = useState('');
   const [guestPromptTargetId, setGuestPromptTargetId] = useState(null);
@@ -1008,6 +1010,10 @@ export default function HubView({
                                   if (accessDeniedNotice?.tournamentId === t.id) {
                                     setAccessDeniedNotice(null);
                                   }
+                                  if (!hasUserIdentity(null, remoteSync)) {
+                                    setPendingJoinRequestTournament(t);
+                                    return;
+                                  }
                                   const res = await tournamentStore.requestTournamentJoinAccess(t.id);
                                   if (res.ok && res.approved) {
                                     handleOpenCloud(t);
@@ -1568,6 +1574,28 @@ export default function HubView({
           </div>
         </div>
       </dialog>
+      <IdentityGateModal
+        open={Boolean(pendingJoinRequestTournament)}
+        state={null}
+        actionLabel="Request Access"
+        allowClaim={false}
+        onIdentified={async () => {
+          const targetT = pendingJoinRequestTournament;
+          setPendingJoinRequestTournament(null);
+          if (!targetT) return;
+          const res = await tournamentStore.requestTournamentJoinAccess(targetT.id);
+          if (res.ok && res.approved) {
+            handleOpenCloud(targetT);
+          } else if (res.ok && res.pending) {
+            flashStatus(
+              `✋ Join request sent to ${targetT.hostDeviceName || 'the host'} for "${targetT.tournamentName}"!`
+            );
+          } else {
+            flashStatus(res.error || 'Could not send join request');
+          }
+        }}
+        onCancel={() => setPendingJoinRequestTournament(null)}
+      />
     </div>
   );
 }
