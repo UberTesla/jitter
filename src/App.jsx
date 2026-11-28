@@ -424,7 +424,19 @@ export default function App() {
       : '/control';
 
   const navigateMode = (nextMode) => {
-    const normalized = clampModeForPermissions(nextMode, rolePerms);
+    // Resolve fresh permissions directly from the store so navigating immediately after a role change
+    // (e.g., auto-approved Scorekeeper request) never clamps against stale React render permissions!
+    const freshMeta = tournamentStore.getSyncMeta();
+    const freshLive = freshMeta.programState || tournamentStore.getState();
+    const freshPerms = getRolePermissions(
+      resolveEffectiveRole(
+        freshLive,
+        freshMeta.remoteSync?.deviceId || '',
+        tournamentStore.getTabId(),
+        { adminDeviceIds: freshMeta.remoteSync?.admins || [] }
+      )
+    );
+    const normalized = clampModeForPermissions(nextMode, freshPerms);
     if (normalized !== 'admin') setAdminStandalone(false);
     setViewMode(normalized);
     const targetPath = pathForMode(normalized);

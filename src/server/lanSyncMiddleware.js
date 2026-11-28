@@ -3473,7 +3473,8 @@ export function createLanSyncHandler({
           return sendJson(res, 403, { error: 'Not authorized for this tournament', accessRevoked: true });
         }
 
-        const currentRole = resolveEffectiveRole(entry, reqDeviceId, '', {
+        const reqTabId = String(body?.tabId || body?.sender || '').trim();
+        const currentRole = resolveEffectiveRole(entry, reqDeviceId, reqTabId, {
           adminDeviceIds: getAdminDeviceIds(),
         });
         if (currentRole === 'presenter') {
@@ -3493,9 +3494,21 @@ export function createLanSyncHandler({
 
         if (!requireApproval && !wasManuallyDemoted) {
           // Open Scorekeeper mode: first-time requests auto-approve immediately!
+          const deviceRole = resolveEffectiveRole(entry, reqDeviceId, '', {
+            adminDeviceIds: getAdminDeviceIds(),
+          });
+          const nextUserRoles = { ...(entry.userRoles || {}) };
+          if ((ROLE_LEVEL[deviceRole] ?? 0) < ROLE_LEVEL.scorekeeper) {
+            nextUserRoles[reqDeviceId] = 'scorekeeper';
+          }
+          const nextTabRoles = { ...(entry.tabRoles || {}) };
+          if (reqTabId && nextTabRoles[reqTabId] === 'spectator') {
+            nextTabRoles[reqTabId] = 'scorekeeper';
+          }
           const updated = {
             ...entry,
-            userRoles: { ...(entry.userRoles || {}), [reqDeviceId]: 'scorekeeper' },
+            userRoles: nextUserRoles,
+            tabRoles: nextTabRoles,
             scorekeeperRequests: (entry.scorekeeperRequests || []).filter(
               (r) => r && r.deviceId !== reqDeviceId
             ),
@@ -3535,6 +3548,7 @@ export function createLanSyncHandler({
         const nextReqs = [
           {
             deviceId: reqDeviceId,
+            tabId: reqTabId || null,
             deviceName: reqDeviceName,
             ip: reqIp,
             requestedAt: Date.now(),
@@ -3593,10 +3607,14 @@ export function createLanSyncHandler({
         if (!getRolePermissions(actorRole).canApproveRequests) {
           return sendJson(res, 403, { error: 'Only admin, host, or moderator can resolve access requests' });
         }
+        const matchedReq = (entry.scorekeeperRequests || []).find(
+          (r) => r && r.deviceId === targetDeviceId
+        );
         const nextReqs = (entry.scorekeeperRequests || []).filter(
           (r) => r && r.deviceId !== targetDeviceId
         );
         const nextRoles = { ...(entry.userRoles || {}) };
+        const nextTabRoles = { ...(entry.tabRoles || {}) };
         let nextDemoted = Array.isArray(entry.demotedScorekeepers)
           ? [...entry.demotedScorekeepers]
           : [];
@@ -3608,6 +3626,9 @@ export function createLanSyncHandler({
           if ((ROLE_LEVEL[currTargetRole] ?? 0) < ROLE_LEVEL.scorekeeper) {
             nextRoles[targetDeviceId] = 'scorekeeper';
           }
+          if (matchedReq?.tabId && nextTabRoles[matchedReq.tabId] === 'spectator') {
+            nextTabRoles[matchedReq.tabId] = 'scorekeeper';
+          }
           nextDemoted = nextDemoted.filter((did) => did !== targetDeviceId);
         } else if (!approve && targetDeviceId) {
           deniedSet.add(targetDeviceId);
@@ -3615,6 +3636,7 @@ export function createLanSyncHandler({
         const updated = {
           ...entry,
           userRoles: nextRoles,
+          tabRoles: nextTabRoles,
           scorekeeperRequests: nextReqs,
           demotedScorekeepers: nextDemoted,
           deniedDevices: Array.from(deniedSet),

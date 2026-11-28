@@ -3657,6 +3657,7 @@ export class TournamentStore {
           this.state = {
             ...this.state,
             userRoles: updated.userRoles,
+            tabRoles: updated.tabRoles,
             scorekeeperRequests: updated.scorekeeperRequests,
           };
           if (Array.isArray(data.clients)) {
@@ -3708,6 +3709,7 @@ export class TournamentStore {
           this.state = {
             ...this.state,
             userRoles: updated.userRoles,
+            tabRoles: updated.tabRoles,
             scorekeeperRequests: updated.scorekeeperRequests,
           };
           if (Array.isArray(data.clients)) {
