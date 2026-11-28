@@ -1617,13 +1617,13 @@ dialog.app-dialog::backdrop {
 }
 
 /* =========================================================================
-   NOTIFICATION PRE-PERMISSION EXPLAINER MODAL (WITH TAILORED BROWSER PREVIEW)
+   NOTIFICATION PRE-PERMISSION EXPLAINER MODAL
    ========================================================================= */
 .notify-preprompt-backdrop {
   position: fixed;
   inset: 0;
   z-index: 130;
-  background: rgba(2, 6, 23, 0.82);
+  background: rgba(2, 6, 23, 0.78);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -1632,173 +1632,58 @@ dialog.app-dialog::backdrop {
 }
 
 .notify-preprompt-card {
-  width: min(410px, 100%);
+  width: min(390px, 100%);
   max-height: 90dvh;
   overflow-y: auto;
   border-radius: 16px;
-  padding: 1.15rem 1.2rem 1rem;
+  padding: 1.3rem 1.35rem 1.05rem;
   background: linear-gradient(175deg, #172038 0%, #0b1224 100%);
-  border: 2px solid rgba(251, 191, 36, 0.72);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72), 0 0 32px rgba(245, 158, 11, 0.18);
+  border: 1.5px solid rgba(251, 191, 36, 0.62);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.68), 0 0 28px rgba(245, 158, 11, 0.14);
   display: flex;
   flex-direction: column;
-  gap: 0.72rem;
+  gap: 0.9rem;
   color: #f8fafc;
-}
-
-.notify-preprompt-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  align-self: flex-start;
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  padding: 0.2rem 0.58rem;
-  border-radius: 999px;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(248, 113, 113, 0.65);
-  color: #fecaca;
-}
-
-.notify-preprompt-pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f87171;
-  box-shadow: 0 0 8px #f87171;
 }
 
 .notify-preprompt-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.24rem;
+  font-size: 1.35rem;
   line-height: 1.15;
   color: #fef3c7;
+  letter-spacing: 0.02em;
 }
 
-.notify-preprompt-lead {
+.notify-preprompt-list {
+  list-style: none;
   margin: 0;
-  font-size: 0.86rem;
-  line-height: 1.45;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 0.62rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
   color: #cbd5e1;
 }
 
-.notify-preprompt-lead strong {
+.notify-preprompt-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.notify-preprompt-list .npl-icon {
+  flex-shrink: 0;
+  line-height: 1.35;
+}
+
+.notify-preprompt-list strong {
   color: #f8fafc;
-}
-
-.notify-preview-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.38rem;
-}
-
-.notify-preview-caption {
-  font-size: 0.74rem;
-  color: #93c5fd;
-}
-
-.notify-native-mock {
-  border-radius: 10px;
-  padding: 0.7rem 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.32rem;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-
-.notify-native-mock.is-light {
-  background: #ffffff;
-  color: #1f2937;
-  border: 1px solid rgba(15, 23, 42, 0.16);
-}
-
-.notify-native-mock.is-dark {
-  background: #292a2d;
-  color: #e8eaed;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-.notify-native-mock.is-ios {
-  text-align: center;
-  border-radius: 14px;
-}
-
-.notify-native-mock.is-ios.is-light {
-  background: #f2f2f7;
-}
-
-.notify-native-mock.is-ios.is-dark {
-  background: #2c2c2e;
-}
-
-.nnm-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  word-break: break-word;
-}
-
-.nnm-body {
-  font-size: 0.76rem;
-  opacity: 0.88;
-}
-
-.nnm-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.45rem;
-  margin-top: 0.3rem;
-}
-
-.notify-native-mock.is-ios .nnm-actions {
-  flex-direction: row-reverse;
-  justify-content: center;
-  border-top: 1px solid rgba(148, 163, 184, 0.22);
-  padding-top: 0.45rem;
-}
-
-.nnm-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.28rem 0.78rem;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 600;
-}
-
-.notify-native-mock.is-firefox .nnm-btn,
-.notify-native-mock.is-safari-mac .nnm-btn,
-.notify-native-mock.is-ios .nnm-btn {
-  border-radius: 6px;
-}
-
-.notify-native-mock.is-light .nnm-btn.is-deny {
-  background: #f1f3f4;
-  color: #5f6368;
-  border: 1px solid #dadce0;
-}
-
-.notify-native-mock.is-dark .nnm-btn.is-deny {
-  background: #3c4043;
-  color: #bdc1c6;
-  border: 1px solid #5f6368;
-}
-
-.notify-native-mock.is-light .nnm-btn.is-allow {
-  background: #1a73e8;
-  color: #ffffff;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.55);
-}
-
-.notify-native-mock.is-dark .nnm-btn.is-allow {
-  background: #8ab4f8;
-  color: #202124;
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.6);
+  letter-spacing: 0.02em;
 }
 
 .notify-preprompt-actions {
@@ -1810,8 +1695,8 @@ dialog.app-dialog::backdrop {
 
 .notify-preprompt-cta {
   width: 100%;
-  padding: 0.68rem 1rem;
-  font-size: 0.94rem;
+  padding: 0.72rem 1rem;
+  font-size: 0.96rem;
   font-weight: 800;
 }
 
@@ -1820,9 +1705,9 @@ dialog.app-dialog::backdrop {
   border: none;
   background: transparent;
   color: #94a3b8;
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   cursor: pointer;
-  padding: 0.2rem;
+  padding: 0.24rem;
 }
 
 .notify-preprompt-skip:hover {
