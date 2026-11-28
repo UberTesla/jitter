@@ -1309,77 +1309,95 @@ export class RetroTVScene {
     ctx.fill();
     ctx.restore();
 
-    // Main silver-gray hair volume (rear three-quarter view facing right toward TV)
-    const hairGrad = ctx.createRadialGradient(-4, -26, 6, 2, -16, 34);
-    hairGrad.addColorStop(0, '#f1f5f9');
-    hairGrad.addColorStop(0.45, '#cbd5e1');
-    hairGrad.addColorStop(0.82, '#94a3b8');
+    // Main silver-white curled grandma bob / soft perm (hair down, no bun — rear 3/4 view)
+    const hairGrad = ctx.createRadialGradient(-2, -28, 5, 2, -15, 36);
+    hairGrad.addColorStop(0, '#f8fafc');
+    hairGrad.addColorStop(0.42, '#dbe3ed');
+    hairGrad.addColorStop(0.78, '#9aa7b8');
     hairGrad.addColorStop(1, '#64748b');
-    ctx.fillStyle = hairGrad;
-    ctx.beginPath();
-    ctx.ellipse(2, -17, 25, 24, 0.08, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
 
-    // Soft sculpted hair waves swept back toward the bun
-    ctx.strokeStyle = 'rgba(248, 250, 252, 0.65)';
-    ctx.lineWidth = 1.5;
-    for (let w = 0; w < 4; w++) {
-      ctx.beginPath();
-      ctx.moveTo(19, -29 + w * 6.5);
-      ctx.quadraticCurveTo(2, -33 + w * 6.5, -19, -22 + w * 5.2);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(71, 85, 105, 0.35)';
-    ctx.lineWidth = 1.1;
-    for (let w = 0; w < 3; w++) {
-      ctx.beginPath();
-      ctx.moveTo(16, -25 + w * 7);
-      ctx.quadraticCurveTo(0, -28 + w * 7, -18, -18 + w * 5.5);
-      ctx.stroke();
-    }
+    // Outer fluffy scalloped silhouette (full crown + curled waves framing back & nape)
+    const curlPuffs = [
+      { x: 2, y: -24, rx: 23, ry: 18 },   // full soft crown
+      { x: -16, y: -22, rx: 12, ry: 12 }, // upper-back curl volume
+      { x: -21, y: -10, rx: 11, ry: 11 }, // mid-back curl puff
+      { x: -17, y: 1, rx: 10, ry: 9.5 },  // lower-back nape curl
+      { x: -6, y: 5, rx: 11, ry: 9 },     // center nape curl
+      { x: 6, y: 4, rx: 11, ry: 9 },      // right-nape curl
+      { x: 16, y: -2, rx: 10, ry: 9.5 },  // side bob curl below ear
+      { x: 19, y: -14, rx: 10, ry: 11 },  // right temple wave
+      { x: 14, y: -28, rx: 12, ry: 10 },  // front-top poof
+      { x: -6, y: -33, rx: 13, ry: 9.5 }, // top-back crown poof
+    ];
 
-    // Rear Hair Bun (positioned on back-left of her head)
-    const bunGrad = ctx.createRadialGradient(-24, -22, 2, -22, -19, 13);
-    bunGrad.addColorStop(0, '#e2e8f0');
-    bunGrad.addColorStop(0.55, '#b6c2d1');
-    bunGrad.addColorStop(1, '#64748b');
-    ctx.fillStyle = bunGrad;
-    ctx.beginPath();
-    ctx.ellipse(-22, -19, 11.5, 10, -0.25, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-
-    // Bun swirl highlight
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.arc(-22, -19, 6, Math.PI * 0.2, Math.PI * 1.4);
-    ctx.stroke();
-
-    // Tortoiseshell / Gold Hairpin tucked diagonally through the rear bun
+    // Subtle dark outline halo around the full curled silhouette
     ctx.save();
-    ctx.translate(-22, -19);
-    ctx.rotate(-0.62);
-    ctx.strokeStyle = '#b45309';
-    ctx.lineWidth = 2.4;
+    ctx.fillStyle = '#475569';
+    for (const p of curlPuffs) {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.rx + 1.3, p.ry + 1.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = hairGrad;
+    for (const p of curlPuffs) {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Soft permed curl arcs & silver-white sheen across crown and waves
+    ctx.save();
     ctx.lineCap = 'round';
+    const curlArcs = [
+      { x: -8, y: -26, r: 9, a0: Math.PI * 0.85, a1: Math.PI * 1.85 },
+      { x: 6, y: -27, r: 9.5, a0: Math.PI * 1.05, a1: Math.PI * 1.95 },
+      { x: -15, y: -13, r: 8, a0: Math.PI * 0.6, a1: Math.PI * 1.65 },
+      { x: -2, y: -14, r: 9, a0: Math.PI * 0.15, a1: Math.PI * 1.1 },
+      { x: 11, y: -15, r: 8, a0: Math.PI * 1.15, a1: Math.PI * 2.1 },
+      { x: -13, y: -1, r: 7.5, a0: Math.PI * 0.2, a1: Math.PI * 1.25 },
+      { x: -1, y: 1, r: 8, a0: Math.PI * 0.1, a1: Math.PI * 1.05 },
+      { x: 11, y: -1, r: 7.5, a0: Math.PI * 0.05, a1: Math.PI * 0.95 },
+    ];
+    ctx.strokeStyle = 'rgba(71, 85, 105, 0.34)';
+    ctx.lineWidth = 1.6;
+    for (const c of curlArcs) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y + 1.1, c.r, c.a0, c.a1);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.lineWidth = 1.4;
+    for (const c of curlArcs) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r, c.a0, c.a1);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Gold beaded glasses chain draping gently from temple arm down behind her curls
+    ctx.save();
+    ctx.strokeStyle = '#d4a84f';
+    ctx.lineWidth = 1.15;
+    ctx.setLineDash([1.6, 2.2]);
     ctx.beginPath();
-    ctx.moveTo(-14, 0);
-    ctx.lineTo(13, 0);
+    ctx.moveTo(20, -15.5);
+    ctx.quadraticCurveTo(18, -3, 12, 9);
     ctx.stroke();
-    // Gold beaded hairpin ornament on outer end
-    ctx.fillStyle = '#fbbf24';
+    ctx.setLineDash([]);
+
+    // Classic luminous pearl stud earring peeking beneath her side wave
+    ctx.fillStyle = '#f8fafc';
     ctx.beginPath();
-    ctx.arc(-14.5, 0, 3.1, 0, Math.PI * 2);
+    ctx.arc(19.5, -7.5, 2.7, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#92400e';
-    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 0.7;
     ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(18.8, -8.3, 0.9, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
 
     ctx.restore(); // End Grandma behind-chair layer
