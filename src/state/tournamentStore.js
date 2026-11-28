@@ -431,28 +431,34 @@ function detectInitialViewMode() {
 }
 
 export const DEFAULT_BANTER_QUOTES = [
-  'Raymond would have knocked over the coffee table by now.',
-  'Back in \'68, your grandfather played with a wooden paddle and won!',
-  'Watch your elbows, sweetheart — keep your wrist loose!',
-  'Somebody turn up the TV, my show is getting to the good part!',
-  'Don\'t forget to hydrate between sets, dear.',
-  'Nice footwork! You\'re lighter on your feet than Frank ever was.',
+  'Stick your head in a coffee pot!',
+  'Tattletale sittin\' on a bull\'s tail',
+  'You think you\'re smart ... you\'re dumber than a fart!',
+  'Get off the TV, Raymond\'s on!',
+  'Hey, get out of my \"Cher\".',
+  'Move your butt, I gotta watch Raymond!'
+  //  'Raymond would have knocked over the coffee table by now.',
+  //  'Back in \'68, your grandfather played with a wooden paddle and won!',
+  //  'Watch your elbows, sweetheart — keep your wrist loose!',
+  //  'Somebody turn up the TV, my show is getting to the good part!',
+  //  'Don\'t forget to hydrate between sets, dear.',
+  //  'Nice footwork! You\'re lighter on your feet than Frank ever was.',
 ];
 
 export const DEFAULT_CONTEXTUAL_QUOTES = [
   'Oh! Look at the spin on that little white ball!',
   'That point had more mustard on it than a deli sandwich!',
-  'Ooh, what a rally! My knitting needles are shaking!',
+  //  'Ooh, what a rally! My knitting needles are shaking!',
   'Right down the line! Did you see that angle?!',
-  'Whoa! Keep your eye on the ball, honey!',
+  'Whoa! Keep your eye on the ball!',
   'What a comeback shot — pure magic!',
 ];
 
 export const DEFAULT_GAME_POINT_QUOTES = [
   'Game point! Hold your breath, everyone!',
   'One more point and this match is in the books!',
-  'Oh my nerves — it\'s Game Point on $table!',
-  'Don\'t blink now, sweetheart — Game Point!',
+  'Oh my nerves — it\'s Game Point!',
+  'Don\'t blink now — Game Point!',
 ];
 
 export const SCORE_FONT_OPTIONS = [
@@ -748,16 +754,16 @@ export function createInitialState(overrides = {}) {
         Array.isArray(overrides.ui?.tvPlaylist) && overrides.ui.tvPlaylist.length > 0
           ? overrides.ui.tvPlaylist
           : [
-              {
-                id: 'builtin-default-tv',
-                kind: 'url',
-                name: 'Raymond Thanksgiving (Default)',
-                url: '/raymond-thanksgiving.mp4',
-                muted: true,
-                durationSec: 2640,
-                updatedAt: 0,
-              },
-            ],
+            {
+              id: 'builtin-default-tv',
+              kind: 'url',
+              name: 'Raymond Thanksgiving (Default)',
+              url: '/raymond-thanksgiving.mp4',
+              muted: true,
+              durationSec: 2640,
+              updatedAt: 0,
+            },
+          ],
       tvPlaylistIndex: Math.max(0, Number(overrides.ui?.tvPlaylistIndex) || 0),
       tvPlaylistMode: ['loop', 'shuffle', 'single'].includes(overrides.ui?.tvPlaylistMode)
         ? overrides.ui.tvPlaylistMode
@@ -784,8 +790,8 @@ export function createInitialState(overrides = {}) {
     presentation: {
       activeSlide: overrides.presentation?.activeSlide || 'title',
       autoRotate: overrides.presentation?.autoRotate ?? false,
-    autoRotateSec: overrides.presentation?.autoRotateSec ?? 18,
-    autoRotateSlides: normalizeAutoRotateSlides(overrides.presentation?.autoRotateSlides),
+      autoRotateSec: overrides.presentation?.autoRotateSec ?? 18,
+      autoRotateSlides: normalizeAutoRotateSlides(overrides.presentation?.autoRotateSlides),
       titleAmbiance: AMBIANCE_OPTIONS.some((a) => a.id === overrides.presentation?.titleAmbiance)
         ? overrides.presentation.titleAmbiance
         : 'auto',
@@ -1680,7 +1686,7 @@ export class TournamentStore {
         // Periodic lightweight HTTP ping (every 4 min) keeps Render Free awake during active tournaments
         this.keepalivePingTimer = setInterval(() => {
           if (typeof fetch === 'function') {
-            fetch(`${baseUrl}/__sync/ping`, { cache: 'no-store' }).catch(() => {});
+            fetch(`${baseUrl}/__sync/ping`, { cache: 'no-store' }).catch(() => { });
           }
         }, 4 * 60 * 1000);
         if (typeof this.keepalivePingTimer?.unref === 'function') {
@@ -2171,9 +2177,9 @@ export class TournamentStore {
               : {}),
             ...(Array.isArray(data.clients)
               ? {
-                  connectedClients: data.connectedClients ?? data.clients.length,
-                  clients: data.clients,
-                }
+                connectedClients: data.connectedClients ?? data.clients.length,
+                clients: data.clients,
+              }
               : {}),
           };
           this.emit();
@@ -2605,10 +2611,10 @@ export class TournamentStore {
     const active = this.programState;
     const isMyHostedTournament = Boolean(
       active &&
-        active.tournamentId &&
-        !active.destruction &&
-        active.hostDeviceId &&
-        active.hostDeviceId === this.remoteSync.deviceId
+      active.tournamentId &&
+      !active.destruction &&
+      active.hostDeviceId &&
+      active.hostDeviceId === this.remoteSync.deviceId
     );
     if (!isMyHostedTournament) return false;
 
@@ -2798,7 +2804,7 @@ export class TournamentStore {
           };
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }
 
   setHubPresence(onHub) {
@@ -5149,8 +5155,8 @@ export class TournamentStore {
       const rebasedSpeech = isSameSpeech
         ? prevSpeech
         : this.rebaseGrandmaSpeechToLocalClock(incoming.grandma.activeSpeech, {
-            liveArrival: true,
-          });
+          liveArrival: true,
+        });
       incoming = {
         ...incoming,
         grandma: {
@@ -5651,10 +5657,10 @@ export class TournamentStore {
               startedAt: m.startedAt || this.getServerNow(),
               ...(shouldAttachClaim
                 ? {
-                    scorekeeperDeviceId: claimDevId,
-                    scorekeeperDeviceName: claimDevName || 'Scorekeeper',
-                    scorekeeperClaimedAt: m.scorekeeperClaimedAt || Date.now(),
-                  }
+                  scorekeeperDeviceId: claimDevId,
+                  scorekeeperDeviceName: claimDevName || 'Scorekeeper',
+                  scorekeeperClaimedAt: m.scorekeeperClaimedAt || Date.now(),
+                }
                 : {}),
             },
           },
@@ -6898,10 +6904,10 @@ export class TournamentStore {
         grandma: nextEnabled
           ? s.grandma
           : {
-              ...s.grandma,
-              activeSpeech: null,
-              liveQuote: null,
-            },
+            ...s.grandma,
+            activeSpeech: null,
+            liveQuote: null,
+          },
       }),
       { forcePublish: true }
     );
@@ -6944,10 +6950,10 @@ export class TournamentStore {
         ...(partial.items !== undefined ? { tickerItems: normalizeTickerItems(partial.items) } : {}),
         ...(partial.mode !== undefined
           ? {
-              tickerMode: ['static', 'rotate', 'scroll'].includes(partial.mode) ? partial.mode : 'static',
-              tickerScroll: partial.mode === 'scroll',
-              tickerAutoRotate: partial.mode === 'rotate',
-            }
+            tickerMode: ['static', 'rotate', 'scroll'].includes(partial.mode) ? partial.mode : 'static',
+            tickerScroll: partial.mode === 'scroll',
+            tickerAutoRotate: partial.mode === 'rotate',
+          }
           : {}),
         ...(partial.rotateSec !== undefined ? { tickerRotateSec: Math.max(3, Math.min(120, Number(partial.rotateSec) || 10)) } : {}),
       },
@@ -7028,16 +7034,16 @@ export class TournamentStore {
           filtered.length > 0
             ? filtered
             : [
-                {
-                  id: 'builtin-default-tv',
-                  kind: 'url',
-                  name: 'Raymond Thanksgiving (Default)',
-                  url: '/raymond-thanksgiving.mp4',
-                  muted: true,
-                  durationSec: 2640,
-                  updatedAt: 0,
-                },
-              ];
+              {
+                id: 'builtin-default-tv',
+                kind: 'url',
+                name: 'Raymond Thanksgiving (Default)',
+                url: '/raymond-thanksgiving.mp4',
+                muted: true,
+                durationSec: 2640,
+                updatedAt: 0,
+              },
+            ];
         const curIdx = Number(s.ui?.tvPlaylistIndex) || 0;
         const nextIdx = Math.min(curIdx, nextList.length - 1);
         return {
@@ -7086,16 +7092,16 @@ export class TournamentStore {
         const nextList = cur.map((x) =>
           x.id === itemId
             ? {
-                ...x,
-                ...(partial.name !== undefined ? { name: String(partial.name).trim() || x.name } : {}),
-                ...(partial.durationSec !== undefined
-                  ? { durationSec: Math.max(1, Math.min(86400, Math.round(Number(partial.durationSec) || 12))) }
-                  : {}),
-                ...(partial.muted !== undefined ? { muted: Boolean(partial.muted) } : {}),
-                ...(partial.cacheLocal !== undefined ? { cacheLocal: Boolean(partial.cacheLocal) } : {}),
-                ...(partial.quality !== undefined ? { quality: String(partial.quality) } : {}),
-                ...(partial.autoDuration !== undefined ? { autoDuration: Boolean(partial.autoDuration) } : {}),
-              }
+              ...x,
+              ...(partial.name !== undefined ? { name: String(partial.name).trim() || x.name } : {}),
+              ...(partial.durationSec !== undefined
+                ? { durationSec: Math.max(1, Math.min(86400, Math.round(Number(partial.durationSec) || 12))) }
+                : {}),
+              ...(partial.muted !== undefined ? { muted: Boolean(partial.muted) } : {}),
+              ...(partial.cacheLocal !== undefined ? { cacheLocal: Boolean(partial.cacheLocal) } : {}),
+              ...(partial.quality !== undefined ? { quality: String(partial.quality) } : {}),
+              ...(partial.autoDuration !== undefined ? { autoDuration: Boolean(partial.autoDuration) } : {}),
+            }
             : x
         );
         return {
@@ -7204,10 +7210,10 @@ export class TournamentStore {
       const nextBanterAt = intervalChanged
         ? activeExp + Math.round(minInt * 1000)
         : currentNext > activeExp + maxInt * 1000
-        ? activeExp + Math.round(minInt * 1000)
-        : currentNext < activeExp + minInt * 1000 && currentNext > now
-        ? activeExp + Math.round(minInt * 1000)
-        : currentNext || activeExp + Math.round(minInt * 1000);
+          ? activeExp + Math.round(minInt * 1000)
+          : currentNext < activeExp + minInt * 1000 && currentNext > now
+            ? activeExp + Math.round(minInt * 1000)
+            : currentNext || activeExp + Math.round(minInt * 1000);
 
       return {
         ...s,
