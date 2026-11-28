@@ -49,8 +49,17 @@ Ideas queued and implemented.
 ---
 
 ## 6. Security & Hardening
-- [ ] Add per-IP / per-device rate limiting & brute-force lockout (with exponential backoff / `429 Too Many Requests`) on both **Tournament Room Join Keys** (`/__sync/join`, `/__sync/select`, `/__sync/state`) and **Hub Admin Key** (`/__sync/admin/unlock`).
-- [ ] Use constant-time comparison (`crypto.timingSafeEqual`) for Admin Key checks and cap/guard `allowedKeyTypos` sensibly.
+- [x] Add per-IP / per-device rate limiting & brute-force lockout (with exponential backoff / `429 Too Many Requests`) on both **Tournament Room Join Keys** (`/__sync/join`, `/__sync/select`, `/__sync/state`) and **Hub Admin Key** (`/__sync/admin/unlock`).
+- [x] Use constant-time comparison (`crypto.timingSafeEqual`) for Admin Key checks and cap/guard `allowedKeyTypos` sensibly.
 
-add a flag in tv playlist/database that tells the client to download that asset locally.
+---
+
+## 7. Completed Polish & Bug Fixes
+- [x] Add per-item `cacheLocal` flag in TV playlist/database so connected clients prefetch & cache flagged media assets locally (IndexedDB).
+- [x] Fix spurious "Match Order Changed / You Are Up Now!" alerts when switching between concurrent tables in Control/Scorekeeper.
+- [x] Show all live tables in the Inbox header mini scoreboard.
+- [x] Fix mid-tournament added players disappearing after seconds/minutes (monotonic `setupVersion` + immediate `forcePublish` + stale push rejection).
+- [x] Fix Presentation ambiance not showing (respect explicit ambiance even with OS reduced-motion enabled & layer particles visibly over cards).
+- [x] Add `1 Table | ⊞ All Tables` simultaneous multi-table scoreboard grid to Control View.
+
 

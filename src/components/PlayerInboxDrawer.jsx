@@ -3,6 +3,7 @@ import {
   ROLE_LEVEL,
   ROLE_META,
   resolveEffectiveRole,
+  getLiveTableMatches,
   tournamentStore,
 } from '../state/tournamentStore.js';
 import {
@@ -783,15 +784,19 @@ export default function PlayerInboxDrawer({
                 💬 {chatHeaderName}
               </h2>
 
-              {/* Compact Live Mini Scoreboard next to user's name (dead-center score + yellow serve dot) */}
+              {/* Compact Live Mini Scoreboard next to user's name (supports 1 or multiple live tables) */}
               {(() => {
-                const am = state?.activeMatchId ? state.matches?.[state.activeMatchId] : null;
-                if (!am || am.isBye) return null;
-                const p1 = getPlayerLabel(am.player1Id, am.source1Label);
-                const p2 = getPlayerLabel(am.player2Id, am.source2Label);
-                const isLive = Boolean(am.started && !am.completed);
-                const evalM = evaluateMatchState(am, state?.rules);
-                const serverSlot = !am.completed ? evalM.activeServer : null;
+                const liveList = getLiveTableMatches(state);
+                const fallbackAm = state?.activeMatchId ? state.matches?.[state.activeMatchId] : null;
+                const displayMatches =
+                  liveList.length > 0
+                    ? liveList
+                    : fallbackAm && !fallbackAm.isBye
+                    ? [fallbackAm]
+                    : [];
+                if (displayMatches.length === 0) return null;
+                const showTableBadge =
+                  displayMatches.length > 1 || (Number(state?.rules?.tableCount) || 1) > 1;
                 const serveDot = (
                   <span
                     aria-label="Serving"
@@ -806,86 +811,134 @@ export default function PlayerInboxDrawer({
                     }}
                   />
                 );
+                const renderMiniMatch = (am, idx, compact) => {
+                  const p1 = getPlayerLabel(am.player1Id, am.source1Label);
+                  const p2 = getPlayerLabel(am.player2Id, am.source2Label);
+                  const isLive = Boolean(am.started && !am.completed);
+                  const evalM = evaluateMatchState(am, state?.rules);
+                  const serverSlot = !am.completed ? evalM.activeServer : null;
+                  const tableNum = am.tableNumber || idx + 1;
+                  return (
+                    <div
+                      key={am.id}
+                      aria-label={showTableBadge ? `Table ${tableNum} Scoreboard` : 'Live Match Scoreboard'}
+                      title={`${showTableBadge ? `Table ${tableNum} · ` : ''}${am.roundLabel} (${am.label}): ${p1} ${am.score1 ?? 0}–${am.score2 ?? 0} ${p2}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: showTableBadge ? 'auto 1fr auto 1fr' : '1fr auto 1fr',
+                        alignItems: 'center',
+                        gap: compact ? '0.25rem' : '0.35rem',
+                        padding: compact ? '0.18rem 0.42rem' : '0.22rem 0.5rem',
+                        borderRadius: '7px',
+                        background: 'rgba(15, 23, 42, 0.78)',
+                        border: `1px solid ${
+                          isLive ? 'rgba(52, 211, 153, 0.45)' : 'rgba(148, 163, 184, 0.28)'
+                        }`,
+                        fontSize: compact ? '0.69rem' : '0.73rem',
+                        minWidth: compact ? '168px' : 0,
+                        flex: compact ? '1 0 168px' : 1,
+                      }}
+                    >
+                      {showTableBadge && (
+                        <span
+                          style={{
+                            fontSize: '0.62rem',
+                            fontWeight: 800,
+                            padding: '0.06rem 0.28rem',
+                            borderRadius: '4px',
+                            background: isLive
+                              ? 'rgba(34, 197, 94, 0.2)'
+                              : 'rgba(245, 158, 11, 0.18)',
+                            color: isLive ? '#86efac' : '#fde68a',
+                            flexShrink: 0,
+                          }}
+                        >
+                          T{tableNum}
+                        </span>
+                      )}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: '0.24rem',
+                          minWidth: 0,
+                        }}
+                      >
+                        {serverSlot === 1 && serveDot}
+                        <span
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            fontWeight: serverSlot === 1 ? 700 : 500,
+                          }}
+                        >
+                          {p1}
+                        </span>
+                      </div>
+
+                      <strong
+                        style={{
+                          color: '#fbbf24',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                          fontSize: compact ? '0.84rem' : '0.94rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.03em',
+                          lineHeight: 1,
+                          fontVariantNumeric: 'tabular-nums',
+                          textAlign: 'center',
+                          padding: '0 0.12rem',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {am.score1 ?? 0}–{am.score2 ?? 0}
+                      </strong>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          gap: '0.24rem',
+                          minWidth: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            fontWeight: serverSlot === 2 ? 700 : 500,
+                          }}
+                        >
+                          {p2}
+                        </span>
+                        {serverSlot === 2 && serveDot}
+                      </div>
+                    </div>
+                  );
+                };
+
+                if (displayMatches.length === 1) {
+                  return renderMiniMatch(displayMatches[0], 0, false);
+                }
+
                 return (
                   <div
-                    aria-label="Live Match Scoreboard"
-                    title={`${am.roundLabel} (${am.label}): ${p1} ${am.score1 ?? 0}–${am.score2 ?? 0} ${p2}`}
+                    className="scroller"
+                    aria-label="Live Tables Scoreboard"
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto 1fr',
+                      display: 'flex',
                       alignItems: 'center',
-                      gap: '0.35rem',
-                      padding: '0.22rem 0.5rem',
-                      borderRadius: '7px',
-                      background: 'rgba(15, 23, 42, 0.78)',
-                      border: `1px solid ${
-                        isLive ? 'rgba(52, 211, 153, 0.45)' : 'rgba(148, 163, 184, 0.28)'
-                      }`,
-                      fontSize: '0.73rem',
+                      gap: '0.32rem',
+                      overflowX: 'auto',
                       minWidth: 0,
                       flex: 1,
+                      paddingBottom: '1px',
                     }}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-end',
-                        gap: '0.28rem',
-                        minWidth: 0,
-                      }}
-                    >
-                      {serverSlot === 1 && serveDot}
-                      <span
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontWeight: serverSlot === 1 ? 700 : 500,
-                        }}
-                      >
-                        {p1}
-                      </span>
-                    </div>
-
-                    <strong
-                      style={{
-                        color: '#fbbf24',
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                        fontSize: '0.94rem',
-                        fontWeight: 800,
-                        letterSpacing: '0.03em',
-                        lineHeight: 1,
-                        fontVariantNumeric: 'tabular-nums',
-                        textAlign: 'center',
-                        padding: '0 0.15rem',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {am.score1 ?? 0}–{am.score2 ?? 0}
-                    </strong>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        gap: '0.28rem',
-                        minWidth: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontWeight: serverSlot === 2 ? 700 : 500,
-                        }}
-                      >
-                        {p2}
-                      </span>
-                      {serverSlot === 2 && serveDot}
-                    </div>
+                    {displayMatches.map((am, idx) => renderMiniMatch(am, idx, true))}
                   </div>
                 );
               })()}

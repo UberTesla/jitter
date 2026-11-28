@@ -3,6 +3,7 @@ import { RetroTVScene, LOGICAL_WIDTH, LOGICAL_HEIGHT } from '../canvas/RetroTVSc
 import {
   loadTvMediaSource,
   loadTvPlaylistItemSource,
+  prefetchTvPlaylistItemToLocalCache,
   subscribeTvMediaSync,
 } from '../state/mediaStore.js';
 
@@ -286,6 +287,23 @@ export default function RetroTVCorner({
       }
     };
   }, [applyMediaSource]);
+
+  // Background local prefetch for any playlist item flagged with cacheLocal: true
+  useEffect(() => {
+    if (!hasPlaylist) return undefined;
+    const targets = tvPlaylist.filter((it) => it && it.cacheLocal && it.kind !== 'sitcom');
+    if (targets.length === 0) return undefined;
+    let cancelled = false;
+    (async () => {
+      for (const it of targets) {
+        if (cancelled) break;
+        await prefetchTvPlaylistItemToLocalCache(it).catch(() => {});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPlaylist, tvPlaylist]);
 
   // Playlist loader: load active playlist item whenever it changes
   useEffect(() => {

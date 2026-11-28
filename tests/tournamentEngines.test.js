@@ -3758,3 +3758,222 @@ test('Multi-table setup queues independent matches per table, scores simultaneou
   assert.equal(afterSlots[0].match.tableNumber, 1);
   assert.equal(afterSlots[1].match.id, m2Id);
 });
+
+test('Mid-tournament added players increment setupVersion and survive stale client state pushes', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingpong-setup-ver-'));
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => 0 });
+  const server = http.createServer((req, res) => {
+    handler(req, res, () => {
+      res.statusCode = 404;
+      res.end('Not found');
+    });
+  });
+
+  try {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const initial = createInitialState({
+      tournamentName: 'Roster Stability Cup',
+      playerCount: 4,
+      access: { isPublic: true, isSecure: false },
+    });
+    const store = new TournamentStore(initial, { persist: false });
+    const staleSnapshot = structuredClone(store.getState());
+
+    // Push initial 4-player state
+    await fetch(`${baseUrl}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-host', state: staleSnapshot, activate: true }),
+    });
+
+    // Host adds 2 players mid-tournament -> increments setupVersion
+    const updatedPlayers = [
+      ...staleSnapshot.players,
+      { id: 'p5', seed: 5, name: 'Late Arrival 1' },
+      { id: 'p6', seed: 6, name: 'Late Arrival 2' },
+    ];
+    store.applyFullSetup({
+      playerCount: 6,
+      players: updatedPlayers,
+      rebuildBracket: false,
+    });
+    const newerState = store.getState();
+    assert.equal(newerState.players.length, 6);
+    assert.ok(newerState.setupVersion > staleSnapshot.setupVersion);
+
+    await fetch(`${baseUrl}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-host', state: newerState, activate: true }),
+    });
+
+    // Another client pushes the older 4-player snapshot -> server rejects overwrite & returns stale:true + 6-player state!
+    const staleRes = await (
+      await fetch(`${baseUrl}/__sync/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: 'dev-other', state: staleSnapshot, activate: true }),
+      })
+    ).json();
+    assert.equal(staleRes.stale, true);
+    assert.equal(staleRes.state.players.length, 6);
+
+    // Local store also ignores stale incoming external sync
+    store.handleExternalSync(staleSnapshot);
+    assert.equal(store.getState().players.length, 6);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Switching activeMatchId across different concurrent tables does NOT fire Match Order Changed alerts', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingpong-table-alerts-'));
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => 0 });
+  const server = http.createServer((req, res) => {
+    handler(req, res, () => {
+      res.statusCode = 404;
+      res.end('Not found');
+    });
+  });
+
+  try {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const initial = createInitialState({
+      tournamentName: 'Concurrent Tables Cup',
+      playerCount: 8,
+      rules: { tableCount: 2 },
+      access: { isPublic: true, isSecure: false },
+    });
+    const store = new TournamentStore(initial, { persist: false });
+    const m1Id = store.getState().activeMatchId;
+    store.startMatch(m1Id, 1);
+    const t2 = store.selectOrQueueTable(2, { setAsActive: false });
+    store.startMatch(t2.matchId, 2);
+
+    const stateT1Active = { ...store.getState(), activeMatchId: m1Id };
+    const m1 = stateT1Active.matches[m1Id];
+    stateT1Active.playerClaims = { 'dev-p1': m1.player1Id };
+
+    // Push initial state with Table 1 active
+    await fetch(`${baseUrl}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-host', state: stateT1Active, activate: true }),
+    });
+
+    // Connect claimed player via SSE
+    let receivedSse = '';
+    const sseReq = http.get(
+      `${baseUrl}/__sync/events?tabId=tab-p1&deviceId=dev-p1&viewMode=spectator&tournamentId=${encodeURIComponent(stateT1Active.tournamentId)}`
+    );
+    await new Promise((resolve, reject) => {
+      sseReq.on('response', (res) => {
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          receivedSse += chunk;
+          resolve();
+        });
+      });
+      sseReq.on('error', reject);
+    });
+
+    // Now switch activeMatchId to Table 2's match -> different tableNumber, so NO "Match Order Changed" alert!
+    const stateT2Active = { ...stateT1Active, activeMatchId: t2.matchId };
+    await fetch(`${baseUrl}/__sync/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-host', state: stateT2Active, activate: true }),
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    sseReq.destroy();
+
+    assert.equal(
+      receivedSse.includes('Match Order Changed'),
+      false,
+      'Switching between concurrent tables must not fire Match Order Changed alerts'
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Admin Key and Room Join Key endpoints enforce rate-limit lockout (429 Too Many Requests) after repeated failures', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pingpong-ratelimit-'));
+  const handler = createLanSyncHandler({ rootDir: tmpDir, getPort: () => 0 });
+  const server = http.createServer((req, res) => {
+    handler(req, res, () => {
+      res.statusCode = 404;
+      res.end('Not found');
+    });
+  });
+
+  try {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    // 4 bad Admin Key attempts return 403; 5th triggers 429 Too Many Requests with Retry-After!
+    for (let i = 0; i < 4; i++) {
+      const r = await fetch(`${baseUrl}/__sync/admin/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: 'dev-brute-admin', key: 'wrong-key-attempt-here' }),
+      });
+      assert.equal(r.status, 403);
+    }
+    const lockedAdmin = await fetch(`${baseUrl}/__sync/admin/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-brute-admin', key: 'wrong-key-attempt-here' }),
+    });
+    assert.equal(lockedAdmin.status, 429);
+    assert.ok(Number(lockedAdmin.headers.get('retry-after')) >= 1);
+
+    // 9 bad Room Join Key attempts return 404; 10th triggers 429 Too Many Requests!
+    for (let i = 0; i < 9; i++) {
+      const r = await fetch(`${baseUrl}/__sync/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: 'dev-brute-room', code: 'fake-room-code-guess' }),
+      });
+      assert.equal(r.status, 404);
+    }
+    const lockedRoom = await fetch(`${baseUrl}/__sync/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'dev-brute-room', code: 'fake-room-code-guess' }),
+    });
+    assert.equal(lockedRoom.status, 429);
+    assert.ok(Number(lockedRoom.headers.get('retry-after')) >= 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('TV playlist items persist the cacheLocal flag via addTvPlaylistItem and updateTvPlaylistItem', () => {
+  const initial = createInitialState();
+  const store = new TournamentStore(initial, { persist: false });
+  store.addTvPlaylistItem({
+    id: 'tv-local-1',
+    kind: 'url',
+    name: 'Clip',
+    url: '/raymond-thanksgiving.mp4',
+    cacheLocal: true,
+    durationSec: 60,
+  });
+  let item = store.getState().ui.tvPlaylist.find((x) => x.id === 'tv-local-1');
+  assert.equal(item?.cacheLocal, true);
+
+  store.updateTvPlaylistItem('tv-local-1', { cacheLocal: false });
+  item = store.getState().ui.tvPlaylist.find((x) => x.id === 'tv-local-1');
+  assert.equal(item?.cacheLocal, false);
+});

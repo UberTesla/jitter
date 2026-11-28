@@ -213,18 +213,22 @@ function drawPetal(ctx, p, t) {
  * 60fps Configurable Title Screen Ambiance Canvas
  * Renders falling leaves, snow, rain, hearth embers, fireflies, cherry blossoms, or confetti.
  */
-export default function TitleAmbianceCanvas({ effect = 'none', intensity = 'medium' }) {
+export default function TitleAmbianceCanvas({
+  effect = 'none',
+  intensity = 'medium',
+  isExplicit = false,
+}) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     if (!effect || effect === 'none') return undefined;
-    if (
+    const prefersReducedMotion = Boolean(
       typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      return undefined;
-    }
+        window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+    const motionSpeedScale = prefersReducedMotion && !isExplicit ? 0.35 : 1.0;
+    const motionCountScale = prefersReducedMotion && !isExplicit ? 0.55 : 1.0;
 
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -233,7 +237,7 @@ export default function TitleAmbianceCanvas({ effect = 'none', intensity = 'medi
 
     let width = 1600;
     let height = 900;
-    const mult = INTENSITY_MULTIPLIER[intensity] || 1.0;
+    const mult = (INTENSITY_MULTIPLIER[intensity] || 1.0) * motionCountScale;
     const targetCount = Math.max(8, Math.round(getBaseCount(effect) * mult));
     let particles = [];
 
@@ -263,9 +267,13 @@ export default function TitleAmbianceCanvas({ effect = 'none', intensity = 'medi
     const startNow = lastNow;
 
     const tick = (now) => {
-      const dt = Math.min(0.06, (now - lastNow) / 1000);
+      const parent = canvas.parentElement;
+      if (parent && (parent.clientWidth !== width || parent.clientHeight !== height)) {
+        resize();
+      }
+      const dt = Math.min(0.06, (now - lastNow) / 1000) * motionSpeedScale;
       lastNow = now;
-      const t = (now - startNow) / 1000;
+      const t = ((now - startNow) / 1000) * motionSpeedScale;
 
       ctx.clearRect(0, 0, width, height);
 
@@ -385,7 +393,7 @@ export default function TitleAmbianceCanvas({ effect = 'none', intensity = 'medi
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (ro) ro.disconnect();
     };
-  }, [effect, intensity]);
+  }, [effect, intensity, isExplicit]);
 
   if (!effect || effect === 'none') return null;
 

@@ -722,6 +722,7 @@ export function createInitialState(overrides = {}) {
     },
     lastPointAt: 0,
     debouncedClicks: 0,
+    setupVersion: Math.max(0, Math.floor(Number(overrides.setupVersion) || 0)),
     players,
     matches,
     activeMatchId: firstMatchId,
@@ -968,6 +969,7 @@ function normalizePersistedState(parsed) {
       typeof parsed.tournamentSubtitle === 'string' ? parsed.tournamentSubtitle.trim() : '',
     matches: normalizedMatches,
     lastCompletedEvent: parsed.lastCompletedEvent || null,
+    setupVersion: Math.max(0, Math.floor(Number(parsed.setupVersion) || 0)),
     entryMode,
     demoMode: Boolean(parsed.demoMode),
     autoTeamNames: Boolean(parsed.autoTeamNames),
@@ -2650,6 +2652,9 @@ export class TournamentStore {
       }
       if (!res.ok) return null;
       const data = await res.json();
+      if (data.stale && data.state) {
+        this.handleExternalSync(data.state);
+      }
       if (Array.isArray(data.tournaments)) {
         const nextHosts = Array.isArray(data.hosts) ? data.hosts : this.remoteSync.hosts;
         this.remoteSync = {
@@ -5085,6 +5090,14 @@ export class TournamentStore {
 
   handleExternalSync(incoming) {
     const prevProgram = this.programState;
+    // Never let a stale snapshot from another tab/device revert a newer setup/roster revision
+    if (
+      incoming?.tournamentId &&
+      prevProgram?.tournamentId === incoming.tournamentId &&
+      Number(incoming.setupVersion || 0) < Number(prevProgram.setupVersion || 0)
+    ) {
+      return;
+    }
     // Rebase incoming Grandma speech timestamps to this device's local clock (zero skew delay on Fire Stick/TVs)
     if (incoming?.grandma?.activeSpeech?.id) {
       const prevSpeechId = prevProgram?.grandma?.activeSpeech?.id;
@@ -6208,6 +6221,7 @@ export class TournamentStore {
 
       return {
         ...s,
+        setupVersion: (Number(s.setupVersion) || 0) + 1,
         tournamentName:
           tournamentName !== undefined && tournamentName.trim()
             ? tournamentName.trim()
@@ -6240,7 +6254,7 @@ export class TournamentStore {
           ambianceIntensity: nextIntensity,
         },
       };
-    });
+    }, { forcePublish: true });
   }
 
   setDemoMode(enabled) {
@@ -6650,6 +6664,7 @@ export class TournamentStore {
           url: item.url || '',
           gcsObject: item.gcsObject || '',
           muted: Boolean(item.muted),
+          cacheLocal: Boolean(item.cacheLocal),
           ...(item.quality ? { quality: String(item.quality) } : {}),
           ...(item.autoDuration !== undefined ? { autoDuration: Boolean(item.autoDuration) } : {}),
           durationSec: Math.max(1, Math.min(86400, Math.round(Number(item.durationSec) || 12))),
@@ -6746,6 +6761,7 @@ export class TournamentStore {
                   ? { durationSec: Math.max(1, Math.min(86400, Math.round(Number(partial.durationSec) || 12))) }
                   : {}),
                 ...(partial.muted !== undefined ? { muted: Boolean(partial.muted) } : {}),
+                ...(partial.cacheLocal !== undefined ? { cacheLocal: Boolean(partial.cacheLocal) } : {}),
                 ...(partial.quality !== undefined ? { quality: String(partial.quality) } : {}),
                 ...(partial.autoDuration !== undefined ? { autoDuration: Boolean(partial.autoDuration) } : {}),
               }

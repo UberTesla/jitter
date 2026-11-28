@@ -501,7 +501,13 @@ export default function PresentationView({
       >
         {/* Configurable Ambiance Layer (Applies to ALL Presentation Slides) */}
         {effectiveAmbiance !== 'none' && (
-          <TitleAmbianceCanvas effect={effectiveAmbiance} intensity={ambianceIntensity} />
+          <TitleAmbianceCanvas
+            effect={effectiveAmbiance}
+            intensity={ambianceIntensity}
+            isExplicit={Boolean(
+              state.presentation?.titleAmbiance && state.presentation.titleAmbiance !== 'auto'
+            )}
+          />
         )}
 
         {/* Clean Audience Top Header — replaced by Announcement Banner when active */}

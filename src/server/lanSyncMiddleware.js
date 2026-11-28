@@ -2,6 +2,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import dns from 'node:dns';
+import crypto from 'node:crypto';
 import * as webpush from 'web-push';
 import {
   generateFourWordId,
@@ -165,7 +166,7 @@ function normalizeHubSettings(raw) {
       ? Number(src.allowedKeyTypos)
       : DEFAULT_HUB_SETTINGS.allowedKeyTypos;
   const allowedKeyTypos = Number.isFinite(rawTypos)
-    ? Math.max(0, Math.min(5, Math.floor(rawTypos)))
+    ? Math.max(0, Math.min(3, Math.floor(rawTypos)))
     : DEFAULT_HUB_SETTINGS.allowedKeyTypos;
   return {
     hubTitle: String(src.hubTitle || DEFAULT_HUB_SETTINGS.hubTitle).trim() || DEFAULT_HUB_SETTINGS.hubTitle,
@@ -351,6 +352,87 @@ export function createLanSyncHandler({
   migrateLegacyFile(LEGACY_MEDIA_META_FILENAME, mediaMetaPath);
   migrateLegacyFile(LEGACY_ANALYTICS_FILENAME, analyticsPath);
   const sseClients = new Map(); // res -> { tabId, deviceId, deviceName, ip, viewMode, tournamentId, connectedAt }
+  const authRateLimits = new Map(); // key -> { failures: number[], lockedUntil: number, lockCount: number }
+
+  const AUTH_LIMIT_POLICIES = {
+    'admin-key': { maxFailures: 5, windowMs: 60_000, baseLockMs: 30_000, maxLockMs: 900_000 },
+    'room-key': { maxFailures: 10, windowMs: 60_000, baseLockMs: 15_000, maxLockMs: 600_000 },
+  };
+
+  const timingSafeStringEqual = (a, b) => {
+    const sa = String(a ?? '');
+    const sb = String(b ?? '');
+    if (!sa || !sb) return false;
+    const ha = crypto.createHash('sha256').update(sa, 'utf8').digest();
+    const hb = crypto.createHash('sha256').update(sb, 'utf8').digest();
+    return crypto.timingSafeEqual(ha, hb);
+  };
+
+  const getRateLimitKeys = (bucket, req, deviceId = '') => {
+    const ip =
+      String(req?.headers?.['x-forwarded-for'] || '')
+        .split(',')[0]
+        .trim() ||
+      req?.socket?.remoteAddress ||
+      'unknown';
+    const keys = [`${bucket}:ip:${ip}`];
+    const cleanDev = String(deviceId || '').trim();
+    if (cleanDev) keys.push(`${bucket}:dev:${cleanDev}`);
+    return keys;
+  };
+
+  const checkAuthRateLimit = (bucket, req, deviceId = '', now = Date.now()) => {
+    const keys = getRateLimitKeys(bucket, req, deviceId);
+    let maxRetryMs = 0;
+    for (const k of keys) {
+      const rec = authRateLimits.get(k);
+      if (rec && rec.lockedUntil > now) {
+        maxRetryMs = Math.max(maxRetryMs, rec.lockedUntil - now);
+      }
+    }
+    if (maxRetryMs > 0) {
+      return { blocked: true, retryAfterSec: Math.max(1, Math.ceil(maxRetryMs / 1000)) };
+    }
+    return { blocked: false, retryAfterSec: 0 };
+  };
+
+  const recordAuthFailure = (bucket, req, deviceId = '', now = Date.now()) => {
+    const policy = AUTH_LIMIT_POLICIES[bucket] || AUTH_LIMIT_POLICIES['room-key'];
+    const keys = getRateLimitKeys(bucket, req, deviceId);
+    let maxRetryMs = 0;
+    for (const k of keys) {
+      const rec = authRateLimits.get(k) || { failures: [], lockedUntil: 0, lockCount: 0 };
+      rec.failures = rec.failures.filter((ts) => now - ts <= policy.windowMs);
+      rec.failures.push(now);
+      if (rec.failures.length >= policy.maxFailures) {
+        rec.lockCount = Math.min(8, (rec.lockCount || 0) + 1);
+        const lockMs = Math.min(
+          policy.maxLockMs,
+          policy.baseLockMs * Math.pow(2, rec.lockCount - 1)
+        );
+        rec.lockedUntil = now + lockMs;
+        rec.failures = [];
+        maxRetryMs = Math.max(maxRetryMs, lockMs);
+      }
+      authRateLimits.set(k, rec);
+    }
+    if (authRateLimits.size > 2000) {
+      for (const [k, rec] of authRateLimits.entries()) {
+        if (rec.lockedUntil <= now && rec.failures.every((ts) => now - ts > policy.windowMs)) {
+          authRateLimits.delete(k);
+        }
+      }
+    }
+    return maxRetryMs > 0
+      ? { blocked: true, retryAfterSec: Math.max(1, Math.ceil(maxRetryMs / 1000)) }
+      : { blocked: false, retryAfterSec: 0 };
+  };
+
+  const resetAuthFailures = (bucket, req, deviceId = '') => {
+    for (const k of getRateLimitKeys(bucket, req, deviceId)) {
+      authRateLimits.delete(k);
+    }
+  };
   const destructionTimers = new Map(); // tournamentId -> Timeout
   const serverBootId = `boot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -1146,11 +1228,29 @@ export function createLanSyncHandler({
     res.setHeader('Cache-Control', 'no-store');
   };
 
-  const sendJson = (res, statusCode, data) => {
+  const sendJson = (res, statusCode, data, extraHeaders = null) => {
     setCors(res);
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (extraHeaders && typeof extraHeaders === 'object') {
+      for (const [k, v] of Object.entries(extraHeaders)) {
+        res.setHeader(k, v);
+      }
+    }
     res.end(JSON.stringify(data));
+  };
+
+  const sendRateLimited = (res, retryAfterSec, label = 'authentication') => {
+    return sendJson(
+      res,
+      429,
+      {
+        error: `Too many failed ${label} attempts. Please wait ${retryAfterSec}s before trying again.`,
+        rateLimited: true,
+        retryAfterSec,
+      },
+      { 'Retry-After': String(retryAfterSec) }
+    );
   };
 
   const lanSyncMiddleware = async function lanSyncMiddleware(req, res, next) {
@@ -2243,9 +2343,33 @@ export function createLanSyncHandler({
           reqDeviceId &&
           !isDeviceAuthorizedForTournament(existingEntry, reqDeviceId, body.joinCode || '')
         ) {
+          if (body.joinCode) {
+            const rl = checkAuthRateLimit('room-key', req, reqDeviceId);
+            if (rl.blocked) return sendRateLimited(res, rl.retryAfterSec, 'tournament key');
+            const fail = recordAuthFailure('room-key', req, reqDeviceId);
+            if (fail.blocked) return sendRateLimited(res, fail.retryAfterSec, 'tournament key');
+          }
           return sendJson(res, 403, {
             error: 'Not authorized to update this tournament — rejoin with the current 4-word key',
             accessRevoked: true,
+          });
+        }
+
+        // Reject stale state pushes that carry an older setupVersion (prevents another tab/device
+        // from accidentally reverting newly added players, rules, or theme/ambiance edits!)
+        const incomingSetupVer = Number(incoming.setupVersion || 0);
+        const existingSetupVer = Number(existingEntry?.setupVersion || 0);
+        if (existingEntry && incomingSetupVer < existingSetupVer) {
+          const { totalCloudTournaments, privateCloudCount } = getLibraryStats();
+          return sendJson(res, 200, {
+            ok: true,
+            stale: true,
+            state: existingEntry,
+            activeTournamentId: store.activeTournamentId,
+            tournaments: getLibrarySummaries(reqDeviceId),
+            totalCloudTournaments,
+            privateCloudCount,
+            hosts: getHostsList(),
           });
         }
 
@@ -2407,12 +2531,16 @@ export function createLanSyncHandler({
             }
 
             // 2b. Active Match Switched Before Completion (match order changed!) -> notify both bumped & newly-up players
+            // Only fire when switching matches on the SAME table (never when switching between concurrent tables!)
             const prevActiveForSwitch = existingEntry.matches?.[existingEntry.activeMatchId];
             const nextActiveForSwitch = stamped.matches?.[stamped.activeMatchId];
+            const sameTableSwitch =
+              (prevActiveForSwitch?.tableNumber || 1) === (nextActiveForSwitch?.tableNumber || 1);
             if (
               prevActiveForSwitch &&
               nextActiveForSwitch &&
               prevActiveForSwitch.id !== nextActiveForSwitch.id &&
+              sameTableSwitch &&
               !prevActiveForSwitch.isBye &&
               !prevActiveForSwitch.completed &&
               !nextActiveForSwitch.isBye &&
@@ -2650,6 +2778,10 @@ export function createLanSyncHandler({
         const access = normalizeAccessConfig(entry.access);
         const expectedCode = resolveTournamentJoinCode(entry);
         const providedRaw = body?.joinCode || body?.code || '';
+        if (providedRaw && !isRequesterAdmin && !isOwnHost) {
+          const rl = checkAuthRateLimit('room-key', req, requesterDeviceId);
+          if (rl.blocked) return sendRateLimited(res, rl.retryAfterSec, 'tournament key');
+        }
         const maxTypos = store.hubSettings?.allowedKeyTypos ?? DEFAULT_HUB_SETTINGS.allowedKeyTypos;
         const hasValidKey = Boolean(
           providedRaw && matchTournamentJoinKey(providedRaw, expectedCode, { maxTypos }).matched
@@ -2668,12 +2800,19 @@ export function createLanSyncHandler({
           !hasValidKey &&
           !isAlreadyAuthorizedGuest
         ) {
+          if (providedRaw) {
+            const fail = recordAuthFailure('room-key', req, requesterDeviceId);
+            if (fail.blocked) return sendRateLimited(res, fail.retryAfterSec, 'tournament key');
+          }
           return sendJson(res, 403, {
             error: 'Tournament ID key required to join this secure tournament',
             requiresKey: true,
             hostDeviceName: entry.hostDeviceName || 'Sync Host',
             hostIp: entry.hostIp || null,
           });
+        }
+        if (hasValidKey) {
+          resetAuthFailures('room-key', req, requesterDeviceId);
         }
 
         const selected = {
@@ -2713,16 +2852,21 @@ export function createLanSyncHandler({
     if (pathname === '/__sync/join' && req.method === 'POST') {
       try {
         const body = await readJsonBody(req);
+        const requesterDeviceId = body?.deviceId || null;
+        const rl = checkAuthRateLimit('room-key', req, requesterDeviceId);
+        if (rl.blocked) return sendRateLimited(res, rl.retryAfterSec, 'tournament key');
         const rawCode = body?.code || body?.joinCode || body?.tournamentId || '';
         const matchedKey = findTournamentKeyByCodeOrId(rawCode, { allowFuzzy: true });
         if (!matchedKey || !store.tournaments[matchedKey]) {
+          const fail = recordAuthFailure('room-key', req, requesterDeviceId);
+          if (fail.blocked) return sendRateLimited(res, fail.retryAfterSec, 'tournament key');
           return sendJson(res, 404, {
             error: 'No tournament found matching that 4-word key',
             normalizedCode: normalizeFourWordId(rawCode),
           });
         }
+        resetAuthFailures('room-key', req, requesterDeviceId);
         const entry = store.tournaments[matchedKey];
-        const requesterDeviceId = body?.deviceId || null;
         const isOwnHost = Boolean(
           entry.hostDeviceId && requesterDeviceId && entry.hostDeviceId === requesterDeviceId
         );
@@ -3987,19 +4131,24 @@ export function createLanSyncHandler({
       try {
         const body = await readJsonBody(req);
         const deviceId = String(body?.deviceId || '').trim();
+        const rl = checkAuthRateLimit('admin-key', req, deviceId);
+        if (rl.blocked) return sendRateLimited(res, rl.retryAfterSec, 'Admin Key');
         const rawProvided = String(body?.key || body?.adminKey || '').trim();
         const providedKey = normalizeFourWordId(rawProvided);
         const envAdminKey = String(process.env.ADMIN_KEY || '').trim();
         if (!deviceId || !rawProvided) {
           return sendJson(res, 400, { error: 'deviceId and Admin Key are required' });
         }
-        const matchesEnvKey = Boolean(envAdminKey && rawProvided === envAdminKey);
+        const matchesEnvKey = Boolean(envAdminKey && timingSafeStringEqual(rawProvided, envAdminKey));
         const matchesStoreKey = Boolean(
-          providedKey && providedKey === normalizeFourWordId(store.adminKey)
+          providedKey && timingSafeStringEqual(providedKey, normalizeFourWordId(store.adminKey))
         );
         if (!matchesEnvKey && !matchesStoreKey) {
+          const fail = recordAuthFailure('admin-key', req, deviceId);
+          if (fail.blocked) return sendRateLimited(res, fail.retryAfterSec, 'Admin Key');
           return sendJson(res, 403, { error: 'Invalid Hub Admin Key' });
         }
+        resetAuthFailures('admin-key', req, deviceId);
         const serverInfo = collectLocalServerInfo(getPort(), appMeta);
         const reqIp = getDisplayIpForRequest(req, serverInfo);
         const deviceName = String(body?.deviceName || 'Admin Device').trim();

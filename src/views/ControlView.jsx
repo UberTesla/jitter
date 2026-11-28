@@ -83,10 +83,21 @@ export default function ControlView({
   const [tvUrlHistory, setTvUrlHistory] = useState(() => readTvUrlHistory());
   const [tvUploadLog, setTvUploadLog] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
+  const [selectedTableNum, setSelectedTableNum] = useState(null);
+  const [multiTableMode, setMultiTableMode] = useState(false);
   const fileInputRef = useRef(null);
   const toastTimerRef = useRef(null);
 
-  const activeMatch = state.matches?.[state.activeMatchId] || null;
+  const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
+  const tableSlots = getTableSlots(state);
+  const selectedSlot =
+    tableCount > 1 && selectedTableNum
+      ? tableSlots.find((s) => s.tableNumber === selectedTableNum) || null
+      : null;
+  const activeMatch =
+    (selectedSlot?.match ? selectedSlot.match : null) ||
+    state.matches?.[state.activeMatchId] ||
+    null;
   const grandmaEnabled = state.rules?.grandmaEnabled !== false;
   const cornerScale = state.ui?.cornerScale ?? 1.0;
   const cornerOpacity = state.ui?.cornerOpacity ?? 1.0;
@@ -108,8 +119,8 @@ export default function ControlView({
     toastTimerRef.current = setTimeout(() => setToastMessage(''), 2800);
   };
 
-  const resolveSlotName = (slot) => {
-    const id = slot === 1 ? activeMatch?.player1Id : activeMatch?.player2Id;
+  const resolveSlotName = (slot, targetMatch = activeMatch) => {
+    const id = slot === 1 ? targetMatch?.player1Id : targetMatch?.player2Id;
     const found = (state.players || []).find((p) => p.id === id);
     return found?.name || (isTeams ? `Team ${slot}` : `Player ${slot}`);
   };
@@ -120,7 +131,7 @@ export default function ControlView({
     score2: activeMatch?.score2 || 0,
     onCommit: (slot, count, playerName) => {
       for (let i = 0; i < count; i += 1) {
-        tournamentStore.subtractPoint(slot);
+        tournamentStore.subtractPoint(slot, { matchId: activeMatch?.id || null });
       }
       showToast(`Removed ${count} ${count === 1 ? 'point' : 'points'} from ${playerName}`);
     },
@@ -129,9 +140,10 @@ export default function ControlView({
     },
   });
 
-  const handleScorePoint = (slot) => {
+  const handleScorePoint = (slot, targetMatch = activeMatch) => {
     cancelPendingRemoval(true);
-    const res = tournamentStore.addPoint(slot, { requireStarted: true });
+    const targetMatchId = targetMatch?.id || null;
+    const res = tournamentStore.addPoint(slot, { matchId: targetMatchId, requireStarted: true });
     if (res && res.requiresStart) {
       showToast('Click ▶ Begin Match before scoring points');
       return;
@@ -140,16 +152,23 @@ export default function ControlView({
       setDebounceRequest({
         id: Date.now(),
         slot,
-        playerName: resolveSlotName(slot),
+        matchId: targetMatchId,
+        playerName: resolveSlotName(slot, targetMatch),
         remainingSec: res.remainingSec,
       });
     }
   };
 
   const handleConfirmDebounceOverride = (slot) => {
+    const reqMatchId = debounceRequest?.matchId || activeMatch?.id || null;
+    const reqPlayerName = debounceRequest?.playerName || resolveSlotName(slot);
     setDebounceRequest(null);
-    tournamentStore.addPoint(slot, { bypassDebounce: true, requireStarted: true });
-    showToast(`+1 point added for ${resolveSlotName(slot)} (debounce override)`);
+    tournamentStore.addPoint(slot, {
+      matchId: reqMatchId,
+      bypassDebounce: true,
+      requireStarted: true,
+    });
+    showToast(`+1 point added for ${reqPlayerName} (debounce override)`);
   };
 
   const buildMatchSummary = (m) => {
@@ -705,160 +724,300 @@ export default function ControlView({
 
       {/* Main Operator Dashboard */}
       <main className="control-main">
-        {/* Multi-Table Switcher Bar (when tableCount > 1) */}
-        {(state.rules?.tableCount ?? 1) > 1 && (() => {
-          const tableSlots = getTableSlots(state);
+        {/* Multi-Table Switcher Bar & Single / All Tables Toggle (when 2+ tables configured) */}
+        {tableCount > 1 && (() => {
           const pMap = new Map((state.players || []).map((p) => [p.id, p]));
           return (
-            <div
-              className="scroller"
-              role="tablist"
-              aria-label="Active Tables"
-              style={{
-                display: 'flex',
-                alignItems: 'stretch',
-                gap: '0.45rem',
-                overflowX: 'auto',
-                paddingBottom: '0.2rem',
-              }}
-            >
-              {tableSlots.map((slot) => {
-                const m = slot.match;
-                const isSelected = Boolean(m && activeMatch && m.id === activeMatch.id);
-                const p1Name = m?.player1Id ? pMap.get(m.player1Id)?.name : null;
-                const p2Name = m?.player2Id ? pMap.get(m.player2Id)?.name : null;
-                return (
-                  <button
-                    key={slot.tableNumber}
-                    type="button"
-                    role="tab"
-                    aria-selected={isSelected}
-                    onClick={() => {
-                      cancelPendingRemoval(true);
-                      const res = tournamentStore.selectOrQueueTable(slot.tableNumber);
-                      if (res.ok && res.queued) {
-                        showToast(`Queued next match onto Table ${slot.tableNumber}`);
-                      } else if (!res.ok) {
-                        showToast(res.reason || `Table ${slot.tableNumber} is open`);
-                      }
-                    }}
-                    style={{
-                      flex: tableSlots.length <= 4 ? '1 1 0' : '0 0 auto',
-                      minWidth: '170px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      gap: '0.2rem',
-                      padding: '0.48rem 0.7rem',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      color: '#f8fafc',
-                      background: isSelected
-                        ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.24), rgba(15, 23, 42, 0.94))'
-                        : 'rgba(15, 23, 42, 0.82)',
-                      border: isSelected
-                        ? '1.5px solid rgba(251, 191, 36, 0.82)'
-                        : slot.isLive
-                        ? '1px solid rgba(34, 197, 94, 0.45)'
-                        : '1px solid rgba(148, 163, 184, 0.24)',
-                    }}
-                  >
-                    <div
+            <div className="control-table-bar-wrap">
+              <div
+                className="scroller"
+                role="tablist"
+                aria-label="Active Tables"
+                style={{
+                  display: 'flex',
+                  alignItems: 'stretch',
+                  gap: '0.45rem',
+                  overflowX: 'auto',
+                  paddingBottom: '0.2rem',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                }}
+              >
+                {tableSlots.map((slot) => {
+                  const m = slot.match;
+                  const isSelected =
+                    !multiTableMode &&
+                    Boolean(
+                      (selectedTableNum && selectedTableNum === slot.tableNumber) ||
+                        (!selectedTableNum && m && activeMatch && m.id === activeMatch.id)
+                    );
+                  const p1Name = m?.player1Id ? pMap.get(m.player1Id)?.name : null;
+                  const p2Name = m?.player2Id ? pMap.get(m.player2Id)?.name : null;
+                  return (
+                    <button
+                      key={slot.tableNumber}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSelected}
+                      onClick={() => {
+                        cancelPendingRemoval(true);
+                        const res = tournamentStore.selectOrQueueTable(slot.tableNumber, {
+                          setAsActive: false,
+                        });
+                        setSelectedTableNum(slot.tableNumber);
+                        if (multiTableMode) setMultiTableMode(false);
+                        if (res.ok && res.queued) {
+                          showToast(`Queued next match onto Table ${slot.tableNumber}`);
+                        } else if (!res.ok) {
+                          showToast(res.reason || `Table ${slot.tableNumber} is open`);
+                        }
+                      }}
                       style={{
-                        width: '100%',
+                        flex: tableSlots.length <= 4 ? '1 1 0' : '0 0 auto',
+                        minWidth: '165px',
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '0.4rem',
-                        fontSize: '0.72rem',
-                        fontWeight: 800,
-                        letterSpacing: '0.04em',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '0.2rem',
+                        padding: '0.48rem 0.7rem',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        color: '#f8fafc',
+                        background: isSelected
+                          ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.24), rgba(15, 23, 42, 0.94))'
+                          : 'rgba(15, 23, 42, 0.82)',
+                        border: isSelected
+                          ? '1.5px solid rgba(251, 191, 36, 0.82)'
+                          : slot.isLive
+                          ? '1px solid rgba(34, 197, 94, 0.45)'
+                          : '1px solid rgba(148, 163, 184, 0.24)',
                       }}
                     >
-                      <span style={{ color: '#fbbf24' }}>TABLE {slot.tableNumber}</span>
-                      <span
+                      <div
                         style={{
-                          fontSize: '0.64rem',
-                          padding: '0.08rem 0.36rem',
-                          borderRadius: '999px',
-                          background: slot.isLive
-                            ? 'rgba(34, 197, 94, 0.22)'
-                            : slot.isQueued
-                            ? 'rgba(245, 158, 11, 0.2)'
-                            : 'rgba(148, 163, 184, 0.16)',
-                          color: slot.isLive ? '#4ade80' : slot.isQueued ? '#fde68a' : '#94a3b8',
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '0.4rem',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.04em',
                         }}
                       >
-                        {slot.isLive ? '● LIVE' : slot.isQueued ? 'READY' : 'OPEN'}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        width: '100%',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        color: m ? '#f1f5f9' : '#94a3b8',
-                      }}
-                    >
-                      {m
-                        ? `${p1Name || 'TBD'} ${m.score1 ?? 0}–${m.score2 ?? 0} ${p2Name || 'TBD'}`
-                        : '+ Click to queue next match'}
-                    </div>
-                  </button>
-                );
-              })}
+                        <span style={{ color: '#fbbf24' }}>TABLE {slot.tableNumber}</span>
+                        <span
+                          style={{
+                            fontSize: '0.64rem',
+                            padding: '0.08rem 0.36rem',
+                            borderRadius: '999px',
+                            background: slot.isLive
+                              ? 'rgba(34, 197, 94, 0.22)'
+                              : slot.isQueued
+                              ? 'rgba(245, 158, 11, 0.2)'
+                              : 'rgba(148, 163, 184, 0.16)',
+                            color: slot.isLive ? '#4ade80' : slot.isQueued ? '#fde68a' : '#94a3b8',
+                          }}
+                        >
+                          {slot.isLive ? '● LIVE' : slot.isQueued ? 'READY' : 'OPEN'}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          width: '100%',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          color: m ? '#f1f5f9' : '#94a3b8',
+                        }}
+                      >
+                        {m
+                          ? `${p1Name || 'TBD'} ${m.score1 ?? 0}–${m.score2 ?? 0} ${p2Name || 'TBD'}`
+                          : '+ Click to queue next match'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="control-table-view-toggle" role="group" aria-label="Scoreboard layout">
+                <button
+                  type="button"
+                  className={!multiTableMode ? 'is-active' : ''}
+                  onClick={() => setMultiTableMode(false)}
+                  title="Focus one table scoreboard at a time"
+                >
+                  1 Table
+                </button>
+                <button
+                  type="button"
+                  className={multiTableMode ? 'is-active' : ''}
+                  onClick={() => setMultiTableMode(true)}
+                  title="Show and score all tables simultaneously"
+                >
+                  ⊞ All Tables
+                </button>
+              </div>
             </div>
           );
         })()}
 
-        {/* Live Match Scoreboard */}
-        <Scoreboard
-          match={activeMatch}
-          players={state.players}
-          rules={state.rules}
-          entryMode={state.entryMode || 'singles'}
-          scoreFont={state.ui?.scoreFont || 'barlow'}
-          mode="control"
-          onAddPoint={handleScorePoint}
-          onSubtractPoint={(slot) => requestRemovePoint(slot, resolveSlotName(slot))}
-          pendingPointRemoval={pendingRemoval}
-          onCancelPointRemoval={() => cancelPendingRemoval()}
-          onSwitchFirstServer={() => tournamentStore.switchFirstServer()}
-          onStartMatch={() => {
-            cancelPendingRemoval(true);
-            tournamentStore.startMatch();
-            if (activeMatch) showToast(`Match ${activeMatch.label} started!`);
-          }}
-          onCancelMatchStart={() => {
-            cancelPendingRemoval(true);
-            tournamentStore.cancelMatchStart();
-            if (activeMatch) showToast(`Cancelled start for ${activeMatch.label} — back to Ready`);
-          }}
-          onChangeMatchTable={(tableNum) => {
-            if (!activeMatch) return;
-            tournamentStore.setMatchTable(activeMatch.id, tableNum);
-            showToast(`Assigned ${activeMatch.label} to Table ${tableNum}`);
-          }}
-          onCompleteMatch={() => {
-            cancelPendingRemoval(true);
-            const prevMatch = activeMatch;
-            tournamentStore.completeActiveMatch();
-            if (prevMatch) {
-              showToast(`Match ${prevMatch.label} completed — next match ready!`);
+        {/* Live Match Scoreboard — Single Table or Simultaneous Multi-Table Grid */}
+        {tableCount > 1 && multiTableMode ? (
+          <div
+            className={`control-multitable-grid ${
+              tableSlots.length === 2 ? 'is-dual' : 'is-multi'
+            }`}
+            aria-label="Multi-Table Live Scoreboards"
+          >
+            {tableSlots.map((slot) => {
+              const m = slot.match;
+              return (
+                <div key={slot.tableNumber} className="control-multitable-cell">
+                  <div className="control-multitable-cell-head">
+                    <span className="control-multitable-title">
+                      🏓 TABLE {slot.tableNumber}
+                    </span>
+                    <span
+                      className={`control-multitable-status ${
+                        slot.isLive ? 'is-live' : slot.isQueued ? 'is-ready' : 'is-open'
+                      }`}
+                    >
+                      {slot.isLive ? '● LIVE' : slot.isQueued ? 'READY' : 'OPEN'}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      style={{ marginLeft: 'auto', padding: '0.16rem 0.5rem', fontSize: '0.7rem' }}
+                      onClick={() => {
+                        setSelectedTableNum(slot.tableNumber);
+                        setMultiTableMode(false);
+                      }}
+                    >
+                      Focus
+                    </button>
+                  </div>
+                  {m ? (
+                    <Scoreboard
+                      match={m}
+                      players={state.players}
+                      rules={state.rules}
+                      entryMode={state.entryMode || 'singles'}
+                      scoreFont={state.ui?.scoreFont || 'barlow'}
+                      mode="control"
+                      onAddPoint={(slotIdx) => handleScorePoint(slotIdx, m)}
+                      onSubtractPoint={(slotIdx) => {
+                        tournamentStore.subtractPoint(slotIdx, { matchId: m.id });
+                        showToast(`Removed 1 point on Table ${slot.tableNumber}`);
+                      }}
+                      onSwitchFirstServer={() =>
+                        tournamentStore.switchFirstServer({ matchId: m.id })
+                      }
+                      onStartMatch={() => {
+                        tournamentStore.startMatch(m.id, slot.tableNumber);
+                        showToast(`Table ${slot.tableNumber}: Match ${m.label} started!`);
+                      }}
+                      onCancelMatchStart={() => {
+                        tournamentStore.cancelMatchStart(m.id);
+                        showToast(`Table ${slot.tableNumber}: Cancelled start for ${m.label}`);
+                      }}
+                      onChangeMatchTable={(tableNum) => {
+                        tournamentStore.setMatchTable(m.id, tableNum);
+                        showToast(`Assigned ${m.label} to Table ${tableNum}`);
+                      }}
+                      onCompleteMatch={() => {
+                        tournamentStore.completeActiveMatch(m.id);
+                        showToast(`Table ${slot.tableNumber}: Match ${m.label} completed!`);
+                      }}
+                      onEditCompletedMatch={() => {
+                        setSelectedTableNum(slot.tableNumber);
+                        setEditCompletedOpen(true);
+                      }}
+                      onReopenMatch={(matchId) => {
+                        const res = tournamentStore.reopenMatch(matchId);
+                        if (res.reopened) {
+                          showToast(`Match ${state.matches[matchId]?.label || ''} reopened for play`);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="control-multitable-open-card">
+                      <p>Table {slot.tableNumber} is currently open.</p>
+                      <button
+                        type="button"
+                        className="btn-amber btn-sm"
+                        onClick={() => {
+                          const res = tournamentStore.selectOrQueueTable(slot.tableNumber, {
+                            setAsActive: false,
+                          });
+                          if (res.ok && res.queued) {
+                            showToast(`Queued next match onto Table ${slot.tableNumber}`);
+                          } else if (!res.ok) {
+                            showToast(res.reason || `No ready matches for Table ${slot.tableNumber}`);
+                          }
+                        }}
+                      >
+                        + Queue Next Ready Match
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <Scoreboard
+            match={activeMatch}
+            players={state.players}
+            rules={state.rules}
+            entryMode={state.entryMode || 'singles'}
+            scoreFont={state.ui?.scoreFont || 'barlow'}
+            mode="control"
+            onAddPoint={(slotIdx) => handleScorePoint(slotIdx, activeMatch)}
+            onSubtractPoint={(slotIdx) =>
+              requestRemovePoint(slotIdx, resolveSlotName(slotIdx, activeMatch))
             }
-          }}
-          onEditCompletedMatch={() => setEditCompletedOpen(true)}
-          onReopenMatch={(matchId) => {
-            const res = tournamentStore.reopenMatch(matchId);
-            if (res.reopened) {
-              showToast(`Match ${state.matches[matchId]?.label || ''} reopened for play`);
+            pendingPointRemoval={pendingRemoval}
+            onCancelPointRemoval={() => cancelPendingRemoval()}
+            onSwitchFirstServer={() =>
+              tournamentStore.switchFirstServer({ matchId: activeMatch?.id || null })
             }
-          }}
-        />
+            onStartMatch={() => {
+              cancelPendingRemoval(true);
+              tournamentStore.startMatch(activeMatch?.id || null, selectedTableNum);
+              if (activeMatch) showToast(`Match ${activeMatch.label} started!`);
+            }}
+            onCancelMatchStart={() => {
+              cancelPendingRemoval(true);
+              tournamentStore.cancelMatchStart(activeMatch?.id || null);
+              if (activeMatch) showToast(`Cancelled start for ${activeMatch.label} — back to Ready`);
+            }}
+            onChangeMatchTable={(tableNum) => {
+              if (!activeMatch) return;
+              tournamentStore.setMatchTable(activeMatch.id, tableNum);
+              setSelectedTableNum(tableNum);
+              showToast(`Assigned ${activeMatch.label} to Table ${tableNum}`);
+            }}
+            onCompleteMatch={() => {
+              cancelPendingRemoval(true);
+              const prevMatch = activeMatch;
+              tournamentStore.completeActiveMatch(activeMatch?.id || null);
+              if (prevMatch) {
+                showToast(`Match ${prevMatch.label} completed — next match ready!`);
+              }
+            }}
+            onEditCompletedMatch={() => setEditCompletedOpen(true)}
+            onReopenMatch={(matchId) => {
+              const res = tournamentStore.reopenMatch(matchId);
+              if (res.reopened) {
+                showToast(`Match ${state.matches[matchId]?.label || ''} reopened for play`);
+              }
+            }}
+          />
+        )}
 
         {/* Middle Row: Collapsible Broadcast Deck (with contextual slide banner) + Grandma & CRT Panels */}
         <div
@@ -1653,6 +1812,39 @@ export default function ControlView({
                                   </span>
                                 );
                               })()
+                            )}
+
+                            {item.kind !== 'sitcom' && !isEmbedStream && (
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm"
+                                onClick={() => {
+                                  const nextVal = !item.cacheLocal;
+                                  tournamentStore.updateTvPlaylistItem(item.id, {
+                                    cacheLocal: nextVal,
+                                  });
+                                  showToast(
+                                    nextVal
+                                      ? `Flagged "${item.name}" to cache locally on connected clients`
+                                      : `Disabled local client caching for "${item.name}"`
+                                  );
+                                }}
+                                title={
+                                  item.cacheLocal
+                                    ? 'Local client cache ON — connected devices prefetch and store this file locally'
+                                    : 'Click to have all connected clients download & cache this file locally'
+                                }
+                                aria-pressed={Boolean(item.cacheLocal)}
+                                style={{
+                                  padding: '0.12rem 0.34rem',
+                                  fontSize: '0.7rem',
+                                  flexShrink: 0,
+                                  borderColor: item.cacheLocal ? 'rgba(52, 211, 153, 0.7)' : undefined,
+                                  background: item.cacheLocal ? 'rgba(16, 185, 129, 0.22)' : undefined,
+                                }}
+                              >
+                                💾
+                              </button>
                             )}
 
                             {supportsAudio && (

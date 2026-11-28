@@ -590,6 +590,86 @@ export async function listCloudTvMediaLibrary() {
   }
 }
 
+const inflightLocalPrefetches = new Map();
+
+/**
+ * Prefetches a playlist item flagged with `cacheLocal: true` into this device's IndexedDB
+ * so subsequent playback works locally with zero network buffering.
+ */
+export async function prefetchTvPlaylistItemToLocalCache(item) {
+  if (!item || !item.id || !item.cacheLocal || item.kind === 'sitcom') {
+    return { ok: false, skipped: true };
+  }
+  if (item.kind === 'url' && item.url && resolveEmbedStreamUrl(item.url)) {
+    return { ok: false, skipped: true };
+  }
+  if (typeof fetch === 'undefined') return { ok: false, skipped: true };
+
+  const cacheKey = `playlist:${item.id}`;
+  const existing = await readLocalMediaRecordByKey(cacheKey);
+  if (existing && (existing.data || existing.blob)) {
+    return { ok: true, alreadyCached: true };
+  }
+  if (inflightLocalPrefetches.has(cacheKey)) {
+    return inflightLocalPrefetches.get(cacheKey);
+  }
+
+  const job = (async () => {
+    try {
+      let downloadUrl = '';
+      let contentType = item.type || '';
+      let mediaKind = item.kind || 'image';
+
+      if (item.kind === 'url' && item.url) {
+        downloadUrl = item.url;
+        const lower = String(item.url).toLowerCase().split('?')[0];
+        if (/\.(mp4|webm|mov|m4v|ogv)$/.test(lower)) {
+          mediaKind = 'video';
+          contentType = contentType || 'video/mp4';
+        }
+      } else {
+        const baseUrl = getSyncBaseUrl();
+        if (!baseUrl) return { ok: false, error: 'Sync server unavailable' };
+        const qs = new URLSearchParams({ meta: '1', id: item.id });
+        if (item.gcsObject) qs.set('gcsObject', item.gcsObject);
+        const metaRes = await fetch(`${baseUrl}/__sync/media?${qs.toString()}`, {
+          cache: 'no-store',
+        });
+        if (!metaRes.ok) return { ok: false, error: 'Media metadata unavailable' };
+        const meta = await metaRes.json();
+        if (!meta?.hasMedia) return { ok: false, error: 'Media not found' };
+        downloadUrl = meta.streamUrl || buildRemoteMediaUrl(meta.updatedAt || item.updatedAt, item.id);
+        contentType = meta.type || contentType;
+        mediaKind = meta.kind || mediaKind;
+      }
+
+      if (!downloadUrl) return { ok: false, error: 'No download URL' };
+      const res = await fetch(downloadUrl);
+      if (!res.ok) return { ok: false, error: `Download failed (${res.status})` };
+      const buf = await res.arrayBuffer();
+      if (!buf || buf.byteLength === 0) return { ok: false, error: 'Empty media file' };
+      const resolvedType = res.headers.get('Content-Type') || contentType || 'application/octet-stream';
+      const resolvedKind = resolvedType.startsWith('video/') ? 'video' : mediaKind;
+
+      await writeLocalMediaRecordByKey(cacheKey, {
+        data: buf,
+        type: resolvedType,
+        kind: resolvedKind,
+        name: item.name || item.id,
+        updatedAt: item.updatedAt || Date.now(),
+      });
+      return { ok: true, bytes: buf.byteLength };
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Prefetch failed' };
+    } finally {
+      inflightLocalPrefetches.delete(cacheKey);
+    }
+  })();
+
+  inflightLocalPrefetches.set(cacheKey, job);
+  return job;
+}
+
 export async function deleteTvPlaylistItemBlob(mediaId, { senderId = '', gcsObject = '' } = {}) {
   if (!mediaId) return;
   await writeLocalMediaRecordByKey(`playlist:${mediaId}`, null);
@@ -780,6 +860,28 @@ export async function loadTvPlaylistItemSource(item, { muted = true, loop = true
         isObjectUrl: false,
       };
     }
+    // If flagged for local caching, prefer locally cached IndexedDB blob for instant/offline playback
+    if (item.cacheLocal && item.id) {
+      const cachedRec = await readLocalMediaRecordByKey(`playlist:${item.id}`);
+      if (cachedRec && (cachedRec.data || cachedRec.blob)) {
+        const blob = cachedRec.data
+          ? new Blob([cachedRec.data], { type: cachedRec.type || 'application/octet-stream' })
+          : cachedRec.blob;
+        if (blob) {
+          return {
+            hasMedia: true,
+            url: URL.createObjectURL(blob),
+            name: cachedRec.name || item.name || item.url,
+            type: cachedRec.type || blob.type || 'application/octet-stream',
+            kind: cachedRec.kind || (blob.type.startsWith('video/') ? 'video' : 'image'),
+            updatedAt: cachedRec.updatedAt || item.updatedAt || Date.now(),
+            isObjectUrl: true,
+            fromLocalCache: true,
+          };
+        }
+      }
+      prefetchTvPlaylistItemToLocalCache(item).catch(() => {});
+    }
     const lower = String(item.url).toLowerCase().split('?')[0];
     const isVideo = /\.(mp4|webm|mov|m4v|ogv)$/.test(lower);
     return {
@@ -794,6 +896,29 @@ export async function loadTvPlaylistItemSource(item, { muted = true, loop = true
   }
   const mediaId = item.id;
   if (!mediaId) return null;
+
+  // If flagged for local client caching, prefer local IndexedDB blob before hitting network
+  if (item.cacheLocal) {
+    const cachedRec = await readLocalMediaRecordByKey(`playlist:${mediaId}`);
+    if (cachedRec && (cachedRec.data || cachedRec.blob)) {
+      const blob = cachedRec.data
+        ? new Blob([cachedRec.data], { type: cachedRec.type || 'application/octet-stream' })
+        : cachedRec.blob;
+      if (blob) {
+        return {
+          hasMedia: true,
+          url: URL.createObjectURL(blob),
+          name: cachedRec.name || item.name || 'tv-media',
+          type: cachedRec.type || blob.type || 'application/octet-stream',
+          kind: cachedRec.kind || item.kind || 'image',
+          updatedAt: cachedRec.updatedAt || item.updatedAt || Date.now(),
+          isObjectUrl: true,
+          fromLocalCache: true,
+        };
+      }
+    }
+    prefetchTvPlaylistItemToLocalCache(item).catch(() => {});
+  }
 
   // Prefer remote streaming URL (GCS signed URL or local LAN HTTP 206 stream)
   if (typeof fetch !== 'undefined') {
