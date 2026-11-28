@@ -1,15 +1,20 @@
 import React, { useMemo } from 'react';
 
 /**
- * Detects the user's browser & OS so we can render an accurate visual preview
- * of the EXACT native permission popup they are about to see next.
+ * Detects the user's browser, OS, and prefers-color-scheme (dark/light)
+ * to preview their native notification prompt accurately.
  */
 export function detectClientNotificationUI() {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
   const host =
     typeof window !== 'undefined' && window.location?.host
       ? window.location.host
-      : 'this tournament';
+      : 'this site';
+  const isDark = Boolean(
+    typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
 
   const isIOS =
     /iPhone|iPad|iPod/i.test(ua) ||
@@ -24,10 +29,10 @@ export function detectClientNotificationUI() {
   if (isIOS) {
     return {
       variant: 'ios',
-      label: 'iPhone / iPad',
-      where: 'Center of your screen',
+      isDark,
+      where: 'center of screen',
       title: `"${host}" Would Like to Send You Notifications`,
-      body: 'Notifications may include alerts, sounds, and icon badges.',
+      body: '',
       denyLabel: "Don't Allow",
       allowLabel: 'Allow',
     };
@@ -36,10 +41,10 @@ export function detectClientNotificationUI() {
   if (isSafari) {
     return {
       variant: 'safari-mac',
-      label: 'Safari on Mac',
-      where: 'Top of your Safari window',
+      isDark,
+      where: 'top of Safari',
       title: `"${host}" would like to send you notifications.`,
-      body: 'Notifications can be configured in Safari Settings.',
+      body: '',
       denyLabel: "Don't Allow",
       allowLabel: 'Allow',
     };
@@ -48,8 +53,8 @@ export function detectClientNotificationUI() {
   if (isAndroid) {
     return {
       variant: 'android',
-      label: isEdge ? 'Edge on Android' : isFirefox ? 'Firefox on Android' : 'Chrome on Android',
-      where: 'Center / bottom of your phone screen',
+      isDark,
+      where: 'bottom of screen',
       title: `Allow ${host} to send you notifications?`,
       body: '',
       denyLabel: 'Block',
@@ -60,8 +65,8 @@ export function detectClientNotificationUI() {
   if (isFirefox) {
     return {
       variant: 'firefox',
-      label: 'Firefox',
-      where: 'Top-left near the address bar',
+      isDark,
+      where: 'top-left by address bar',
       title: `Allow ${host} to send notifications?`,
       body: '',
       denyLabel: 'Block',
@@ -70,9 +75,9 @@ export function detectClientNotificationUI() {
   }
 
   return {
-    variant: 'chromium',
-    label: isEdge ? 'Microsoft Edge' : 'Chrome',
-    where: 'Top-left near the address bar',
+    variant: isEdge ? 'edge' : 'chrome',
+    isDark,
+    where: 'top-left by address bar',
     title: `${host} wants to`,
     body: '🔔 Show notifications',
     denyLabel: 'Block',
@@ -81,9 +86,8 @@ export function detectClientNotificationUI() {
 }
 
 /**
- * High-conviction Pre-Permission Modal shown BEFORE calling Notification.requestPermission().
- * Explains why live tournament alerts matter and previews the user's exact browser prompt
- * with the "Allow" button highlighted so players don't reflexively tap Block.
+ * Compact, high-conviction Pre-Permission Modal shown BEFORE Notification.requestPermission().
+ * Adapts the native prompt preview to the user's browser, OS, and dark/light mode.
  */
 export default function NotificationPrePromptModal({ open, onEnable, onDismiss }) {
   const clientUi = useMemo(() => detectClientNotificationUI(), []);
@@ -103,61 +107,34 @@ export default function NotificationPrePromptModal({ open, onEnable, onDismiss }
       <div className="notify-preprompt-card">
         <div className="notify-preprompt-kicker">
           <span className="notify-preprompt-pulse" aria-hidden="true" />
-          🚨 DON&apos;T MISS YOUR MATCH
+          🚨 DON&apos;T GET SKIPPED
         </div>
 
         <h2 id="notify-preprompt-title" className="notify-preprompt-title">
-          Turn On Live Tournament Alerts
+          Turn On Match Alerts
         </h2>
 
         <p className="notify-preprompt-lead">
-          Without alerts enabled, <strong>you won&apos;t know when you&apos;re called to the table</strong>{' '}
-          — and you risk holding up the bracket or getting skipped while your phone is in your pocket.
+          We&apos;ll ping your device when you&apos;re <strong>On Deck</strong> and when your{' '}
+          <strong>Table</strong> is up — even with your screen locked. Zero spam.
         </p>
 
-        <ul className="notify-preprompt-reasons">
-          <li>
-            <span aria-hidden="true">🏓</span>
-            <span>
-              <strong>Instant Table Call:</strong> Pinged the second you&apos;re <strong>On Deck</strong>{' '}
-              and when your match starts (with your exact <strong>Table #</strong>).
-            </span>
-          </li>
-          <li>
-            <span aria-hidden="true">📱</span>
-            <span>
-              <strong>Works With Your Screen Locked:</strong> Alerts break through even if you switch apps
-              or put your phone away.
-            </span>
-          </li>
-          <li>
-            <span aria-hidden="true">🔒</span>
-            <span>
-              <strong>Zero Spam, Ever:</strong> Strictly live match calls, Host announcements &amp; DMs for
-              this tournament.
-            </span>
-          </li>
-        </ul>
-
-        {/* Tailored Preview of THIS Client's Exact Browser/OS Popup */}
         <div className="notify-preview-section">
           <div className="notify-preview-caption">
-            NEXT POPUP ({clientUi.label.toUpperCase()} · {clientUi.where.toUpperCase()}) — TAP{' '}
-            <strong>&ldquo;{clientUi.allowLabel.toUpperCase()}&rdquo;</strong>:
+            Next popup ({clientUi.where}) → tap <strong>{clientUi.allowLabel}</strong>:
           </div>
 
           <div
-            className={`notify-native-mock is-${clientUi.variant}`}
+            className={`notify-native-mock is-${clientUi.variant} ${
+              clientUi.isDark ? 'is-dark' : 'is-light'
+            }`}
             aria-hidden="true"
           >
             <div className="nnm-title">{clientUi.title}</div>
             {clientUi.body && <div className="nnm-body">{clientUi.body}</div>}
             <div className="nnm-actions">
+              <span className="nnm-btn is-allow">{clientUi.allowLabel}</span>
               <span className="nnm-btn is-deny">{clientUi.denyLabel}</span>
-              <span className="nnm-btn is-allow">
-                {clientUi.allowLabel}
-                <span className="nnm-pointer">👈 TAP THIS</span>
-              </span>
             </div>
           </div>
         </div>
@@ -168,14 +145,14 @@ export default function NotificationPrePromptModal({ open, onEnable, onDismiss }
             className="btn-amber notify-preprompt-cta"
             onClick={() => onEnable?.()}
           >
-            🔔 Yes — Turn On Match Alerts Now
+            🔔 Turn On Match Alerts
           </button>
           <button
             type="button"
             className="notify-preprompt-skip"
             onClick={() => onDismiss?.()}
           >
-            Skip for now (I&apos;ll watch the screen myself)
+            Skip for now
           </button>
         </div>
       </div>
