@@ -473,6 +473,252 @@ export function propagateByes(inputMatches) {
   return matches;
 }
 
+export function normalizeByeMode(byeMode) {
+  return byeMode === 'minimal' ? 'minimal' : 'standard';
+}
+
+export function isByeMatch(match) {
+  return Boolean(match && (match.isBye || match.slot1IsBye || match.slot2IsBye));
+}
+
+/**
+ * Summarizes Round 1 matches and BYE counts for either 'standard' (power-of-2,
+ * all BYEs front-loaded in Round 1) or 'minimal' (max 1 BYE per odd round in Single Elim).
+ */
+export function summarizeBracketByes(playerCount, format = 'single', byeMode = 'standard') {
+  const count = clampPlayerCount(playerCount);
+  const effectiveMode = format === 'double' ? 'standard' : normalizeByeMode(byeMode);
+  const pow2 = nextPowerOfTwo(count);
+
+  if (effectiveMode === 'standard' || count === pow2) {
+    const r1Byes = pow2 - count;
+    const r1Matches = Math.max(0, (count - r1Byes) / 2);
+    return {
+      byeMode: effectiveMode,
+      bracketSize: pow2,
+      round1Matches: r1Matches,
+      round1Byes: r1Byes,
+      totalByes: r1Byes,
+      totalRealMatches: Math.max(0, count - 1),
+    };
+  }
+
+  let entrants = count;
+  let round1Matches = 0;
+  let round1Byes = 0;
+  let totalByes = 0;
+  let round = 0;
+  while (entrants > 1) {
+    round += 1;
+    const hasBye = entrants % 2 === 1;
+    const realMatches = Math.floor(entrants / 2);
+    if (round === 1) {
+      round1Matches = realMatches;
+      round1Byes = hasBye ? 1 : 0;
+    }
+    if (hasBye) totalByes += 1;
+    entrants = Math.ceil(entrants / 2);
+  }
+
+  return {
+    byeMode: 'minimal',
+    bracketSize: count,
+    round1Matches,
+    round1Byes,
+    totalByes,
+    totalRealMatches: Math.max(0, count - 1),
+  };
+}
+
+/**
+ * Arranges high-vs-low pairs so top seeds are balanced across top and bottom halves
+ * (e.g., #1 at the top, #2 at the bottom so they can only meet in the Final).
+ */
+function balancePairsForBracket(pairs) {
+  if (pairs.length <= 2) return pairs;
+  const top = [];
+  const bottom = [];
+  for (let i = 0; i < pairs.length; i++) {
+    // Snake pattern: 0 -> top, 1 -> bottom, 2 -> bottom, 3 -> top, 4 -> top, 5 -> bottom...
+    const toTop = i === 0 || Math.floor((i + 1) / 2) % 2 === 0;
+    if (toTop) {
+      top.push(pairs[i]);
+    } else {
+      bottom.unshift(pairs[i]);
+    }
+  }
+  return [...top, ...bottom];
+}
+
+function getMinimalRoundLabel(round, totalRounds, entrantsInRound) {
+  const remaining = totalRounds - round;
+  if (remaining === 0) return 'Championship Final';
+  if (remaining === 1) return 'Semifinals';
+  if (remaining === 2) return 'Quarterfinals';
+  const pow2Size = Math.pow(2, remaining + 1);
+  if (entrantsInRound === pow2Size) return `Round of ${pow2Size}`;
+  return `Round ${round}`;
+}
+
+/**
+ * Generates a Single Elimination bracket with AT MOST ONE BYE PER ROUND
+ * (pairing everyone who can play in Round 1 and only issuing a single BYE in rounds
+ * with an odd number of remaining entrants, preferring branches with the fewest prior BYEs).
+ */
+function generateMinimalByeSingleBracket(normalizedPlayers) {
+  const count = normalizedPlayers.length;
+  const totalRounds = Math.ceil(Math.log2(count));
+  const matches = {};
+
+  const getShortPrefix = (r) => {
+    if (r === totalRounds) return 'FINAL';
+    if (r === totalRounds - 1) return 'SF';
+    if (r === totalRounds - 2) return 'QF';
+    return `R${r}`;
+  };
+
+  // Round 1: pair everyone high-vs-low; if count is odd, Seed #1 gets the single Round 1 BYE
+  let r1Entries = [];
+  if (count % 2 === 0) {
+    const rawPairs = [];
+    for (let i = 0; i < count / 2; i++) {
+      rawPairs.push({
+        p1: normalizedPlayers[i],
+        p2: normalizedPlayers[count - 1 - i],
+        hadBye: false,
+        byeCount: 0,
+      });
+    }
+    r1Entries = balancePairsForBracket(rawPairs);
+  } else {
+    const byeEntry = {
+      p1: normalizedPlayers[0],
+      p2: null,
+      hadBye: true,
+      byeCount: 1,
+    };
+    const rem = normalizedPlayers.slice(1);
+    const rawPairs = [];
+    for (let i = 0; i < rem.length / 2; i++) {
+      rawPairs.push({
+        p1: rem[i],
+        p2: rem[rem.length - 1 - i],
+        hadBye: false,
+        byeCount: 0,
+      });
+    }
+    // Reverse balanced order so #2 vs #N lands at the very bottom (opposite half from #1)
+    const balancedRem = balancePairsForBracket(rawPairs).reverse();
+    r1Entries = [byeEntry, ...balancedRem];
+  }
+
+  const r1Label = getMinimalRoundLabel(1, totalRounds, count);
+  const r1Prefix = getShortPrefix(1);
+  let prevNodes = r1Entries.map((entry, idx) => {
+    const m = idx + 1;
+    const id = `W-R1-M${m}`;
+    const label = r1Entries.length === 1 ? r1Prefix : `${r1Prefix} M${m}`;
+    matches[id] = createEmptyMatch({
+      id,
+      bracket: 'winners',
+      round: 1,
+      roundLabel: r1Label,
+      matchNumber: m,
+      label,
+      player1Id: entry.p1?.id || null,
+      player2Id: entry.p2?.id || null,
+      slot1IsBye: !entry.p1,
+      slot2IsBye: !entry.p2,
+      source1Label: entry.p1 ? `Seed #${entry.p1.seed}` : 'BYE',
+      source2Label: entry.p2 ? `Seed #${entry.p2.seed}` : 'BYE',
+    });
+    return {
+      id,
+      byeCount: entry.byeCount,
+      justHadBye: entry.hadBye,
+    };
+  });
+
+  // Subsequent rounds: pair adjacent winners; if odd, give 1 BYE to the branch with fewest prior BYEs
+  for (let r = 2; r <= totalRounds; r++) {
+    const entrantsInRound = prevNodes.length;
+    const roundLabel = getMinimalRoundLabel(r, totalRounds, entrantsInRound);
+    const shortPrefix = getShortPrefix(r);
+    const isOdd = entrantsInRound % 2 === 1;
+    const nextRoundMatchCount = Math.ceil(entrantsInRound / 2);
+
+    let roundSpecs = [];
+    if (!isOdd) {
+      for (let i = 0; i < prevNodes.length; i += 2) {
+        roundSpecs.push({ left: prevNodes[i], right: prevNodes[i + 1], isBye: false });
+      }
+    } else {
+      // Pick one branch for the single BYE: avoid back-to-back BYEs, prefer lowest byeCount,
+      // then prefer outer edges (index 0 or last) so adjacent matches stay cleanly grouped.
+      let byeIdx = 0;
+      let bestScore = Infinity;
+      for (let i = 0; i < prevNodes.length; i++) {
+        const node = prevNodes[i];
+        const edgePenalty = i === 0 ? 0 : i === prevNodes.length - 1 ? 1 : 2;
+        const score = (node.justHadBye ? 1000 : 0) + node.byeCount * 10 + edgePenalty;
+        if (score < bestScore) {
+          bestScore = score;
+          byeIdx = i;
+        }
+      }
+
+      const byeNode = prevNodes[byeIdx];
+      const remainingNodes = prevNodes.filter((_, i) => i !== byeIdx);
+      const pairedSpecs = [];
+      for (let i = 0; i < remainingNodes.length; i += 2) {
+        pairedSpecs.push({ left: remainingNodes[i], right: remainingNodes[i + 1], isBye: false });
+      }
+      const byeSpec = { left: byeNode, right: null, isBye: true };
+      roundSpecs = byeIdx === 0 ? [byeSpec, ...pairedSpecs] : [...pairedSpecs, byeSpec];
+    }
+
+    const nextNodes = roundSpecs.map((spec, idx) => {
+      const m = idx + 1;
+      const id = `W-R${r}-M${m}`;
+      const label = nextRoundMatchCount === 1 ? shortPrefix : `${shortPrefix} M${m}`;
+      const source1Label = `Winner ${spec.left.id}`;
+      const source2Label = spec.isBye ? 'BYE' : `Winner ${spec.right.id}`;
+
+      matches[id] = createEmptyMatch({
+        id,
+        bracket: 'winners',
+        round: r,
+        roundLabel,
+        matchNumber: m,
+        label,
+        slot1IsBye: false,
+        slot2IsBye: spec.isBye,
+        source1Label,
+        source2Label,
+      });
+
+      matches[spec.left.id].nextWinnerMatchId = id;
+      matches[spec.left.id].nextWinnerSlot = 1;
+      if (!spec.isBye && spec.right) {
+        matches[spec.right.id].nextWinnerMatchId = id;
+        matches[spec.right.id].nextWinnerSlot = 2;
+      }
+
+      return {
+        id,
+        byeCount: spec.isBye
+          ? spec.left.byeCount + 1
+          : Math.max(spec.left.byeCount, spec.right?.byeCount || 0),
+        justHadBye: spec.isBye,
+      };
+    });
+
+    prevNodes = nextNodes;
+  }
+
+  return propagateByes(matches);
+}
+
 /**
  * Generates all matches for ANY number of players or teams (2..256)
  * in Single Elimination or Double Elimination.
@@ -481,7 +727,19 @@ export function generateBracket(players, format = 'single', options = {}) {
   const count = clampPlayerCount(players.length);
   const isTeams = Array.isArray(players[0]?.members);
   const normalizedPlayers = createPlayers(count, players, isTeams ? 'teams' : 'singles');
-  const { customR1Pairs = null, bracketSizeOverride = null } = options || {};
+  const { customR1Pairs = null, bracketSizeOverride = null, byeMode = 'standard' } = options || {};
+  const effectiveByeMode = format === 'double' ? 'standard' : normalizeByeMode(byeMode);
+
+  if (
+    format === 'single' &&
+    effectiveByeMode === 'minimal' &&
+    !Array.isArray(customR1Pairs) &&
+    !bracketSizeOverride &&
+    count !== nextPowerOfTwo(count)
+  ) {
+    return generateMinimalByeSingleBracket(normalizedPlayers);
+  }
+
   const bracketSize = Math.max(
     nextPowerOfTwo(count),
     bracketSizeOverride ? nextPowerOfTwo(bracketSizeOverride) : 2
@@ -981,18 +1239,19 @@ export function addEntrantsPreservingBracket(
   nextPlayers,
   format = 'single',
   rules = { targetPoints: 11, serveRotation: 2, winBy: 2 },
-  prevActiveMatchId = null
+  prevActiveMatchId = null,
+  byeMode = 'standard'
 ) {
   const oldIds = new Set((oldPlayers || []).map((p) => p.id));
   const addedPlayers = (nextPlayers || []).filter((p) => !oldIds.has(p.id));
 
   const hasAnyProgress = Object.values(oldMatches || {}).some(
-    (m) => !m.isBye && (m.completed || m.started || (m.score1 || 0) > 0 || (m.score2 || 0) > 0)
+    (m) => !isByeMatch(m) && (m.completed || m.started || (m.score1 || 0) > 0 || (m.score2 || 0) > 0)
   );
 
   // If no matches have been played/started yet, clean optimal seeding loses nothing
   if (!hasAnyProgress) {
-    const fresh = generateBracket(nextPlayers, format);
+    const fresh = generateBracket(nextPlayers, format, { byeMode });
     return {
       matches: fresh,
       activeMatchId: findNextReadyMatchId(fresh) || Object.keys(fresh)[0] || 'W-R1-M1',
@@ -1308,7 +1567,7 @@ export function groupBracketRounds(matches) {
 
 export function computeTournamentStats(state) {
   const allMatches = Object.values(state.matches || {});
-  const allRealMatches = allMatches.filter((m) => !m.isBye);
+  const allRealMatches = allMatches.filter((m) => !isByeMatch(m));
   const byeCount = allMatches.length - allRealMatches.length;
 
   const completedMatches = allRealMatches

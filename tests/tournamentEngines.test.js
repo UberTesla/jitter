@@ -27,6 +27,9 @@ import {
   completeMatchAndAdvance,
   computeTournamentStats,
   getStandardSeedOrder,
+  summarizeBracketByes,
+  isByeMatch,
+  findNextReadyMatchId,
 } from '../src/engine/bracketGenerator.js';
 import {
   TournamentStore,
@@ -4140,3 +4143,124 @@ test('Server /__sync/grandma throttles competing banter floods and enforces conf
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('Minimal BYEs Single Elimination pairs everyone in Round 1 (max 1 BYE/round) and completes cleanly for 9, 10, and 12 entrants', () => {
+  // Summary comparison: standard vs minimal
+  assert.deepEqual(
+    {
+      r1M: summarizeBracketByes(10, 'single', 'standard').round1Matches,
+      r1B: summarizeBracketByes(10, 'single', 'standard').round1Byes,
+      totB: summarizeBracketByes(10, 'single', 'standard').totalByes,
+    },
+    { r1M: 2, r1B: 6, totB: 6 }
+  );
+  assert.deepEqual(
+    {
+      r1M: summarizeBracketByes(10, 'single', 'minimal').round1Matches,
+      r1B: summarizeBracketByes(10, 'single', 'minimal').round1Byes,
+      totB: summarizeBracketByes(10, 'single', 'minimal').totalByes,
+    },
+    { r1M: 5, r1B: 0, totB: 2 }
+  );
+  assert.deepEqual(
+    {
+      r1M: summarizeBracketByes(9, 'single', 'minimal').round1Matches,
+      r1B: summarizeBracketByes(9, 'single', 'minimal').round1Byes,
+      totB: summarizeBracketByes(9, 'single', 'minimal').totalByes,
+    },
+    { r1M: 4, r1B: 1, totB: 3 }
+  );
+  assert.deepEqual(
+    {
+      r1M: summarizeBracketByes(12, 'single', 'minimal').round1Matches,
+      r1B: summarizeBracketByes(12, 'single', 'minimal').round1Byes,
+      totB: summarizeBracketByes(12, 'single', 'minimal').totalByes,
+    },
+    { r1M: 6, r1B: 0, totB: 1 }
+  );
+
+  // Full end-to-end simulation for 9, 10, and 12 entrants
+  const rules = { targetPoints: 11, serveRotation: 2, winBy: 2 };
+  for (const count of [9, 10, 12]) {
+    const players = createPlayers(count);
+    let matches = generateBracket(players, 'single', { byeMode: 'minimal' });
+
+    const r1 = Object.values(matches).filter((m) => m.bracket === 'winners' && m.round === 1);
+    const r1Real = r1.filter((m) => !isByeMatch(m));
+    const r1Byes = r1.filter((m) => isByeMatch(m));
+
+    assert.equal(r1Real.length, Math.floor(count / 2), `R1 real matches for ${count}`);
+    assert.equal(r1Byes.length, count % 2, `R1 BYEs for ${count}`);
+    assert.notEqual(r1[0].roundLabel, 'Round of 16', `R1 label for ${count} should not be Round of 16`);
+
+    // Every round has at most 1 BYE
+    const byRound = new Map();
+    for (const m of Object.values(matches)) {
+      if (!byRound.has(m.round)) byRound.set(m.round, []);
+      byRound.get(m.round).push(m);
+    }
+    for (const [round, list] of byRound.entries()) {
+      const roundByes = list.filter((m) => isByeMatch(m));
+      assert.ok(roundByes.length <= 1, `Round ${round} for ${count} had ${roundByes.length} BYEs`);
+    }
+
+    // Stats report exact N-1 real matches before any match is played
+    const initialStats = computeTournamentStats({ matches, players, activeMatchId: null });
+    assert.equal(initialStats.totalMatches, count - 1);
+
+    // Play out every match cleanly to a Champion
+    let played = 0;
+    let championId = null;
+    while (!championId && played < 50) {
+      const nextId = findNextReadyMatchId(matches);
+      assert.ok(nextId, `Expected a ready match before champion for ${count}`);
+      matches = {
+        ...matches,
+        [nextId]: { ...matches[nextId], score1: 11, score2: 5, started: true },
+      };
+      const res = completeMatchAndAdvance(matches, nextId, rules, count, 'single');
+      assert.equal(res.completed, true);
+      matches = res.matches;
+      championId = res.championId;
+      played += 1;
+    }
+
+    assert.equal(played, count - 1, `Total real matches played for ${count}`);
+    assert.ok(championId, `Champion crowned for ${count}`);
+  }
+
+  // Store integration: host switches byeMode via applyFullSetup and preserves it across shuffle/reset
+  const store = new TournamentStore(createInitialState({ playerCount: 10, format: 'single' }));
+  assert.equal(store.getState().byeMode, 'standard');
+  assert.equal(
+    Object.values(store.getState().matches).filter((m) => m.round === 1 && !isByeMatch(m)).length,
+    2
+  );
+
+  store.applyFullSetup({
+    format: 'single',
+    byeMode: 'minimal',
+    playerCount: 10,
+    players: store.getState().players,
+    rebuildBracket: false,
+  });
+  assert.equal(store.getState().byeMode, 'minimal');
+  assert.equal(
+    Object.values(store.getState().matches).filter((m) => m.round === 1 && !isByeMatch(m)).length,
+    5
+  );
+
+  store.randomizeSeeds();
+  assert.equal(store.getState().byeMode, 'minimal');
+  assert.equal(
+    Object.values(store.getState().matches).filter((m) => m.round === 1 && !isByeMatch(m)).length,
+    5
+  );
+
+  store.resetTournament();
+  assert.equal(
+    Object.values(store.getState().matches).filter((m) => m.round === 1 && !isByeMatch(m)).length,
+    5
+  );
+});
+

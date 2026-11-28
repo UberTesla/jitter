@@ -208,6 +208,87 @@ dialog.app-dialog::backdrop {
   font-size: 0.82rem;
 }
 
+.setup-bye-mode-field {
+  margin-top: 0.15rem;
+}
+
+.setup-label-with-tooltip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.setup-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.setup-tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(30, 41, 59, 0.9);
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.setup-tooltip-trigger:hover,
+.setup-tooltip-trigger:focus-visible {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.75);
+  color: #f8fafc;
+  outline: none;
+}
+
+.setup-tooltip-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(360px, 82vw);
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setup-tooltip-popover p {
+  margin: 0;
+}
+
+.setup-tooltip-popover strong {
+  color: #f8fafc;
+}
+
+.setup-tooltip-popover em {
+  color: #93c5fd;
+  font-style: normal;
+}
+
+.setup-tooltip-note {
+  color: #fde68a;
+  font-weight: 600;
+}
+
 .player-count-picker {
   display: flex;
   flex-wrap: wrap;

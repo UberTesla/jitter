@@ -1,5 +1,5 @@
 import React from 'react';
-import { groupBracketRounds } from '../engine/bracketGenerator.js';
+import { groupBracketRounds, isByeMatch } from '../engine/bracketGenerator.js';
 import AutoFitBox from './AutoFitBox.jsx';
 
 const LARGE_BRACKET_THRESHOLD = 16;
@@ -121,24 +121,25 @@ export default function MiniBracket({
     if (m.isBye && m.winnerIsBye) {
       return <div key={m.id} className="mb-spacer" aria-hidden="true" />;
     }
-    const isActive = m.id === activeMatchId && !m.isBye;
-    const isCompleted = m.completed && !m.isBye;
+    const isBye = isByeMatch(m);
+    const isActive = m.id === activeMatchId && !isBye;
+    const isCompleted = m.completed && !isBye;
     return (
       <div
         key={m.id}
         className={`mb-card ${isActive ? 'is-active' : ''} ${isCompleted ? 'is-done' : ''} ${
-          m.isBye ? 'is-bye' : ''
+          isBye ? 'is-bye' : ''
         }`}
       >
         <div
           className={`mb-row ${
-            (isCompleted || m.isBye) && m.winnerId === m.player1Id && m.player1Id ? 'is-win' : ''
+            (isCompleted || isBye) && m.winnerId === m.player1Id && m.player1Id ? 'is-win' : ''
           }`}
         >
           <span className="mb-name">{shortName(m.player1Id, m.slot1IsBye, 'TBD')}</span>
           <span className="mb-score">
-            {m.isBye
-              ? m.winnerId === m.player1Id
+            {isBye
+              ? m.winnerId === m.player1Id && m.player1Id
                 ? '✓'
                 : '–'
               : isCompleted || isActive
@@ -148,13 +149,13 @@ export default function MiniBracket({
         </div>
         <div
           className={`mb-row ${
-            (isCompleted || m.isBye) && m.winnerId === m.player2Id && m.player2Id ? 'is-win' : ''
+            (isCompleted || isBye) && m.winnerId === m.player2Id && m.player2Id ? 'is-win' : ''
           }`}
         >
           <span className="mb-name">{shortName(m.player2Id, m.slot2IsBye, 'TBD')}</span>
           <span className="mb-score">
-            {m.isBye
-              ? m.winnerId === m.player2Id
+            {isBye
+              ? m.winnerId === m.player2Id && m.player2Id
                 ? '✓'
                 : '–'
               : isCompleted || isActive
