@@ -570,10 +570,10 @@ export function createGrandmaSpeech({
   if (!cleaned) return null;
   const { totalVisibleMs } = computeGrandmaSpeechTiming(
     cleaned,
-    grandmaConfig.stayDurationSec ?? 5.5
+    grandmaConfig.stayDurationSec ?? 10
   );
-  const minInt = Math.max(1, Number(grandmaConfig.minIntervalSec ?? 6) || 6);
-  const maxInt = Math.max(minInt, Number(grandmaConfig.maxIntervalSec ?? 13) || 13);
+  const minInt = Math.max(1, Number(grandmaConfig.minIntervalSec ?? 30) || 30);
+  const maxInt = Math.max(minInt, Number(grandmaConfig.maxIntervalSec ?? 120) || 120);
   const nextGapMs = Math.round((minInt + randomFn() * (maxInt - minInt)) * 1000);
 
   return {
