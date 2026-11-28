@@ -4015,3 +4015,50 @@ test('assignMatchToTable refuses to replace a live match until paused or cancell
   assert.equal(store.getState().matches[m1].tableNumber, 2);
   assert.equal(store.getState().matches[m1].score1, 1);
 });
+
+test('Per-match Scorekeeper claiming enforces 1 claim per match, 1 active claim per device, Host override, and auto-release on completion', () => {
+  const initial = createInitialState({
+    playerCount: 8,
+    format: 'single',
+    rules: { targetPoints: 11, winBy: 2, tableCount: 2 },
+  });
+  const store = new TournamentStore(initial, { persist: false });
+  const readyIds = Object.values(store.getState().matches)
+    .filter((m) => !m.isBye && m.player1Id && m.player2Id)
+    .map((m) => m.id);
+  const [m1, m2] = readyIds;
+
+  // Device A claims & starts m1
+  const claimA = store.claimMatchScorekeeper(m1, { deviceId: 'dev-a', deviceName: 'Alice Phone' });
+  assert.equal(claimA.ok, true);
+  assert.equal(store.getState().matches[m1].scorekeeperDeviceId, 'dev-a');
+  assert.equal(store.getState().matches[m1].scorekeeperDeviceName, 'Alice Phone');
+
+  // Device B cannot claim m1 without force
+  const claimB = store.claimMatchScorekeeper(m1, { deviceId: 'dev-b', deviceName: 'Bob Phone' });
+  assert.equal(claimB.ok, false);
+  assert.equal(claimB.claimedByOther, true);
+
+  // Device A cannot simultaneously claim m2 while holding m1
+  const claimA2 = store.claimMatchScorekeeper(m2, { deviceId: 'dev-a', deviceName: 'Alice Phone' });
+  assert.equal(claimA2.ok, false);
+  assert.equal(claimA2.otherMatchId, m1);
+
+  // Host can force-takeover m1
+  const hostTakeover = store.claimMatchScorekeeper(m1, {
+    deviceId: 'dev-host',
+    deviceName: 'Host Laptop',
+    force: true,
+  });
+  assert.equal(hostTakeover.ok, true);
+  assert.equal(store.getState().matches[m1].scorekeeperDeviceId, 'dev-host');
+
+  // Completing m1 auto-releases its scorekeeper claim
+  store.startMatch(m1, 1);
+  for (let i = 0; i < 11; i++) {
+    store.addPoint(1, { matchId: m1, bypassDebounce: true });
+  }
+  store.completeActiveMatch(m1);
+  assert.equal(store.getState().matches[m1].completed, true);
+  assert.equal(store.getState().matches[m1].scorekeeperDeviceId, null);
+});

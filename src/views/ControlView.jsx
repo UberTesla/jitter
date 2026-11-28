@@ -948,6 +948,10 @@ export default function ControlView({
                         showToast(`Table ${slot.tableNumber}: Cancelled start for ${m.label}`);
                       }}
                       onOpenMatchPicker={(tNum) => setTablePickerFor(tNum)}
+                      onReleaseScorekeeper={(mid) => {
+                        tournamentStore.releaseMatchScorekeeper(mid, { force: true });
+                        showToast(`Released Scorekeeper claim on ${m.label}`);
+                      }}
                       onCompleteMatch={() => {
                         tournamentStore.completeActiveMatch(m.id);
                         showToast(`Table ${slot.tableNumber}: Match ${m.label} completed!`);
@@ -1017,6 +1021,10 @@ export default function ControlView({
               if (activeMatch) showToast(`Cancelled start for ${activeMatch.label} — back to Ready`);
             }}
             onOpenMatchPicker={(tNum) => setTablePickerFor(tNum)}
+            onReleaseScorekeeper={(mid) => {
+              tournamentStore.releaseMatchScorekeeper(mid, { force: true });
+              if (activeMatch) showToast(`Released Scorekeeper claim on ${activeMatch.label}`);
+            }}
             onCompleteMatch={() => {
               cancelPendingRemoval(true);
               const prevMatch = activeMatch;

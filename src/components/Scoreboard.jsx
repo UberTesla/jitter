@@ -27,6 +27,7 @@ export default function Scoreboard({
   onResumeMatch,
   onChangeMatchTable,
   onOpenMatchPicker,
+  onReleaseScorekeeper,
   onCompleteMatch,
   onEditCompletedMatch,
   onReopenMatch,
@@ -132,6 +133,43 @@ export default function Scoreboard({
             )
           )}
           {isTeams && <span className="doubles-pill">DOUBLES / TEAMS</span>}
+          {isControl && match?.scorekeeperDeviceId && !match.completed && (
+            <span
+              className="doubles-pill"
+              title={`Claimed by Scorekeeper: ${match.scorekeeperDeviceName || match.scorekeeperDeviceId}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                background: 'rgba(16, 185, 129, 0.16)',
+                borderColor: 'rgba(52, 211, 153, 0.45)',
+                color: '#a7f3d0',
+              }}
+            >
+              🎯 {match.scorekeeperDeviceName || 'Scorekeeper'}
+              {onReleaseScorekeeper && (
+                <button
+                  type="button"
+                  onClick={() => onReleaseScorekeeper(match.id)}
+                  title="Release this Scorekeeper's claim on the match"
+                  aria-label="Release Scorekeeper claim"
+                  style={{
+                    appearance: 'none',
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    padding: '0 0.1rem',
+                    fontSize: '0.72rem',
+                    lineHeight: 1,
+                    opacity: 0.85,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          )}
         </div>
 
         <div className="scoreboard-header-center">

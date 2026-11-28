@@ -5570,12 +5570,19 @@ export class TournamentStore {
       { forcePublish: true }
     );
   }
-  startMatch(matchId = null, tableNumber = null) {
+  startMatch(matchId = null, tableNumber = null, { claimForScorekeeper = false, deviceId = '', deviceName = '' } = {}) {
     const targetId = matchId || this.localPreviewMatchId || this.state.activeMatchId;
     const localMatch = this.state.matches?.[targetId];
     const localInitialServer = localMatch?.initialServer;
     const localTable = localMatch?.tableNumber;
     this.localPreviewMatchId = null;
+
+    const claimDevId = claimForScorekeeper
+      ? String(deviceId || this.remoteSync?.deviceId || this.tabId || '').trim()
+      : '';
+    const claimDevName = claimForScorekeeper
+      ? String(deviceName || this.remoteSync?.deviceName || 'Scorekeeper').trim()
+      : '';
 
     return this.commit(
       (s) => {
@@ -5588,11 +5595,16 @@ export class TournamentStore {
             ? Math.max(1, Math.min(tableCount, Math.floor(Number(requestedTable))))
             : pickNextAvailableTableNumber(s.matches, tableCount, targetId);
         const resolvedServer = localInitialServer === 2 ? 2 : m.initialServer === 2 ? 2 : 1;
+        const shouldAttachClaim = Boolean(
+          claimDevId && (!m.scorekeeperDeviceId || m.scorekeeperDeviceId === claimDevId)
+        );
         if (
           m.started &&
+          !m.paused &&
           s.activeMatchId === targetId &&
           m.initialServer === resolvedServer &&
-          m.tableNumber === resolvedTable
+          m.tableNumber === resolvedTable &&
+          (!shouldAttachClaim || m.scorekeeperDeviceId === claimDevId)
         ) {
           return s;
         }
@@ -5608,12 +5620,118 @@ export class TournamentStore {
               started: true,
               paused: false,
               startedAt: m.startedAt || this.getServerNow(),
+              ...(shouldAttachClaim
+                ? {
+                    scorekeeperDeviceId: claimDevId,
+                    scorekeeperDeviceName: claimDevName || 'Scorekeeper',
+                    scorekeeperClaimedAt: m.scorekeeperClaimedAt || Date.now(),
+                  }
+                : {}),
             },
           },
         };
       },
       { forcePublish: true }
     );
+  }
+
+  /**
+   * Claims a match for a single Scorekeeper device so two phones cannot score the same match.
+   * Each Scorekeeper device can only hold ONE active uncompleted match claim at a time unless `force` is true.
+   */
+  claimMatchScorekeeper(matchId = null, { deviceId = '', deviceName = '', force = false } = {}) {
+    const base = this.isStudioActive() ? this.state : this.programState;
+    const targetId = matchId || base.activeMatchId;
+    const m = base.matches?.[targetId];
+    if (!m || m.isBye || m.completed) {
+      return { ok: false, reason: 'Match cannot be claimed' };
+    }
+    const devId = String(deviceId || this.remoteSync?.deviceId || this.tabId || '').trim();
+    const devName = String(deviceName || this.remoteSync?.deviceName || 'Scorekeeper').trim();
+    if (!devId) return { ok: false, reason: 'Missing device identity' };
+
+    if (m.scorekeeperDeviceId && m.scorekeeperDeviceId !== devId && !force) {
+      return {
+        ok: false,
+        claimedByOther: true,
+        claimedByName: m.scorekeeperDeviceName || 'another Scorekeeper',
+        reason: `Already being scored by ${m.scorekeeperDeviceName || 'another Scorekeeper'}`,
+      };
+    }
+
+    // Ensure this device does not hold a claim on another active match at the same time
+    const otherClaimed = Object.values(base.matches || {}).find(
+      (x) =>
+        x &&
+        x.id !== targetId &&
+        !x.isBye &&
+        !x.completed &&
+        x.scorekeeperDeviceId === devId
+    );
+    if (otherClaimed && !force) {
+      return {
+        ok: false,
+        otherMatchId: otherClaimed.id,
+        otherMatchLabel: otherClaimed.label || otherClaimed.id,
+        reason: `Release your claim on ${otherClaimed.label || 'your other match'} first`,
+      };
+    }
+
+    this.commit(
+      (s) => {
+        const cur = s.matches?.[targetId];
+        if (!cur || cur.isBye || cur.completed) return s;
+        const nextMatches = { ...s.matches };
+        if (otherClaimed && force && nextMatches[otherClaimed.id]) {
+          nextMatches[otherClaimed.id] = {
+            ...nextMatches[otherClaimed.id],
+            scorekeeperDeviceId: null,
+            scorekeeperDeviceName: null,
+            scorekeeperClaimedAt: null,
+          };
+        }
+        nextMatches[targetId] = {
+          ...cur,
+          scorekeeperDeviceId: devId,
+          scorekeeperDeviceName: devName || 'Scorekeeper',
+          scorekeeperClaimedAt: Date.now(),
+        };
+        return { ...s, matches: nextMatches };
+      },
+      { forcePublish: true }
+    );
+    return { ok: true, matchId: targetId, deviceId: devId, deviceName: devName };
+  }
+
+  releaseMatchScorekeeper(matchId = null, { deviceId = '', force = false } = {}) {
+    const base = this.isStudioActive() ? this.state : this.programState;
+    const targetId = matchId || base.activeMatchId;
+    const m = base.matches?.[targetId];
+    if (!m || !m.scorekeeperDeviceId) return { ok: true };
+    const devId = String(deviceId || this.remoteSync?.deviceId || this.tabId || '').trim();
+    if (!force && m.scorekeeperDeviceId !== devId) {
+      return { ok: false, reason: 'Only the claiming Scorekeeper or a Host/Admin can release this claim' };
+    }
+    this.commit(
+      (s) => {
+        const cur = s.matches?.[targetId];
+        if (!cur || !cur.scorekeeperDeviceId) return s;
+        return {
+          ...s,
+          matches: {
+            ...s.matches,
+            [targetId]: {
+              ...cur,
+              scorekeeperDeviceId: null,
+              scorekeeperDeviceName: null,
+              scorekeeperClaimedAt: null,
+            },
+          },
+        };
+      },
+      { forcePublish: true }
+    );
+    return { ok: true, matchId: targetId };
   }
 
   cancelMatchStart(matchId = null) {
@@ -5634,6 +5752,9 @@ export class TournamentStore {
               startedAt: null,
               winnerReachedAt: null,
               timerOffsetMs: 0,
+              scorekeeperDeviceId: null,
+              scorekeeperDeviceName: null,
+              scorekeeperClaimedAt: null,
             },
           },
         };
@@ -6131,6 +6252,17 @@ export class TournamentStore {
 
       const tableCount = Math.max(1, Math.floor(Number(s.rules?.tableCount ?? 1) || 1));
       let nextMatches = result.matches;
+      if (nextMatches[prevMatchId]?.scorekeeperDeviceId) {
+        nextMatches = {
+          ...nextMatches,
+          [prevMatchId]: {
+            ...nextMatches[prevMatchId],
+            scorekeeperDeviceId: null,
+            scorekeeperDeviceName: null,
+            scorekeeperClaimedAt: null,
+          },
+        };
+      }
       let nextActiveMatchId = result.nextActiveMatchId;
       if (tableCount > 1) {
         // Queue the next unassigned ready match directly onto the table that just finished

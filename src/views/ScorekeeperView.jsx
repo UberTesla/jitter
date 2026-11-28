@@ -85,6 +85,27 @@ export default function ScorekeeperView({
   const activeMatch = lockedSlotMatch || state.matches?.[state.activeMatchId] || null;
   const evalState = evaluateMatchState(activeMatch, state.rules);
 
+  const myEffectiveDeviceId = String(myDeviceId || tournamentStore.getTabId() || '').trim();
+  const isPrivilegedOverride = ['admin', 'host', 'moderator'].includes(effectiveRole);
+  const claimedByDeviceId = activeMatch?.scorekeeperDeviceId || null;
+  const claimedByName = activeMatch?.scorekeeperDeviceName || 'another Scorekeeper';
+  const isClaimedByMe = Boolean(claimedByDeviceId && claimedByDeviceId === myEffectiveDeviceId);
+  const isClaimedByOther = Boolean(claimedByDeviceId && claimedByDeviceId !== myEffectiveDeviceId);
+  const needsClaimToScore = Boolean(
+    canScoreRole &&
+      !isPrivilegedOverride &&
+      activeMatch &&
+      !activeMatch.completed &&
+      !isClaimedByMe
+  );
+  const canScoreThisMatch = Boolean(
+    canScoreRole &&
+      activeMatch &&
+      !activeMatch.completed &&
+      !activeMatch.paused &&
+      (isPrivilegedOverride || isClaimedByMe)
+  );
+
   const playerMap = useMemo(() => {
     const map = new Map();
     for (const p of state.players || []) map.set(p.id, p);
@@ -290,6 +311,18 @@ export default function ScorekeeperView({
           ? 'Guest view is read-only — request Scorekeeper access above'
           : 'Tap 🎯 Become Scorekeeper above to start scoring'
       );
+      return;
+    }
+    if (isClaimedByOther && !isPrivilegedOverride) {
+      flashFeedback(`🔒 This match is being scored by ${claimedByName}`);
+      return;
+    }
+    if (needsClaimToScore) {
+      flashFeedback('✋ Tap "Claim Match to Score" above before scoring points');
+      return;
+    }
+    if (activeMatch?.paused) {
+      flashFeedback('⏸ Match is paused — resume before scoring');
       return;
     }
     cancelPendingRemoval(true);
@@ -756,17 +789,142 @@ export default function ScorekeeperView({
             <button
               type="button"
               className="btn-amber sk-begin-match-btn"
-              disabled={needsScoreboardUpdate}
-              title={needsScoreboardUpdate ? 'Update the scoreboard first' : undefined}
+              disabled={needsScoreboardUpdate || (isClaimedByOther && !isPrivilegedOverride)}
+              title={
+                needsScoreboardUpdate
+                  ? 'Update the scoreboard first'
+                  : isClaimedByOther && !isPrivilegedOverride
+                  ? `Already claimed by ${claimedByName}`
+                  : undefined
+              }
               onClick={() => {
-                tournamentStore.startMatch(activeMatch.id, activeTableNum);
+                if (!isPrivilegedOverride) {
+                  const claimRes = tournamentStore.claimMatchScorekeeper(activeMatch.id, {
+                    deviceId: myEffectiveDeviceId,
+                  });
+                  if (!claimRes.ok) {
+                    flashFeedback(`⚠️ ${claimRes.reason || 'Could not claim match'}`);
+                    return;
+                  }
+                }
+                tournamentStore.startMatch(activeMatch.id, activeTableNum, {
+                  claimForScorekeeper: !isPrivilegedOverride,
+                  deviceId: myEffectiveDeviceId,
+                });
                 flashFeedback(
-                  `▶ ${activeMatch.label} started on Table ${activeTableNum} & synced live!`
+                  `▶ ${activeMatch.label} started on Table ${activeTableNum} & claimed for scoring!`
                 );
               }}
             >
               ▶ Begin Match
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Per-Match Scorekeeper Claim Lock Banner (1 Scorekeeper per match, Host/Admin/Mod can override) */}
+      {canScoreRole && activeMatch && !activeMatch.completed && (isClaimedByMe || isClaimedByOther || activeMatch.started) && (
+        <div
+          role="region"
+          aria-label="Match Scorekeeper Claim"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem',
+            padding: '0.45rem 0.85rem',
+            margin: '0 0.75rem',
+            borderRadius: '10px',
+            fontSize: '0.8rem',
+            background: isClaimedByOther
+              ? 'rgba(239, 68, 68, 0.14)'
+              : isClaimedByMe
+              ? 'rgba(16, 185, 129, 0.14)'
+              : 'rgba(245, 158, 11, 0.14)',
+            border: `1px solid ${
+              isClaimedByOther
+                ? 'rgba(248, 113, 113, 0.5)'
+                : isClaimedByMe
+                ? 'rgba(52, 211, 153, 0.45)'
+                : 'rgba(251, 191, 36, 0.5)'
+            }`,
+            color: '#f8fafc',
+          }}
+        >
+          <span>
+            {isClaimedByOther ? (
+              <>
+                🔒 Scored by <strong>{claimedByName}</strong>
+                {isPrivilegedOverride ? ' (Host/Admin override enabled)' : ' — scoring locked'}
+              </>
+            ) : isClaimedByMe ? (
+              <>🎯 You are the active Scorekeeper for <strong>{activeMatch.label}</strong></>
+            ) : (
+              <>✋ No Scorekeeper has claimed <strong>{activeMatch.label}</strong> yet</>
+            )}
+          </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            {isClaimedByMe && (
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  tournamentStore.releaseMatchScorekeeper(activeMatch.id, {
+                    deviceId: myEffectiveDeviceId,
+                  });
+                  flashFeedback(`Released Scorekeeper claim on ${activeMatch.label}`);
+                }}
+              >
+                Release Claim
+              </button>
+            )}
+            {!isClaimedByMe && !isClaimedByOther && (
+              <button
+                type="button"
+                className="btn-amber btn-sm"
+                onClick={() => {
+                  const res = tournamentStore.claimMatchScorekeeper(activeMatch.id, {
+                    deviceId: myEffectiveDeviceId,
+                    force: isPrivilegedOverride,
+                  });
+                  if (res.ok) {
+                    flashFeedback(`🎯 Claimed ${activeMatch.label} for scoring`);
+                  } else {
+                    flashFeedback(`⚠️ ${res.reason || 'Could not claim match'}`);
+                  }
+                }}
+              >
+                ✋ Claim Match to Score
+              </button>
+            )}
+            {isClaimedByOther && isPrivilegedOverride && (
+              <>
+                <button
+                  type="button"
+                  className="btn-amber btn-sm"
+                  onClick={() => {
+                    tournamentStore.claimMatchScorekeeper(activeMatch.id, {
+                      deviceId: myEffectiveDeviceId,
+                      force: true,
+                    });
+                    flashFeedback(`🎯 Took over scoring ${activeMatch.label}`);
+                  }}
+                >
+                  Take Over
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => {
+                    tournamentStore.releaseMatchScorekeeper(activeMatch.id, { force: true });
+                    flashFeedback(`Released ${claimedByName}'s claim on ${activeMatch.label}`);
+                  }}
+                >
+                  Release
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -812,7 +970,7 @@ export default function ScorekeeperView({
       {/* Main Giant Dual-Pad Tap Arena */}
       <main
         className={`sk-arena ${canStartMatch ? 'is-awaiting-start' : ''} ${
-          !canScoreRole ? 'is-guest-readonly' : ''
+          !canScoreThisMatch ? 'is-guest-readonly' : ''
         }`}
       >
         {renderTapPad(leftData, 'left', '1')}
