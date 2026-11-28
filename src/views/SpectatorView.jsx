@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ROLE_META,
+  getTableSlots,
   tournamentStore,
 } from '../state/tournamentStore.js';
 import {
@@ -140,27 +141,16 @@ export default function SpectatorView({
       matches.find((m) => m.id === state.activeMatchId && !m.completed && m.player1Id && m.player2Id) ||
       null;
 
-    // Matches currently in play (started & not completed) or explicitly queued on a table in multi-table mode
-    const tableCount = Math.max(1, Math.floor(Number(state.rules?.tableCount ?? 1) || 1));
-    const startedLive = matches
-      .filter(
-        (m) =>
-          !m.completed &&
-          m.player1Id &&
-          m.player2Id &&
-          (m.started || (tableCount > 1 && Number(m.tableNumber) >= 1 && Number(m.tableNumber) <= tableCount))
-      )
-      .sort((a, b) => (a.tableNumber || 1) - (b.tableNumber || 1));
-    const liveList = [...startedLive];
-    if (activeMatch && !liveList.some((m) => m.id === activeMatch.id)) {
-      liveList.unshift(activeMatch);
-    }
+    // One canonical match per table (live -> paused -> queued), preventing duplicate T1/T2 pills
+    const liveList = getTableSlots(state)
+      .map((slot) => slot.match)
+      .filter(Boolean);
 
     // Determine which match is featured in the Hero Card
     let hero = null;
     if (selectedTableMatchId && liveList.some((m) => m.id === selectedTableMatchId)) {
       hero = liveList.find((m) => m.id === selectedTableMatchId);
-    } else if (activeMatch) {
+    } else if (activeMatch && liveList.some((m) => m.id === activeMatch.id)) {
       hero = activeMatch;
     } else if (liveList.length > 0) {
       hero = liveList[0];
@@ -190,7 +180,7 @@ export default function SpectatorView({
       onDeckQueue: queue,
       recentResults: completed,
     };
-  }, [allMatches, state.activeMatchId, selectedTableMatchId]);
+  }, [state, allMatches, state.activeMatchId, selectedTableMatchId]);
 
   // Compute personal status for the claimed player
   const myStatus = useMemo(() => {
