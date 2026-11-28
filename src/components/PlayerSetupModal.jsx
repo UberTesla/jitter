@@ -10,6 +10,8 @@ import {
   MIN_PLAYERS,
   MAX_PLAYERS,
   nextPowerOfTwo,
+  normalizeByeMode,
+  summarizeBracketByes,
 } from '../engine/bracketGenerator.js';
 import {
   SCORE_FONT_OPTIONS,
@@ -231,6 +233,8 @@ export default function PlayerSetupModal({
   const [draftName, setDraftName] = useState(state.tournamentName);
   const [draftSubtitle, setDraftSubtitle] = useState(state.tournamentSubtitle || '');
   const [draftFormat, setDraftFormat] = useState(state.format);
+  const [draftByeMode, setDraftByeMode] = useState(normalizeByeMode(state.byeMode));
+  const [showByeTooltip, setShowByeTooltip] = useState(false);
   const [draftEntryMode, setDraftEntryMode] = useState(state.entryMode || 'singles');
   const [draftAutoTeamNames, setDraftAutoTeamNames] = useState(Boolean(state.autoTeamNames));
   const [draftTargetPoints, setDraftTargetPoints] = useState(state.rules?.targetPoints ?? 11);
@@ -275,6 +279,8 @@ export default function PlayerSetupModal({
       setDraftName(state.tournamentName);
       setDraftSubtitle(state.tournamentSubtitle || '');
       setDraftFormat(state.format);
+      setDraftByeMode(normalizeByeMode(state.byeMode));
+      setShowByeTooltip(false);
       setDraftEntryMode(state.entryMode || 'singles');
       setDraftAutoTeamNames(Boolean(state.autoTeamNames));
       setDraftTargetPoints(state.rules?.targetPoints ?? 11);
@@ -523,8 +529,12 @@ export default function PlayerSetupModal({
     );
   }, [draftRoster, rosterSearch]);
 
+  const prevEffectiveByeMode =
+    state.format === 'double' ? 'standard' : normalizeByeMode(state.byeMode);
+  const effectiveByeMode = draftFormat === 'double' ? 'standard' : draftByeMode;
   const mustFullRebuild =
     draftFormat !== state.format ||
+    effectiveByeMode !== prevEffectiveByeMode ||
     draftEntryMode !== (state.entryMode || 'singles') ||
     entrantCount < state.playerCount;
   const effectiveApplyMode = mustFullRebuild ? 'rebuild' : draftApplyMode;
@@ -536,6 +546,7 @@ export default function PlayerSetupModal({
     entrantCount === state.playerCount &&
     draftHumanCount > (state.totalPlayers || state.roster?.length || 0);
   const byeCount = nextPowerOfTwo(entrantCount) - entrantCount;
+  const byeSummary = summarizeBracketByes(entrantCount, draftFormat, effectiveByeMode);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -560,6 +571,7 @@ export default function PlayerSetupModal({
       entryMode: draftEntryMode,
       autoTeamNames: draftAutoTeamNames,
       format: draftFormat,
+      byeMode: effectiveByeMode,
       playerCount: entrantCount,
       totalPlayers: draftHumanCount,
       roster: draftRoster,
@@ -886,6 +898,75 @@ export default function PlayerSetupModal({
               </div>
             </div>
 
+            <div className="form-field setup-bye-mode-field">
+              <div className="setup-label-with-tooltip">
+                <span className="field-label">BYE Placement (Odd / Non-Power-of-2 Counts)</span>
+                <div
+                  className="setup-tooltip-wrap"
+                  onMouseEnter={() => setShowByeTooltip(true)}
+                  onMouseLeave={() => setShowByeTooltip(false)}
+                >
+                  <button
+                    type="button"
+                    className="setup-tooltip-trigger"
+                    aria-label="Explain BYE Placement options"
+                    aria-expanded={showByeTooltip}
+                    onClick={() => setShowByeTooltip((v) => !v)}
+                    onFocus={() => setShowByeTooltip(true)}
+                    onBlur={() => setShowByeTooltip(false)}
+                  >
+                    ?
+                  </button>
+                  {showByeTooltip && (
+                    <div className="setup-tooltip-popover" role="tooltip">
+                      <p>
+                        <strong>Standard (R1 BYEs):</strong> Traditional power-of-2 bracket (8, 16,
+                        32…). Front-loads all BYEs into Round 1 so Quarterfinals and Semifinals
+                        never have a BYE. <em>Example (10 teams):</em> Round of 16 with 2 Round 1
+                        matches and 6 Round 1 BYEs.
+                      </p>
+                      <p>
+                        <strong>Minimal BYEs (Max 1/Rd):</strong> Pairs everyone who can play in
+                        Round 1 and only gives 1 BYE when a round has an odd number of remaining{' '}
+                        {isTeams ? 'teams' : 'players'} (never back-to-back). Great for casual or
+                        family tournaments so everyone plays right away. <em>Example (10 teams):</em>{' '}
+                        5 Round 1 matches, 0 Round 1 BYEs, 2 BYEs total.
+                      </p>
+                      {draftFormat === 'double' && (
+                        <p className="setup-tooltip-note">
+                          Double Elimination always uses Standard power-of-2 BYEs to keep the Losers
+                          Bracket balanced.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={effectiveByeMode === 'standard' ? 'is-selected' : ''}
+                  onClick={() => setDraftByeMode('standard')}
+                  title="Traditional power-of-2 bracket: all BYEs occur in Round 1 so later rounds never have a BYE"
+                >
+                  Standard (R1 BYEs)
+                </button>
+                <button
+                  type="button"
+                  className={effectiveByeMode === 'minimal' ? 'is-selected' : ''}
+                  disabled={draftFormat === 'double'}
+                  onClick={() => setDraftByeMode('minimal')}
+                  title={
+                    draftFormat === 'double'
+                      ? 'Available for Single Elimination only'
+                      : 'Pairs everyone in Round 1 with at most 1 BYE per odd round (no back-to-back BYEs)'
+                  }
+                >
+                  Minimal BYEs (Max 1/Rd)
+                </button>
+              </div>
+            </div>
+
             {isTeams && (
               <p className="setup-info">
                 {draftHumanCount} player{draftHumanCount === 1 ? '' : 's'} →{' '}
@@ -897,10 +978,24 @@ export default function PlayerSetupModal({
               </p>
             )}
 
-            {byeCount > 0 && (
+            {byeCount > 0 && effectiveByeMode === 'minimal' && (
               <p className="setup-info">
-                Top {byeCount} seed{byeCount === 1 ? '' : 's'} will automatically receive a Round 1
-                BYE inside a {nextPowerOfTwo(entrantCount)}-{isTeams ? 'team' : 'slot'} bracket.
+                <strong>Minimal BYEs:</strong> {byeSummary.round1Matches} Round 1 match
+                {byeSummary.round1Matches === 1 ? '' : 'es'} (
+                {byeSummary.round1Byes === 0
+                  ? '0 Round 1 BYEs — everyone plays!'
+                  : '1 Round 1 BYE to Seed #1'}
+                ), {byeSummary.totalByes} BYE{byeSummary.totalByes === 1 ? '' : 's'} total across
+                the bracket.
+              </p>
+            )}
+
+            {byeCount > 0 && effectiveByeMode === 'standard' && (
+              <p className="setup-info">
+                Top {byeSummary.round1Byes} seed{byeSummary.round1Byes === 1 ? '' : 's'} will
+                automatically receive a Round 1 BYE inside a {byeSummary.bracketSize}-
+                {isTeams ? 'team' : 'slot'} bracket ({byeSummary.round1Matches} Round 1 match
+                {byeSummary.round1Matches === 1 ? '' : 'es'}).
               </p>
             )}
 
@@ -913,7 +1008,8 @@ export default function PlayerSetupModal({
 
             {mustFullRebuild && (
               <p className="setup-notice">
-                Changing competition mode, elimination format, or reducing {isTeams ? 'teams' : 'players'} will rebuild the bracket schedule cleanly.
+                Changing competition mode, elimination format, BYE placement, or reducing{' '}
+                {isTeams ? 'teams' : 'players'} will rebuild the bracket schedule cleanly.
               </p>
             )}
           </div>

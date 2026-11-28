@@ -15,6 +15,8 @@ import {
   findNextReadyMatchId,
   getChampionshipMatchId,
   resolveClaimedPlayer,
+  normalizeByeMode,
+  isByeMatch,
 } from '../engine/bracketGenerator.js';
 import {
   adjustMatchScore,
@@ -593,6 +595,7 @@ export function createGrandmaSpeech({
 export function createInitialState(overrides = {}) {
   const playerCount = clampPlayerCount(overrides.playerCount ?? 8);
   const format = overrides.format === 'double' ? 'double' : 'single';
+  const byeMode = format === 'double' ? 'standard' : normalizeByeMode(overrides.byeMode);
   const entryMode = overrides.entryMode === 'teams' ? 'teams' : 'singles';
   const demoMode = Boolean(overrides.demoMode ?? false);
   const autoTeamNames = Boolean(overrides.autoTeamNames ?? false);
@@ -619,7 +622,7 @@ export function createInitialState(overrides = {}) {
           .map((name, idx) => ({ id: `r${idx + 1}`, name }))
         : players.map((p, idx) => ({ id: `r${idx + 1}`, name: p.name }));
 
-  const matches = generateBracket(players, format);
+  const matches = generateBracket(players, format, { byeMode });
   const firstMatchId = findNextReadyMatchId(matches) || Object.keys(matches)[0] || 'W-R1-M1';
 
   const banterQuotes =
@@ -697,6 +700,7 @@ export function createInitialState(overrides = {}) {
     demoMode,
     autoTeamNames,
     format,
+    byeMode,
     playerCount,
     totalPlayers,
     roster,
@@ -1174,7 +1178,7 @@ function writeTournamentLibraryMap(map) {
 function summarizeTournamentEntry(stateObj) {
   if (!stateObj) return null;
   const allMatches = Object.values(stateObj.matches || {});
-  const realMatches = allMatches.filter((m) => !m.isBye);
+  const realMatches = allMatches.filter((m) => !isByeMatch(m));
   const completedMatches = realMatches.filter((m) => m.completed).length;
   const champ = stateObj.championId
     ? (stateObj.players || []).find((p) => p.id === stateObj.championId)
@@ -6417,6 +6421,7 @@ export class TournamentStore {
     demoMode,
     autoTeamNames,
     format,
+    byeMode,
     playerCount,
     totalPlayers,
     roster,
@@ -6436,6 +6441,13 @@ export class TournamentStore {
       const nextAutoTeamNames =
         autoTeamNames !== undefined ? Boolean(autoTeamNames) : s.autoTeamNames;
       const nextFormat = format || s.format;
+      const prevByeMode = s.format === 'double' ? 'standard' : normalizeByeMode(s.byeMode);
+      const nextByeMode =
+        nextFormat === 'double'
+          ? 'standard'
+          : byeMode !== undefined
+            ? normalizeByeMode(byeMode)
+            : prevByeMode;
       const nextCount =
         playerCount !== undefined ? clampPlayerCount(playerCount) : s.playerCount;
       const nextRules = {
@@ -6537,6 +6549,7 @@ export class TournamentStore {
       const mustFullRebuild =
         Boolean(rebuildBracket) ||
         nextFormat !== s.format ||
+        nextByeMode !== prevByeMode ||
         nextEntryMode !== s.entryMode ||
         nextCount < s.playerCount;
 
@@ -6545,7 +6558,7 @@ export class TournamentStore {
       let nextChampionId = s.championId;
 
       if (mustFullRebuild) {
-        nextMatches = generateBracket(nextPlayers, nextFormat);
+        nextMatches = generateBracket(nextPlayers, nextFormat, { byeMode: nextByeMode });
         nextActive =
           findNextReadyMatchId(nextMatches) || Object.keys(nextMatches)[0] || 'W-R1-M1';
         nextChampionId = null;
@@ -6557,7 +6570,8 @@ export class TournamentStore {
           nextPlayers,
           nextFormat,
           nextRules,
-          s.activeMatchId
+          s.activeMatchId,
+          nextByeMode
         );
         nextMatches = preserved.matches;
         nextActive = preserved.activeMatchId;
@@ -6579,6 +6593,7 @@ export class TournamentStore {
         demoMode: nextDemoMode,
         autoTeamNames: nextAutoTeamNames,
         format: nextFormat,
+        byeMode: nextByeMode,
         playerCount: nextCount,
         totalPlayers: resolvedTotalPlayers,
         roster: nextRoster,
@@ -6674,7 +6689,7 @@ export class TournamentStore {
         seed: idx + 1,
         ...entry,
       }));
-      const nextMatches = generateBracket(shuffledPlayers, s.format);
+      const nextMatches = generateBracket(shuffledPlayers, s.format, { byeMode: s.byeMode });
       const nextActive =
         findNextReadyMatchId(nextMatches) || Object.keys(nextMatches)[0] || 'W-R1-M1';
       return {
@@ -6716,7 +6731,7 @@ export class TournamentStore {
 
   resetTournament() {
     return this.commit((s) => {
-      const nextMatches = generateBracket(s.players, s.format);
+      const nextMatches = generateBracket(s.players, s.format, { byeMode: s.byeMode });
       const nextActive =
         findNextReadyMatchId(nextMatches) || Object.keys(nextMatches)[0] || 'W-R1-M1';
       return {

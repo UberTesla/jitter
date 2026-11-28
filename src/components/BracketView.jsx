@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { groupBracketRounds, formatTeamMembers } from '../engine/bracketGenerator.js';
+import { groupBracketRounds, formatTeamMembers, isByeMatch } from '../engine/bracketGenerator.js';
 
 const LARGE_BRACKET_THRESHOLD = 16;
 const BRACKET_ROUND_TAB_KEY = 'pingpong-bracket-round-tab-v1';
@@ -135,7 +135,7 @@ export default function BracketView({
 
     const p1 = match.player1Id ? playerMap.get(match.player1Id) : null;
     const p2 = match.player2Id ? playerMap.get(match.player2Id) : null;
-    const isBye = Boolean(match.isBye);
+    const isBye = isByeMatch(match);
     const isActive = match.id === activeMatchId && !isBye;
     const isCompleted = Boolean(match.completed) && !isBye;
     const isReady = Boolean(p1 && p2 && !isCompleted && !isBye);
