@@ -611,11 +611,6 @@ export default function PresentationView({
                     {state.tournamentSubtitle}
                   </p>
                 )}
-                {Boolean(state.presentation?.titleSubtitle?.trim()) &&
-                  state.presentation.titleSubtitle.trim() !==
-                    (state.tournamentSubtitle || '').trim() && (
-                    <p className="title-sub-banner">{state.presentation.titleSubtitle}</p>
-                  )}
 
                 <div className="title-rules-strip">
                   <div className="title-rule-chip">
@@ -772,9 +767,6 @@ export default function PresentationView({
           {/* SLIDE 3: Full Tournament Bracket Overview (Auto-Fits Any Player Count!) */}
           {renderedSlide === 'bracket' && (
             <div className="slide-bracket-layout">
-              {Boolean(state.presentation?.bracketSubtitle?.trim()) && (
-                <p className="slide-optional-subtitle">{state.presentation.bracketSubtitle}</p>
-              )}
               <AutoFitBox
                 className="full-bracket-autofit"
                 align="center"
@@ -800,9 +792,6 @@ export default function PresentationView({
           {/* SLIDE 4: Split View (Scoreboard + Mini Bracket + Up Next + Ticker) */}
           {renderedSlide === 'split' && (
             <div className="slide-split-wrapper">
-              {Boolean(state.presentation?.splitSubtitle?.trim()) && (
-                <p className="slide-optional-subtitle">{state.presentation.splitSubtitle}</p>
-              )}
               <div className="slide-split-layout">
                 <div className="split-primary-col">
                   {splitVisibleMatches.length <= 1 ? (
@@ -1014,19 +1003,13 @@ export default function PresentationView({
                       {formatTeamMembers(champion, ' & ')}
                     </div>
                   )}
-                  {champion ? (
+                  {champion && (
                     <p className="spotlight-subcopy">
                       Seed #{champion.seed} conquered the {state.playerCount}-
                       {isTeams ? 'team' : 'player'}{' '}
                       {state.format === 'double' ? 'Double Elimination' : 'Single Elimination'}{' '}
                       championship!
                     </p>
-                  ) : (
-                    Boolean(state.presentation?.intermissionMessage?.trim()) && (
-                      <p className="spotlight-subcopy">
-                        {state.presentation.intermissionMessage}
-                      </p>
-                    )
                   )}
 
                   {/* Last Completed Match Result */}

@@ -193,27 +193,13 @@ export default function SlidePreview({
           </div>
 
           {/* Contextual Slide Banner & Settings (Pinned to manually selected slide so auto-rotate never shifts UI) */}
+          {optionsSlide !== 'title' && optionsSlide !== 'spotlight' && (
           <div className="contextual-slide-box">
             <div className="contextual-slide-head">
               <span className="contextual-slide-kicker">
                 SLIDE {optionsSlideDef?.number} OPTIONS · {optionsSlideDef?.label}
               </span>
             </div>
-
-            {optionsSlide === 'title' && (
-              <div className="intermission-field">
-                <label htmlFor="title-subtitle-input">Welcome Subtitle (Optional)</label>
-                <input
-                  id="title-subtitle-input"
-                  type="text"
-                  value={state.presentation?.titleSubtitle ?? ''}
-                  onChange={(e) =>
-                    onUpdatePresentationConfig({ titleSubtitle: e.target.value })
-                  }
-                  placeholder="Optional subtitle (leave blank to hide)"
-                />
-              </div>
-            )}
 
             {optionsSlide === 'arena' && (
               <div className="title-slide-options-stack">
@@ -235,18 +221,6 @@ export default function SlidePreview({
 
             {optionsSlide === 'bracket' && (
               <div className="title-slide-options-stack">
-                <div className="intermission-field">
-                  <label htmlFor="bracket-subtitle-input">Bracket Slide Subtitle (Optional)</label>
-                  <input
-                    id="bracket-subtitle-input"
-                    type="text"
-                    value={state.presentation?.bracketSubtitle ?? ''}
-                    onChange={(e) =>
-                      onUpdatePresentationConfig({ bracketSubtitle: e.target.value })
-                    }
-                    placeholder="Optional subtitle (leave blank to hide)"
-                  />
-                </div>
                 <div className="contextual-inline-row">
                   <div className="rule-group">
                     <span className="rule-label">Show Bracket</span>
@@ -301,18 +275,6 @@ export default function SlidePreview({
 
             {optionsSlide === 'split' && (
               <div className="title-slide-options-stack">
-                <div className="intermission-field">
-                  <label htmlFor="split-subtitle-input">Split View Subtitle (Optional)</label>
-                  <input
-                    id="split-subtitle-input"
-                    type="text"
-                    value={state.presentation?.splitSubtitle ?? ''}
-                    onChange={(e) =>
-                      onUpdatePresentationConfig({ splitSubtitle: e.target.value })
-                    }
-                    placeholder="Optional subtitle (leave blank to hide)"
-                  />
-                </div>
                 <div className="contextual-inline-row">
                   <label className="toggle-label">
                     <input
@@ -328,24 +290,8 @@ export default function SlidePreview({
                 </div>
               </div>
             )}
-
-            {optionsSlide === 'spotlight' && (
-              <div className="intermission-field">
-                <label htmlFor="intermission-msg-input">
-                  Spotlight Subtitle (Optional — leave blank to hide)
-                </label>
-                <input
-                  id="intermission-msg-input"
-                  type="text"
-                  value={state.presentation?.intermissionMessage ?? ''}
-                  onChange={(e) =>
-                    onUpdatePresentationConfig({ intermissionMessage: e.target.value })
-                  }
-                  placeholder="Optional subtitle (leave blank to hide)"
-                />
-              </div>
-            )}
           </div>
+          )}
 
           {/* Ticker Mode + Items (matches On Deck segmented-control layout) */}
           {state.ui?.showMiniBracket !== false && (
@@ -547,9 +493,6 @@ export default function SlidePreview({
                     )}
                   </div>
                   <div className="mini-spotlight-title">{state.tournamentName}</div>
-                  {Boolean(state.presentation?.titleSubtitle?.trim()) && (
-                    <div className="mini-stat-line">{state.presentation.titleSubtitle}</div>
-                  )}
                   {state.rules?.grandmaEnabled !== false && (
                     <div className="mini-corner-chip">Grandma Corner Live</div>
                   )}
@@ -635,13 +578,11 @@ export default function SlidePreview({
                   <div className="mini-spotlight-title">
                     {champion ? `CHAMPION: ${champion.name}` : 'SPOTLIGHT / WARM-UP'}
                   </div>
-                  {(champion || Boolean(state.presentation?.intermissionMessage?.trim())) && (
+                  {champion && (
                     <div className="mini-stat-line">
-                      {champion
-                        ? `${stats.totalPointsPlayed} Total Points${
-                            state.rules?.grandmaEnabled !== false ? ' · Full-Size Grandma CRT' : ''
-                          }`
-                        : state.presentation.intermissionMessage}
+                      {`${stats.totalPointsPlayed} Total Points${
+                        state.rules?.grandmaEnabled !== false ? ' · Full-Size Grandma CRT' : ''
+                      }`}
                     </div>
                   )}
                 </div>
