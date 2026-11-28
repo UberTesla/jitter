@@ -1615,3 +1615,220 @@ dialog.app-dialog::backdrop {
   font-size: 0.86rem;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
+
+/* =========================================================================
+   NOTIFICATION PRE-PERMISSION EXPLAINER MODAL (WITH TAILORED BROWSER PREVIEW)
+   ========================================================================= */
+.notify-preprompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.notify-preprompt-card {
+  width: min(490px, 100%);
+  max-height: 92dvh;
+  overflow-y: auto;
+  border-radius: 18px;
+  padding: 1.35rem 1.4rem 1.2rem;
+  background: linear-gradient(175deg, #172038 0%, #0b1224 100%);
+  border: 2px solid rgba(251, 191, 36, 0.72);
+  box-shadow: 0 28px 68px rgba(0, 0, 0, 0.72), 0 0 36px rgba(245, 158, 11, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  color: #f8fafc;
+}
+
+.notify-preprompt-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 0.24rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(248, 113, 113, 0.65);
+  color: #fecaca;
+}
+
+.notify-preprompt-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f87171;
+  box-shadow: 0 0 10px #f87171;
+}
+
+.notify-preprompt-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1.15;
+  color: #fef3c7;
+}
+
+.notify-preprompt-lead {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.48;
+  color: #e2e8f0;
+}
+
+.notify-preprompt-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0.65rem 0.78rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 0.52rem;
+  font-size: 0.83rem;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.notify-preprompt-reasons li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.notify-preprompt-reasons strong {
+  color: #f8fafc;
+}
+
+.notify-preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.notify-preview-caption {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #93c5fd;
+}
+
+.notify-native-mock {
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+}
+
+.notify-native-mock.is-ios {
+  text-align: center;
+  border-radius: 14px;
+  background: #f2f2f7;
+}
+
+.notify-native-mock.is-android {
+  border-radius: 16px;
+}
+
+.nnm-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.nnm-body {
+  font-size: 0.76rem;
+  color: #334155;
+}
+
+.nnm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.28rem;
+}
+
+.notify-native-mock.is-ios .nnm-actions {
+  justify-content: center;
+  border-top: 1px solid rgba(15, 23, 42, 0.12);
+  padding-top: 0.45rem;
+}
+
+.nnm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.72rem;
+  border-radius: 7px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.nnm-btn.is-deny {
+  background: #e2e8f0;
+  color: #64748b;
+  opacity: 0.75;
+}
+
+.nnm-btn.is-allow {
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35), 0 4px 12px rgba(22, 163, 74, 0.45);
+}
+
+.nnm-pointer {
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.22);
+  padding: 0.08rem 0.34rem;
+  border-radius: 999px;
+}
+
+.notify-preprompt-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.notify-preprompt-cta {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.notify-preprompt-skip {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.76rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.notify-preprompt-skip:hover {
+  color: #cbd5e1;
+}

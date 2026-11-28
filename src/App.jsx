@@ -18,6 +18,7 @@ import AdminView from './views/AdminView.jsx';
 import HubView from './views/HubView.jsx';
 import StudioScoreCountdown from './components/StudioScoreCountdown.jsx';
 import PlayerInboxDrawer from './components/PlayerInboxDrawer.jsx';
+import NotificationPrePromptModal from './components/NotificationPrePromptModal.jsx';
 import { useWakeLock } from './hooks/useWakeLock.js';
 import {
   dispatchNotification,
@@ -589,38 +590,11 @@ export default function App() {
           </button>
         </div>
       )}
-      {showJoinAlertPrompt && !syncMeta.remoteSync?.lastUserMessage && (
-        <div className="user-message-toast" role="region" aria-label="Enable notifications">
-          <div className="user-message-toast-body">
-            <strong>🔔 Enable Desktop Alerts?</strong>
-            <p>Get notified when a host messages you or your match is coming up.</p>
-            <div className="inline-actions" style={{ marginTop: '0.4rem' }}>
-              <button
-                type="button"
-                className="btn-primary btn-sm"
-                onClick={handleEnableDesktopAlerts}
-              >
-                Enable Alerts
-              </button>
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                onClick={handleDismissAlertPrompt}
-              >
-                Not Now
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={handleDismissAlertPrompt}
-            aria-label="Dismiss alert prompt"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <NotificationPrePromptModal
+        open={Boolean(showJoinAlertPrompt && !syncMeta.remoteSync?.lastUserMessage)}
+        onEnable={handleEnableDesktopAlerts}
+        onDismiss={handleDismissAlertPrompt}
+      />
     </>
   );
 
